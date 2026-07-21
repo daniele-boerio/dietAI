@@ -344,6 +344,10 @@ def build_context(db: Session, user_id: int) -> str:
         daily_calories=diet.total_daily_calories,
         meals_config=meals_config,
         excluded=_fmt_list(_excluded_names(db, user_id)),
+        # Testo libero dell'utente: passa così com'è, senza interpretarlo. Regole
+        # come "carne al massimo due volte a settimana" funzionano proprio perché il
+        # piano si genera tutto in una volta e il modello vede l'intera settimana.
+        extra_rules=((prefs.notes or "").strip() if prefs else "") or "nessuna",
         base=_fmt_list(_base_names(db, user_id)),
         pantry=_fmt_list(_pantry_descriptions(db, user_id), "vuota"),
         cuisine=(

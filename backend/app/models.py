@@ -409,6 +409,10 @@ class UserPreferences(Base):
     prefer_italian = Column(Boolean, nullable=False, default=True, server_default="true")
     max_prep_time_min = Column(Integer)
     budget_level = Column(String)  # "economico", "medio", "premium"
+    # Regole in linguaggio naturale che non stanno in una lista: "niente insaccati",
+    # "carne al massimo due volte a settimana", "la domenica mangio fuori". Vanno nel
+    # prompt così come sono — il destinatario è un modello, non un parser.
+    notes = Column(Text)
     # Modello scelto per ciascun ruolo (slug del provider, es. "anthropic/claude-opus-4-8").
     # NULL = si usa il default dell'ambiente. Sono qui e non in configurazione perché
     # cambiarli è una decisione di tutti i giorni — costo contro qualità — non di deploy.

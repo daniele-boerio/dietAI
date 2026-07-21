@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavLink, useParams } from 'react-router-dom';
-import { FileUp, KeyRound, Save, Sparkles, Trash2, User, X } from 'lucide-react';
+import { FileUp, KeyRound, MessageSquare, Save, Sparkles, Trash2, User, X } from 'lucide-react';
 import { api } from '../api';
 import { useApp } from '../App';
 import { useAuth } from '../AuthContext';
@@ -285,6 +285,8 @@ function DietTab() {
         </div>
       </div>
 
+      <DietRulesCard />
+
       <div className="card settings-section">
         <div className="card-title">Carica un nuovo PDF</div>
         <p className="field-hint" style={{ marginBottom: 12 }}>
@@ -312,6 +314,87 @@ function DietTab() {
         </button>
       </div>
     </>
+  );
+}
+
+// ── Regole in linguaggio naturale ──────────────────────────────────────────────
+
+const ESEMPI_REGOLE = `Niente insaccati.
+Carne rossa al massimo due volte a settimana.
+Il pesce mi piace ma non più di tre volte.
+La sera preferisco piatti unici, veloci da preparare.
+Non ripetere lo stesso primo due giorni di fila.`;
+
+function DietRulesCard() {
+  const { addToast } = useApp();
+  const [prefs, setPrefs] = useState(null);
+  const [draft, setDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api
+      .getPreferences()
+      .then((p) => {
+        setPrefs(p);
+        setDraft(p.notes || '');
+      })
+      .catch(() => {});
+  }, []);
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      // Le preferenze si salvano intere: il backend vuole anche gli interruttori.
+      const updated = await api.updatePreferences({ ...prefs, notes: draft });
+      setPrefs(updated);
+      addToast('Regole salvate — valgono dalla prossima generazione ✓');
+    } catch (e) {
+      addToast(e.message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!prefs) return null;
+
+  const dirty = (prefs.notes || '') !== draft;
+
+  return (
+    <div className="card settings-section">
+      <div className="card-title">
+        <MessageSquare /> Regole e note per DietAI
+      </div>
+      <p className="field-hint" style={{ marginBottom: 12 }}>
+        Scrivile come le diresti a voce: qui non servono caselle, dall'altra parte c'è
+        un modello che legge l'italiano. È il posto per tutto ciò che non è un singolo
+        ingrediente da escludere — quante volte a settimana vuoi un alimento, cosa
+        preferisci la sera, abitudini che si ripetono.
+      </p>
+
+      <textarea
+        rows={7}
+        value={draft}
+        placeholder={ESEMPI_REGOLE}
+        onChange={(e) => setDraft(e.target.value)}
+      />
+
+      <p className="field-hint">
+        Le regole a cadenza settimanale ("carne due volte") funzionano perché il piano
+        viene generato tutto in una volta: il modello vede l'intera settimana mentre la
+        costruisce. Valgono anche quando rigeneri un singolo pasto e quando chiedi una
+        modifica in chat.
+      </p>
+
+      <button
+        className="btn btn-primary btn-sm"
+        style={{ marginTop: 12 }}
+        onClick={save}
+        disabled={busy || !dirty}
+      >
+        {busy ? <span className="spinner-inline" /> : <Save size={14} />}
+        Salva le regole
+      </button>
+    </div>
   );
 }
 

@@ -20,6 +20,8 @@ significherebbe sprecarlo.
 - **Lista della spesa automatica**: aggrega le quantità, converte le unità, toglie quello
   che hai in dispensa e quello che hai sempre in casa, raggruppa per reparto e stima il costo.
 - **Blocco settimanale** dopo la spesa, con la settimana successiva già modificabile.
+- **Regole scritte a parole tue** ("niente insaccati", "carne due volte a settimana"):
+  finiscono nel prompt così come sono, senza doverle tradurre in caselle.
 - **Pasti fissi** (la pizza del sabato) che non vengono mai rigenerati, e pasti
   **"lo faccio io"** che l'AI non genera affatto — la colazione di sempre, il pranzo in
   mensa — ma che continuano a contare nei macro della giornata.
@@ -83,7 +85,7 @@ API key → PDF della dieta → ingredienti di base ed esclusi → preferenze. P
 ## Test
 
 ```bash
-cd backend && .venv/Scripts/python.exe -m pytest tests -q   # 112 test
+cd backend && .venv/Scripts/python.exe -m pytest tests -q   # 119 test
 cd frontend && npm test                                     # 14 test
 ```
 

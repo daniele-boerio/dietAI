@@ -88,6 +88,7 @@ CONTEXT_TEMPLATE = """CONTESTO UTENTE
 - Pasti della dieta:
 {meals_config}
 - Ingredienti ESCLUSI (da non usare MAI, nemmeno in tracce): {excluded}
+- REGOLE SCRITTE DALL'UTENTE, da rispettare alla lettera come i macro: {extra_rules}
 - Ingredienti di BASE (sempre in casa, non vanno in lista della spesa): {base}
 - Dispensa attuale (da consumare in via prioritaria): {pantry}
 - Cucina preferita: {cuisine}

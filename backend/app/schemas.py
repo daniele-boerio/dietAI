@@ -77,6 +77,9 @@ class PreferencesUpdate(BaseModel):
     prefer_italian: bool
     max_prep_time_min: int | None = Field(default=None, ge=5, le=480)
     budget_level: str | None = None
+    # Regole libere ("niente insaccati", "carne max 2 volte a settimana"). Il tetto
+    # serve a non far esplodere il prompt: viene rimandato a ogni generazione.
+    notes: str | None = Field(default=None, max_length=2000)
 
 
 class AiModelsUpdate(BaseModel):

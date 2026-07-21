@@ -125,6 +125,12 @@ chat, rigenerazione e lettura della dieta — e su risposta vuota diagnostica il
 metà giovedì) funziona solo se il modello vede tutti i pasti insieme. Sopra gli 8.000
 token di output `ai_client` passa in streaming da solo.
 
+**Le regole dell'utente sono testo libero, di proposito.** `UserPreferences.notes`
+finisce in `CONTEXT_TEMPLATE` così com'è: il destinatario è un modello linguistico,
+quindi trasformare "carne rossa al massimo due volte a settimana" in caselle
+perderebbe sfumature senza guadagnare niente. Vale per generazione, rigenerazione e
+chat, perché tutte e tre passano da `build_context`.
+
 **Il totale giornaliero è invariante.** Aggiungere o togliere un pasto dall'editor
 della dieta non cambia quanto si mangia in un giorno, cambia come lo si divide:
 `lib/macros.js` ridistribuisce calorie e macro sugli altri pasti in proporzione a

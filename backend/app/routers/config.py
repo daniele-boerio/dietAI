@@ -314,6 +314,7 @@ def _serialize_prefs(prefs: UserPreferences) -> dict:
         "prefer_italian": prefs.prefer_italian,
         "max_prep_time_min": prefs.max_prep_time_min,
         "budget_level": prefs.budget_level,
+        "notes": prefs.notes,
     }
 
 
@@ -348,6 +349,7 @@ async def update_preferences(
     prefs.prefer_italian = body.prefer_italian
     prefs.max_prep_time_min = body.max_prep_time_min
     prefs.budget_level = body.budget_level
+    prefs.notes = (body.notes or "").strip() or None
     db.commit()
     return _serialize_prefs(prefs)
 

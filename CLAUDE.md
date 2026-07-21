@@ -92,6 +92,14 @@ dispensa. Da lì: lettura sì, `regenerate`/`assign`/`generate` → **409**; vot
 e tracking restano permessi; la chat diventa informativa (non aggiorna la ricetta).
 `refresh_week_statuses` archivia le settimane scadute a ogni lettura, senza scheduler.
 
+**"Lo faccio io" è un flag della dieta, non della settimana.** `MealSlot.auto_generate`
+a False significa che l'utente quel pasto lo prepara da sé: l'AI non lo genera mai e i
+suoi ingredienti non entrano in lista della spesa, **ma i suoi macro contano lo stesso**
+nel totale del giorno e nel tracking, dati per centrati sul target. Scordarsi la seconda
+metà è l'errore facile: si vedrebbe un buco di 400 kcal al giorno e l'aderenza a picco
+per un pasto che invece rispetta la dieta. Vedi `_is_fixed`, `serialize_week` e
+`weekly_tracking`.
+
 **I pasti fissi non si rigenerano.** `is_recurring` o `source == 'user_custom'` →
 `_is_fixed()` li salta nella generazione e la settimana successiva se li ricopia
 (`apply_recurring_meals`, con `copy_recipe`: copia, non riferimento).

@@ -1634,10 +1634,49 @@ textarea:focus {
 
 .meal-editor-row {
   display: grid;
-  grid-template-columns: minmax(120px, 2fr) repeat(4, minmax(70px, 1fr)) 32px;
+  grid-template-columns: minmax(120px, 2fr) repeat(4, minmax(64px, 1fr)) 104px 32px;
   gap: 8px;
   align-items: center;
   margin-bottom: 8px;
+}
+
+/* Chi prepara il pasto: l'AI o l'utente. Un pasto "mio" non viene mai generato,
+   ma i suoi macro continuano a contare nella giornata. */
+.who-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  transition: all var(--transition);
+}
+
+.who-toggle svg {
+  width: 13px;
+  height: 13px;
+}
+
+.who-toggle.ai {
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--accent);
+}
+
+.who-toggle.mine {
+  background: var(--terracotta-soft);
+  border-color: transparent;
+  color: var(--terracotta);
+}
+
+.meal-editor-row.self-managed input {
+  opacity: 0.75;
 }
 
 .meal-editor-head {
@@ -2033,6 +2072,9 @@ textarea:focus {
   }
   .meal-editor-row {
     grid-template-columns: 1fr 1fr;
+  }
+  .meal-editor-row .who-toggle {
+    grid-column: 1 / -1;
   }
   .shopping-footer {
     flex-direction: column;

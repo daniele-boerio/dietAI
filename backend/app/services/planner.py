@@ -321,6 +321,9 @@ def build_context(db: Session, user_id: int) -> str:
         f"  · {s.name}: {s.target_calories} kcal — proteine {s.target_protein_g:g}g, "
         f"carboidrati {s.target_carbs_g:g}g, grassi {s.target_fat_g:g}g"
         + (f" — note: {s.notes}" if s.notes else "")
+        # Elencato lo stesso, perché conta nel bilancio della giornata, ma va detto
+        # che non si tocca: senza, il modello prova a proporcelo comunque.
+        + ("" if s.auto_generate else " — NON generare: se lo prepara l'utente")
         for s in slots
     )
 
@@ -392,6 +395,8 @@ def serialize_meal(
             "fat_g": slot.target_fat_g,
             "notes": slot.notes,
         },
+        # "lo gestisco io": niente da generare, ma i macro contano nella giornata
+        "self_managed": not slot.auto_generate,
         "source": meal.source,
         "is_recurring": meal.is_recurring,
         "recurring_rule": meal.recurring_rule,
@@ -419,17 +424,29 @@ def serialize_week(db: Session, week: WeekPlan) -> dict:
         entry["meals"].append(serialize_meal(db, day, meal, slot))
 
     for entry in days.values():
-        planned = [m["recipe"] for m in entry["meals"] if m["recipe"]]
+        # I pasti gestiti dall'utente non hanno una ricetta, ma lui li mangia centrando
+        # i target: contarli col loro target è l'unico modo perché il totale del giorno
+        # rappresenti quello che si mangia davvero e non solo quello che ha scritto l'AI.
+        def _macros(meal: dict) -> dict:
+            if meal["recipe"]:
+                return meal["recipe"]
+            return meal["target"] if meal["self_managed"] else {}
+
+        contributi = [_macros(m) for m in entry["meals"]]
         entry["totals"] = {
-            "calories": sum(r["calories"] for r in planned),
-            "protein_g": round(sum(r["protein_g"] for r in planned), 1),
-            "carbs_g": round(sum(r["carbs_g"] for r in planned), 1),
-            "fat_g": round(sum(r["fat_g"] for r in planned), 1),
+            "calories": sum(c.get("calories", 0) for c in contributi),
+            "protein_g": round(sum(c.get("protein_g", 0) for c in contributi), 1),
+            "carbs_g": round(sum(c.get("carbs_g", 0) for c in contributi), 1),
+            "fat_g": round(sum(c.get("fat_g", 0) for c in contributi), 1),
             "target_calories": sum(m["target"]["calories"] for m in entry["meals"]),
         }
 
-    total_slots = len(rows)
-    filled = sum(1 for _, meal, _ in rows if meal.recipe_id)
+    # "Da riempire" conta solo le caselle che l'AI deve generare: includere quelle
+    # gestite dall'utente farebbe sembrare il piano perennemente incompleto.
+    generabili = [(d, m, s) for d, m, s in rows if s.auto_generate]
+    total_slots = len(generabili)
+    filled = sum(1 for _, meal, _ in generabili if meal.recipe_id)
+    self_managed = len(rows) - total_slots
 
     return {
         "id": week.id,
@@ -441,6 +458,7 @@ def serialize_week(db: Session, week: WeekPlan) -> dict:
         "is_current": week.week_start_date == current_week_start(),
         "meals_total": total_slots,
         "meals_filled": filled,
+        "meals_self_managed": self_managed,
         "days": [days[k] for k in sorted(days)],
     }
 
@@ -456,9 +474,14 @@ def _slot_line(slot: MealSlot) -> str:
     return line + (f" (note: {slot.notes})" if slot.notes else "")
 
 
-def _is_fixed(meal: PlannedMeal) -> bool:
-    """Un pasto fissato non viene toccato dalla generazione automatica."""
-    return meal.is_recurring or meal.source == "user_custom"
+def _is_fixed(meal: PlannedMeal, slot: MealSlot) -> bool:
+    """Un pasto fissato non viene toccato dalla generazione automatica.
+
+    Tre modi per esserlo: è ricorrente, l'utente gli ha assegnato una ricetta a mano,
+    oppure il pasto è marcato nella dieta come "lo gestisco io" (`auto_generate` a
+    False) — la colazione di sempre, che non ha senso far reinventare ogni settimana.
+    """
+    return meal.is_recurring or meal.source == "user_custom" or not slot.auto_generate
 
 
 def generate_week(db: Session, user: User, week: WeekPlan) -> dict:
@@ -473,11 +496,14 @@ def generate_week(db: Session, user: User, week: WeekPlan) -> dict:
     if not rows:
         raise HTTPException(400, "La settimana non ha pasti da generare.")
 
-    to_fill = [(d, m, s) for d, m, s in rows if not _is_fixed(m)]
-    fixed = [(d, m, s) for d, m, s in rows if _is_fixed(m) and m.recipe_id]
+    to_fill = [(d, m, s) for d, m, s in rows if not _is_fixed(m, s)]
+    fixed = [(d, m, s) for d, m, s in rows if _is_fixed(m, s) and m.recipe_id]
 
     if not to_fill:
-        raise HTTPException(400, "Tutti i pasti della settimana sono fissati a mano.")
+        raise HTTPException(
+            400,
+            "Non c'è niente da generare: tutti i pasti sono fissi o gestiti da te.",
+        )
 
     by_day: dict[int, list[str]] = {}
     for day, _meal, slot in to_fill:

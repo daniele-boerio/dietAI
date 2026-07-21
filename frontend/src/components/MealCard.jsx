@@ -29,6 +29,12 @@ export default function MealCard({ meal, locked, busy, onRegenerate, onToggleRec
               fat={recipe.fat_g}
             />
           </>
+        ) : meal.self_managed ? (
+          // Non è una casella vuota da riempire: è un pasto che l'utente ha già
+          // risolto per conto suo, e i suoi macro contano nel totale del giorno.
+          <div className="meal-empty" style={{ fontStyle: 'normal' }}>
+            Lo prepari tu · {meal.target.calories} kcal
+          </div>
         ) : (
           <div className="meal-empty">
             Da generare · {meal.target.calories} kcal
@@ -36,18 +42,27 @@ export default function MealCard({ meal, locked, busy, onRegenerate, onToggleRec
         )}
       </Link>
 
-      {(meal.is_recurring || meal.source === 'user_custom') && (
+      {(meal.is_recurring || meal.self_managed || meal.source === 'user_custom') && (
         <div className="meal-flags">
+          {meal.self_managed && <span className="meal-flag custom">Tuo pasto</span>}
           {meal.is_recurring && <span className="meal-flag fixed">Fisso</span>}
-          {meal.source === 'user_custom' && <span className="meal-flag custom">Tuo</span>}
+          {!meal.self_managed && meal.source === 'user_custom' && (
+            <span className="meal-flag custom">Tuo</span>
+          )}
         </div>
       )}
 
       <div className="meal-actions">
         <button
           className="meal-action"
-          title={locked ? 'Piano bloccato' : 'Rigenera'}
-          disabled={locked || busy}
+          title={
+            meal.self_managed
+              ? 'Questo pasto lo gestisci tu (cambia in Impostazioni → La mia dieta)'
+              : locked
+                ? 'Piano bloccato'
+                : 'Rigenera'
+          }
+          disabled={locked || busy || meal.self_managed}
           onClick={() => onRegenerate(meal)}
         >
           <RefreshCw className={busy ? 'spinning' : ''} />

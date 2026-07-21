@@ -40,6 +40,9 @@ class MealSlotInput(BaseModel):
     carbs_g: float = Field(ge=0, le=1000)
     fat_g: float = Field(ge=0, le=500)
     notes: str | None = None
+    # False = lo prepara l'utente, l'AI non deve generarlo. Default True perché le
+    # diete lette dal PDF non hanno questa informazione.
+    auto_generate: bool = True
 
 
 class DietMealsUpdate(BaseModel):

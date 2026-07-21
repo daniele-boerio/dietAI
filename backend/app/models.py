@@ -111,6 +111,10 @@ class MealSlot(Base):
     target_carbs_g = Column(Float, nullable=False)
     target_fat_g = Column(Float, nullable=False)
     notes = Column(Text)
+    # False = "questo pasto lo gestisco io": l'AI non lo genera mai, ma i suoi macro
+    # contano lo stesso nella giornata, perché l'utente lo mangia comunque centrando
+    # i target. Senza questa seconda parte il tracking mostrerebbe un buco.
+    auto_generate = Column(Boolean, nullable=False, default=True, server_default="true")
 
     __table_args__ = (
         UniqueConstraint("diet_plan_id", "order_index", name="uq_meal_slot_order"),

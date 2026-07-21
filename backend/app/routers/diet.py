@@ -41,6 +41,7 @@ def _serialize_diet(db: Session, diet: DietPlan) -> dict:
                 "carbs_g": s.target_carbs_g,
                 "fat_g": s.target_fat_g,
                 "notes": s.notes,
+                "auto_generate": s.auto_generate,
             }
             for s in slots
         ],
@@ -68,6 +69,7 @@ def _replace_meals(db: Session, diet: DietPlan, meals: list[dict]) -> None:
                 target_carbs_g=float(meal.get("carbs_g") or 0),
                 target_fat_g=float(meal.get("fat_g") or 0),
                 notes=(meal.get("notes") or None),
+                auto_generate=bool(meal.get("auto_generate", True)),
             )
         )
     db.flush()

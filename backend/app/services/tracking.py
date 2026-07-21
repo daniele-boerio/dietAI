@@ -45,7 +45,23 @@ def weekly_tracking(db: Session, week: WeekPlan) -> dict:
 
     for day, meal, slot in rows:
         recipe = db.get(Recipe, meal.recipe_id) if meal.recipe_id else None
-        planned = _macros(recipe)
+        self_managed = not slot.auto_generate
+
+        if recipe:
+            planned = _macros(recipe)
+        elif self_managed:
+            # L'utente ha detto di avere già il suo pasto con quei macro: darlo per
+            # centrato è la lettura giusta. Contarlo zero mostrerebbe un buco di 400
+            # kcal al giorno e farebbe crollare l'aderenza per un pasto che invece
+            # rispetta la dieta alla lettera.
+            planned = {
+                "calories": slot.target_calories,
+                "protein_g": slot.target_protein_g,
+                "carbs_g": slot.target_carbs_g,
+                "fat_g": slot.target_fat_g,
+            }
+        else:
+            planned = _macros(None)
 
         entry = days.setdefault(
             day.day_of_week,
@@ -80,8 +96,9 @@ def weekly_tracking(db: Session, week: WeekPlan) -> dict:
                 },
                 "planned": planned,
                 "color": compliance_color(planned["calories"], slot.target_calories)
-                if recipe
+                if (recipe or self_managed)
                 else "grey",
+                "self_managed": self_managed,
                 "is_followed": meal.is_followed,
                 "deviation_notes": meal.deviation_notes,
             }
@@ -119,7 +136,9 @@ def weekly_tracking(db: Session, week: WeekPlan) -> dict:
     avg_planned = sum(d["totals"]["planned_calories"] for d in days_with_food) / n
     avg_target = sum(d["totals"]["target_calories"] for d in ordered) / (len(ordered) or 1)
 
-    all_meals = [m for d in ordered for m in d["meals"] if m["recipe_title"]]
+    all_meals = [
+        m for d in ordered for m in d["meals"] if m["recipe_title"] or m["self_managed"]
+    ]
     in_range = sum(1 for m in all_meals if m["color"] == "green")
 
     return {

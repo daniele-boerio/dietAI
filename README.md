@@ -20,7 +20,9 @@ significherebbe sprecarlo.
 - **Lista della spesa automatica**: aggrega le quantità, converte le unità, toglie quello
   che hai in dispensa e quello che hai sempre in casa, raggruppa per reparto e stima il costo.
 - **Blocco settimanale** dopo la spesa, con la settimana successiva già modificabile.
-- **Pasti fissi** (la colazione di sempre, la pizza del sabato) che non vengono mai rigenerati.
+- **Pasti fissi** (la pizza del sabato) che non vengono mai rigenerati, e pasti
+  **"lo faccio io"** che l'AI non genera affatto — la colazione di sempre, il pranzo in
+  mensa — ma che continuano a contare nei macro della giornata.
 - **Ricettario** con voti e preferiti: i voti rientrano nel contesto delle generazioni future.
 - **Andamento**: pianificato vs prescritto, giorno per giorno.
 
@@ -81,7 +83,7 @@ API key → PDF della dieta → ingredienti di base ed esclusi → preferenze. P
 ## Test
 
 ```bash
-cd backend && .venv/Scripts/python.exe -m pytest tests -q   # 57 test
+cd backend && .venv/Scripts/python.exe -m pytest tests -q   # 66 test
 cd frontend && npm test                                     # 14 test
 ```
 

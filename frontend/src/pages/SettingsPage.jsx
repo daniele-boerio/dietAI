@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavLink, useParams } from 'react-router-dom';
-import { FileUp, KeyRound, Save, Trash2, X } from 'lucide-react';
+import { FileUp, KeyRound, Save, Sparkles, Trash2, User, X } from 'lucide-react';
 import { api } from '../api';
 import { useApp } from '../App';
 import { useAuth } from '../AuthContext';
@@ -102,6 +102,7 @@ function DietTab() {
         carbs_g: Number(m.carbs_g) || 0,
         fat_g: Number(m.fat_g) || 0,
         notes: m.notes || null,
+        auto_generate: m.auto_generate !== false,
       }));
       const updated = await api.updateDietMeals(diet.id, payload);
       setDiet(updated);
@@ -154,6 +155,20 @@ function DietTab() {
     addToast('Pasto aggiunto: la giornata è stata ridivisa fra tutti');
   };
 
+  // "Lo faccio io": DietAI smette di generarlo, ma i macro restano nel conto della
+  // giornata — l'utente quel pasto lo mangia comunque, centrando i target.
+  const toggleWho = (index) => {
+    const mine = meals[index].auto_generate === false;
+    setMeals((prev) =>
+      prev.map((m, i) => (i === index ? { ...m, auto_generate: mine } : m))
+    );
+    addToast(
+      mine
+        ? `${meals[index].name || 'Pasto'}: torna a generarlo DietAI`
+        : `${meals[index].name || 'Pasto'}: non verrà più generato, lo prepari tu`
+    );
+  };
+
   if (loading) return <div className="spinner" />;
 
   const totals = dailyTotals(meals);
@@ -173,11 +188,15 @@ function DietTab() {
           <span>Prot.</span>
           <span>Carb.</span>
           <span>Grassi</span>
+          <span>Chi lo prepara</span>
           <span />
         </div>
 
         {meals.map((meal, i) => (
-          <div key={i} className="meal-editor-row">
+          <div
+            key={i}
+            className={`meal-editor-row ${meal.auto_generate === false ? 'self-managed' : ''}`}
+          >
             <input value={meal.name} onChange={(e) => updateMeal(i, 'name', e.target.value)} />
             <input
               type="number"
@@ -199,6 +218,26 @@ function DietTab() {
               value={meal.fat_g}
               onChange={(e) => updateMeal(i, 'fat_g', e.target.value)}
             />
+            <button
+              className={`who-toggle ${meal.auto_generate === false ? 'mine' : 'ai'}`}
+              onClick={() => toggleWho(i)}
+              title={
+                meal.auto_generate === false
+                  ? 'Lo prepari tu: non verrà generato, ma i suoi macro contano nella giornata'
+                  : 'Lo genera DietAI a ogni piano settimanale'
+              }
+            >
+              {meal.auto_generate === false ? (
+                <>
+                  <User /> Lo faccio io
+                </>
+              ) : (
+                <>
+                  <Sparkles /> DietAI
+                </>
+              )}
+            </button>
+
             <button
               className="icon-button danger"
               onClick={() => dropMeal(i)}
@@ -226,6 +265,13 @@ function DietTab() {
           macro vengono ridistribuiti sugli altri pasti in proporzione a quanto già
           pesavano. Se invece è cambiata la dieta e i totali sono diversi, correggi i
           valori riga per riga.
+        </p>
+
+        <p className="field-hint">
+          <strong>Lo faccio io:</strong> per i pasti che hai già risolto — la colazione
+          di sempre, il pranzo in mensa. DietAI non li genera e non compra i loro
+          ingredienti, ma i macro restano nel conto della giornata: tu quel pasto lo
+          mangi, e centra i suoi target.
         </p>
 
         <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>

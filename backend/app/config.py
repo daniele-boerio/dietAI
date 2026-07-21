@@ -9,6 +9,19 @@ from dotenv import load_dotenv
 # variabili arrivano dall'ambiente: load_dotenv non fa nulla e non solleva.
 load_dotenv()
 
+
+def _clean(value: str | None) -> str:
+    """Ripulisce un segreto letto dall'ambiente.
+
+    Incollando un valore in un pannello web (Coolify) capita di portarsi dietro
+    virgolette, spazi o un a capo. Per SECRET_KEY passerebbe inosservato — cambia
+    solo la firma dei token — ma una chiave Fernet con un apice attaccato smette di
+    essere valida, e l'errore che si vede ("chiave non valida") non fa sospettare
+    la punteggiatura.
+    """
+    return (value or "").strip().strip("\"'").strip()
+
+
 # --- Database ---
 DB_USER = os.getenv("DB_USER", "dietai")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "")
@@ -24,7 +37,7 @@ DATABASE_URL = (
 )
 
 # --- Auth ---
-SECRET_KEY = os.getenv("SECRET_KEY", "")
+SECRET_KEY = _clean(os.getenv("SECRET_KEY"))
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 
 # L'access token è a vita breve: sta in un cookie httpOnly, ma se comunque trapelasse
@@ -41,7 +54,7 @@ COOKIE_DOMAIN = os.getenv("COOKIE_DOMAIN") or None
 # Chiave Fernet (AES-128-CBC + HMAC) generata con:
 #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 # Senza, la API key dell'utente non è salvabile: gli endpoint che la usano rispondono 503.
-ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY", "")
+ENCRYPTION_KEY = _clean(os.getenv("ENCRYPTION_KEY"))
 
 # --- Utente seed ---
 # L'app è single-user: l'utente non si registra, viene creato da `python -m app.seed`.

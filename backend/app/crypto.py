@@ -21,8 +21,14 @@ def _fernet() -> Fernet:
     try:
         return Fernet(ENCRYPTION_KEY.encode())
     except (ValueError, TypeError):
+        # Il messaggio dice quanto è lunga la chiave letta: quasi sempre il problema
+        # è il copia-incolla (virgolette rimaste, "=" finale perso, chiave troncata)
+        # e la lunghezza lo rivela subito, senza dover stampare il segreto.
         raise HTTPException(
-            503, "ENCRYPTION_KEY non valida: serve una chiave Fernet base64 di 32 byte."
+            503,
+            f"ENCRYPTION_KEY non valida: letti {len(ENCRYPTION_KEY)} caratteri, "
+            "ne servono 44 (chiave Fernet urlsafe-base64 da 32 byte, "
+            "generata con Fernet.generate_key(), '=' finale compreso).",
         )
 
 

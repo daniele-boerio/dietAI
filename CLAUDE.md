@@ -51,6 +51,7 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
 │       ├── crypto.py           # Fernet per la API key di Claude
 │       ├── rate_limit.py       # slowapi (AI_LIMIT = 20/minuto)
 │       ├── seed.py             # `python -m app.seed`: utente + anagrafica ingredienti
+│       ├── reset_password.py   # `python -m app.reset_password '...'`: unica via di rientro
 │       ├── routers/            # auth, diet, config, planning, recipes, chat, shopping, tracking
 │       ├── services/
 │       │   ├── ai_client.py    # wrapper Anthropic: retry, streaming, estrazione JSON
@@ -99,6 +100,11 @@ token di output `ai_client` passa in streaming da solo.
 toglie i qualificatori ("zucchine fresche" → "zucchine") e mette in minuscolo: senza,
 la lista della spesa avrebbe tre righe di zucchine e la dispensa non ne coprirebbe
 nessuna.
+
+**Niente email, in tutta l'app.** Nessun SMTP, nessuna registrazione, nessun recupero
+password via link: l'utente nasce dal seed e l'unico endpoint pubblico è `/auth/login`.
+Se la password si perde si usa `python -m app.reset_password` dal container. Cancellare
+la riga utente per farla ricreare dal seed **distrugge tutti i dati** (FK in CASCADE).
 
 ## Convenzioni
 

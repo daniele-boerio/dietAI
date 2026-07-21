@@ -90,6 +90,20 @@ toccare i dati. L'utente viene creato solo la prima volta — cambiare
 ⚠️ `ENCRYPTION_KEY` non va più cambiata dopo il primo avvio: la API key di Claude
 salvata diventerebbe indecifrabile e andrebbe reinserita.
 
+## Password dimenticata
+
+Non c'è recupero via email: l'app non manda posta e non espone endpoint pubblici non
+autenticati. La password si cambia da *Impostazioni → Account*, e se l'hai persa si
+reimposta dal terminale del container (su Coolify: Terminal sul servizio backend):
+
+```bash
+python -m app.reset_password 'nuova-password-lunga'
+```
+
+Revoca anche tutte le sessioni aperte. **Non cancellare la riga dell'utente** per farla
+ricreare dal seed: le foreign key sono in CASCADE e si porterebbero via dieta, ricette,
+settimane e lista della spesa.
+
 ## Costi
 
 Ogni generazione settimanale è una chiamata a Claude con tutte le ricette in un colpo

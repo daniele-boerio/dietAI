@@ -76,12 +76,19 @@ fissi e le conversioni di unità — senza spendere un centesimo di API.
 FastAPI) e un PostgreSQL come risorsa separata. Solo il frontend ha un dominio pubblico;
 il backend è raggiungibile solo dalla rete Docker interna.
 
-Variabili da impostare nelle Environment Variables: `DB_USER`, `DB_PASSWORD`, `DB_HOST`,
+Variabili obbligatorie nelle Environment Variables: `DB_USER`, `DB_PASSWORD`, `DB_HOST`,
 `DB_PORT`, `DB_NAME`, `SECRET_KEY`, `ENCRYPTION_KEY`, `SEED_USER_EMAIL`,
-`SEED_USER_PASSWORD`, `COOKIE_SECURE=true`.
+`SEED_USER_PASSWORD`, `COOKIE_SECURE=true`. Facoltative (hanno un default nel compose):
+`AI_MODEL_PLANNING`, `AI_MODEL_CHAT`, `AI_MAX_RETRIES`, `ACCESS_TOKEN_EXPIRE_MINUTES`,
+`REFRESH_TOKEN_EXPIRE_DAYS`.
 
-Le migrazioni girano da sole all'avvio del container; il seed dell'utente va lanciato
-una volta: `docker exec <container-backend> python -m app.seed`.
+All'avvio il container backend esegue migrazioni e seed da solo: entrambi sono
+idempotenti, quindi ogni redeploy allinea lo schema e l'anagrafica ingredienti senza
+toccare i dati. L'utente viene creato solo la prima volta — cambiare
+`SEED_USER_PASSWORD` dopo non cambia la password (si usa *Impostazioni → Account*).
+
+⚠️ `ENCRYPTION_KEY` non va più cambiata dopo il primo avvio: la API key di Claude
+salvata diventerebbe indecifrabile e andrebbe reinserita.
 
 ## Costi
 

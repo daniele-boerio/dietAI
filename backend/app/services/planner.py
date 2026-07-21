@@ -551,6 +551,12 @@ def generate_week(
     )
 
     client = get_client(db, user, "planning")
+
+    # Le letture qui sopra hanno aperto una transazione, e la chiamata che segue può
+    # durare minuti: chiuderla adesso evita di lasciare una connessione "idle in
+    # transaction" su Postgres per tutta la generazione.
+    db.commit()
+
     # Budget: ~2.000 token a ricetta più il margine per il ragionamento. Sopra la
     # soglia il client passa automaticamente in streaming.
     max_tokens = min(64000, 2000 * len(to_fill) + 6000)
@@ -672,6 +678,7 @@ def regenerate_meal(
     )
 
     client = get_client(db, user, "planning")
+    db.commit()  # come sopra: niente transazione aperta durante la chiamata al modello
     data = client.generate_json(
         prompts.SINGLE_MEAL_SYSTEM, prompt, max_tokens=8000, thinking=False
     )

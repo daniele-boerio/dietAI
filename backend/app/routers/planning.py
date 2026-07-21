@@ -64,7 +64,7 @@ def _get_meal(db: Session, user_id: int, meal_id: int) -> tuple[PlannedMeal, Day
 
 
 @router.get("/weeks/current")
-async def get_current_week(
+def get_current_week(
     user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
 ):
     refresh_week_statuses(db, user_id)
@@ -73,7 +73,7 @@ async def get_current_week(
 
 
 @router.get("/weeks/next")
-async def get_next_week(
+def get_next_week(
     user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
 ):
     refresh_week_statuses(db, user_id)
@@ -83,7 +83,7 @@ async def get_next_week(
 
 @router.post("/weeks/{week_id}/generate")
 @limiter.limit(AI_LIMIT)
-async def generate(
+def generate(
     request: Request,
     week_id: int,
     regenerate_all: bool = False,
@@ -104,7 +104,7 @@ async def generate(
 
 
 @router.post("/weeks/{week_id}/lock")
-async def lock_week(
+def lock_week(
     week_id: int, user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
 ):
     """Blocca la settimana a mano (di norma lo fa il completamento della spesa)."""
@@ -125,7 +125,7 @@ async def lock_week(
 
 
 @router.post("/weeks/{week_id}/unlock")
-async def unlock_week(
+def unlock_week(
     week_id: int, user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
 ):
     """Sblocco d'emergenza: la UI lo chiede con una conferma esplicita."""
@@ -139,7 +139,7 @@ async def unlock_week(
 
 
 @router.post("/weeks/{week_id}/shopping-done")
-async def shopping_done(
+def shopping_done(
     week_id: int, user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
 ):
     """Alias di /api/shopping/current/complete per la settimana indicata."""
@@ -152,7 +152,7 @@ async def shopping_done(
 
 
 @router.get("/meals/{meal_id}")
-async def get_meal(
+def get_meal(
     meal_id: int, user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
 ):
     meal, day, week = _get_meal(db, user_id, meal_id)
@@ -170,7 +170,7 @@ async def get_meal(
 
 @router.post("/meals/{meal_id}/regenerate")
 @limiter.limit(AI_LIMIT)
-async def regenerate(
+def regenerate(
     request: Request,
     meal_id: int,
     user: User = Depends(get_current_user),
@@ -183,7 +183,7 @@ async def regenerate(
 
 
 @router.put("/meals/{meal_id}/assign")
-async def assign_meal(
+def assign_meal(
     meal_id: int,
     body: AssignMealRequest,
     user: User = Depends(get_current_user),
@@ -221,7 +221,7 @@ async def assign_meal(
 
 
 @router.delete("/meals/{meal_id}/recipe")
-async def clear_meal(
+def clear_meal(
     meal_id: int, user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
 ):
     """Svuota la casella (la ricetta resta nel ricettario)."""
@@ -243,7 +243,7 @@ async def clear_meal(
 
 
 @router.put("/meals/{meal_id}/recurring")
-async def set_recurring(
+def set_recurring(
     meal_id: int,
     body: RecurringRequest,
     user_id: int = Depends(get_current_user_id),
@@ -270,7 +270,7 @@ async def set_recurring(
 
 
 @router.put("/meals/{meal_id}/followed")
-async def set_followed(
+def set_followed(
     meal_id: int,
     body: FollowedRequest,
     user_id: int = Depends(get_current_user_id),

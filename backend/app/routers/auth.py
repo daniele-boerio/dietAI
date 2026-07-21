@@ -53,7 +53,7 @@ def _serialize_user(db: Session, user: User) -> dict:
 
 @router.post("/login")
 @limiter.limit("10/minute")
-async def login(
+def login(
     request: Request,
     response: Response,
     body: LoginRequest,
@@ -75,7 +75,7 @@ async def login(
 
 
 @router.post("/refresh")
-async def refresh_session(request: Request, response: Response, db: Session = Depends(get_db)):
+def refresh_session(request: Request, response: Response, db: Session = Depends(get_db)):
     raw = request.cookies.get(REFRESH_COOKIE_NAME)
     if not raw:
         raise HTTPException(401, "Sessione assente")
@@ -97,7 +97,7 @@ async def refresh_session(request: Request, response: Response, db: Session = De
 
 
 @router.post("/logout")
-async def logout(request: Request, response: Response, db: Session = Depends(get_db)):
+def logout(request: Request, response: Response, db: Session = Depends(get_db)):
     raw = request.cookies.get(REFRESH_COOKIE_NAME)
     if raw:
         revoke_session(db, raw)
@@ -107,12 +107,12 @@ async def logout(request: Request, response: Response, db: Session = Depends(get
 
 
 @router.get("/me")
-async def me(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def me(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     return _serialize_user(db, user)
 
 
 @router.put("/api-key")
-async def set_api_key(
+def set_api_key(
     body: ApiKeyRequest,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -135,7 +135,7 @@ async def set_api_key(
 
 
 @router.delete("/api-key")
-async def delete_api_key(
+def delete_api_key(
     user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
     user.claude_api_key_enc = None
@@ -144,7 +144,7 @@ async def delete_api_key(
 
 
 @router.post("/change-password")
-async def change_password(
+def change_password(
     response: Response,
     body: ChangePasswordRequest,
     user: User = Depends(get_current_user),
@@ -165,7 +165,7 @@ async def change_password(
 
 
 @router.get("/preferences-exist")
-async def preferences_exist(
+def preferences_exist(
     user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
     """Usato dall'onboarding per sapere se le preferenze sono già state impostate."""

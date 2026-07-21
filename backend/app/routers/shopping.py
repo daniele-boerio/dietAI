@@ -35,7 +35,7 @@ def _week_and_list(db: Session, user_id: int, which: str) -> tuple[WeekPlan, Sho
 
 
 @router.get("/current")
-async def get_current_list(
+def get_current_list(
     user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
 ):
     week, lst = _week_and_list(db, user_id, "current")
@@ -43,7 +43,7 @@ async def get_current_list(
 
 
 @router.get("/next")
-async def get_next_list(
+def get_next_list(
     user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
 ):
     """Anteprima della spesa della settimana prossima, sempre modificabile."""
@@ -52,7 +52,7 @@ async def get_next_list(
 
 
 @router.put("/items/{item_id}/check")
-async def check_item(
+def check_item(
     item_id: int,
     body: CheckItemRequest,
     user_id: int = Depends(get_current_user_id),
@@ -76,7 +76,7 @@ async def check_item(
 
 
 @router.post("/{which}/complete")
-async def complete(
+def complete(
     which: str,
     user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
@@ -93,7 +93,7 @@ async def complete(
 
 
 @router.get("/export", response_class=PlainTextResponse)
-async def export(
+def export(
     which: str = Query("current", pattern="^(current|next)$"),
     user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),

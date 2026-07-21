@@ -45,6 +45,10 @@ app.include_router(shopping.router)
 app.include_router(tracking.router)
 
 
+# Tutte le rotte sono `def`, non `async def`: il lavoro dell'app è sincrono e
+# bloccante (SQLAlchemy, chiamate al modello che durano minuti), e su una rotta
+# async bloccherebbe l'intero event loop. Così FastAPI le manda in un threadpool.
+# La regola è senza eccezioni — la verifica tests/test_concurrency.py.
 @app.get("/api/health", tags=["Servizio"])
-async def health():
+def health():
     return {"status": "ok"}

@@ -51,7 +51,7 @@ def _serialize_message(message: MealChatMessage) -> dict:
 
 
 @router.get("/meals/{meal_id}/messages")
-async def get_history(
+def get_history(
     meal_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
     _get_meal(db, user.id, meal_id)
@@ -66,7 +66,7 @@ async def get_history(
 
 @router.post("/meals/{meal_id}/messages")
 @limiter.limit(AI_LIMIT)
-async def send_message(
+def send_message(
     request: Request,
     meal_id: int,
     body: ChatMessageRequest,
@@ -160,7 +160,7 @@ async def send_message(
 
 
 @router.delete("/meals/{meal_id}/messages", status_code=204)
-async def clear_history(
+def clear_history(
     meal_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
     _get_meal(db, user.id, meal_id)

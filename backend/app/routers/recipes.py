@@ -54,7 +54,7 @@ def _usage_history(db: Session, recipe_id: int) -> list[dict]:
 
 
 @router.get("")
-async def list_recipes(
+def list_recipes(
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     rating_min: int | None = Query(None, ge=1, le=5),
@@ -92,7 +92,7 @@ async def list_recipes(
 
 
 @router.get("/{recipe_id}")
-async def get_recipe(
+def get_recipe(
     recipe_id: int, user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
 ):
     recipe = _get_recipe(db, user_id, recipe_id)
@@ -102,7 +102,7 @@ async def get_recipe(
 
 
 @router.post("", status_code=201)
-async def create_custom_recipe(
+def create_custom_recipe(
     body: RecipeCreate,
     user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
@@ -113,7 +113,7 @@ async def create_custom_recipe(
 
 
 @router.put("/{recipe_id}/rate")
-async def rate_recipe(
+def rate_recipe(
     recipe_id: int,
     body: RatingRequest,
     user_id: int = Depends(get_current_user_id),
@@ -127,7 +127,7 @@ async def rate_recipe(
 
 
 @router.put("/{recipe_id}/favorite")
-async def favorite_recipe(
+def favorite_recipe(
     recipe_id: int,
     body: FavoriteRequest,
     user_id: int = Depends(get_current_user_id),
@@ -140,7 +140,7 @@ async def favorite_recipe(
 
 
 @router.delete("/{recipe_id}", status_code=204)
-async def delete_recipe(
+def delete_recipe(
     recipe_id: int, user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
 ):
     recipe = _get_recipe(db, user_id, recipe_id)
@@ -154,7 +154,7 @@ async def delete_recipe(
 
 @router.post("/{recipe_id}/substitute")
 @limiter.limit(AI_LIMIT)
-async def substitute_ingredient(
+def substitute_ingredient(
     request: Request,
     recipe_id: int,
     body: SubstituteRequest,

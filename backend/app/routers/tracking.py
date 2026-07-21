@@ -26,7 +26,7 @@ router = APIRouter(prefix="/api/tracking", tags=["Tracking"])
 
 
 @router.get("/weekly")
-async def weekly(
+def weekly(
     week_start_date: str | None = Query(None, description="AAAA-MM-GG, default: settimana corrente"),
     user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
@@ -53,7 +53,7 @@ async def weekly(
 
 
 @router.get("/weeks")
-async def list_weeks(
+def list_weeks(
     user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
 ):
     """Elenco delle settimane esistenti, per il selettore dello storico."""
@@ -78,7 +78,7 @@ async def list_weeks(
 
 
 @router.get("/dashboard")
-async def dashboard(
+def dashboard(
     user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
 ):
     """Riepilogo della home: cosa si mangia oggi, a che punto è il piano e la spesa."""

@@ -154,6 +154,12 @@ password via link: l'utente nasce dal seed e l'unico endpoint pubblico è `/auth
 Se la password si perde si usa `python -m app.reset_password` dal container. Cancellare
 la riga utente per farla ricreare dal seed **distrugge tutti i dati** (FK in CASCADE).
 
+**Le rotte sono `def`, mai `async def`.** Il lavoro dell'app è sincrono e bloccante
+(SQLAlchemy senza async, chiamate al modello che durano minuti): su una rotta `async`
+girerebbe sull'event loop e congelerebbe l'intero server — durante una generazione
+perfino `GET /api/auth/me` restava appeso. Con `def`, FastAPI le esegue in un
+threadpool. La regola non ha eccezioni e `tests/test_concurrency.py` la fa rispettare.
+
 ## Convenzioni
 
 - **Ogni query su dati personali va filtrata per `user_id`.** L'app è single-user ma lo

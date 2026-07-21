@@ -77,7 +77,7 @@ def _replace_meals(db: Session, diet: DietPlan, meals: list[dict]) -> None:
 
 @router.post("/upload")
 @limiter.limit(AI_LIMIT)
-async def upload_diet(
+def upload_diet(
     request: Request,
     file: UploadFile = File(...),
     user: User = Depends(get_current_user),
@@ -95,7 +95,9 @@ async def upload_diet(
     if file.content_type not in ("application/pdf", "application/x-pdf"):
         raise HTTPException(400, "Serve un file PDF.")
 
-    content = await file.read()
+    # `file.file` è il file temporaneo sottostante: si legge in modo sincrono,
+    # come tutto il resto di questa rotta (che gira già in un thread).
+    content = file.file.read()
     if not content:
         raise HTTPException(400, "Il file è vuoto.")
     if len(content) > MAX_PDF_BYTES:
@@ -156,7 +158,7 @@ async def upload_diet(
 
 
 @router.post("/manual")
-async def create_diet_manually(
+def create_diet_manually(
     body: DietMealsUpdate,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -183,7 +185,7 @@ async def create_diet_manually(
 
 
 @router.get("/current")
-async def get_current_diet(
+def get_current_diet(
     user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
     diet = get_active_diet(db, user.id)
@@ -193,7 +195,7 @@ async def get_current_diet(
 
 
 @router.put("/{diet_id}/meals")
-async def update_diet_meals(
+def update_diet_meals(
     diet_id: int,
     body: DietMealsUpdate,
     user: User = Depends(get_current_user),

@@ -46,7 +46,7 @@ BUDGET_LEVELS = {"economico", "medio", "premium"}
 
 
 @router.get("/base-ingredients")
-async def list_base(user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+def list_base(user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     rows = (
         db.query(BaseIngredient, Ingredient)
         .join(Ingredient, Ingredient.id == BaseIngredient.ingredient_id)
@@ -61,7 +61,7 @@ async def list_base(user_id: int = Depends(get_current_user_id), db: Session = D
 
 
 @router.post("/base-ingredients", status_code=201)
-async def add_base(
+def add_base(
     body: IngredientNameRequest,
     user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
@@ -83,7 +83,7 @@ async def add_base(
 
 
 @router.post("/base-ingredients/defaults")
-async def add_default_base(
+def add_default_base(
     user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
 ):
     """Riempie la lista con i soliti sospetti (sale, olio, pepe...) durante l'onboarding."""
@@ -106,7 +106,7 @@ async def add_default_base(
 
 
 @router.delete("/base-ingredients/{item_id}", status_code=204)
-async def remove_base(
+def remove_base(
     item_id: int, user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
 ):
     deleted = (
@@ -124,7 +124,7 @@ async def remove_base(
 
 
 @router.get("/excluded")
-async def list_excluded(
+def list_excluded(
     user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
 ):
     rows = (
@@ -147,7 +147,7 @@ async def list_excluded(
 
 
 @router.post("/excluded", status_code=201)
-async def add_excluded(
+def add_excluded(
     body: ExcludedCreate,
     user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
@@ -194,7 +194,7 @@ async def add_excluded(
 
 
 @router.delete("/excluded/{item_id}", status_code=204)
-async def remove_excluded(
+def remove_excluded(
     item_id: int, user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
 ):
     deleted = (
@@ -228,7 +228,7 @@ def _serialize_pantry(item: PantryItem, ingredient: Ingredient) -> dict:
 
 
 @router.get("/pantry")
-async def list_pantry(
+def list_pantry(
     user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
 ):
     rows = (
@@ -242,7 +242,7 @@ async def list_pantry(
 
 
 @router.post("/pantry", status_code=201)
-async def add_pantry(
+def add_pantry(
     body: PantryCreate,
     user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
@@ -268,7 +268,7 @@ async def add_pantry(
 
 
 @router.put("/pantry/{item_id}")
-async def update_pantry(
+def update_pantry(
     item_id: int,
     body: PantryUpdate,
     user_id: int = Depends(get_current_user_id),
@@ -291,7 +291,7 @@ async def update_pantry(
 
 
 @router.delete("/pantry/{item_id}", status_code=204)
-async def remove_pantry(
+def remove_pantry(
     item_id: int, user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
 ):
     deleted = (
@@ -319,7 +319,7 @@ def _serialize_prefs(prefs: UserPreferences) -> dict:
 
 
 @router.get("/preferences")
-async def get_preferences(
+def get_preferences(
     user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
 ):
     prefs = db.query(UserPreferences).filter(UserPreferences.user_id == user_id).first()
@@ -332,7 +332,7 @@ async def get_preferences(
 
 
 @router.put("/preferences")
-async def update_preferences(
+def update_preferences(
     body: PreferencesUpdate,
     user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
@@ -389,7 +389,7 @@ def _prefs_of(db: Session, user_id: int) -> UserPreferences:
 
 
 @router.get("/ai")
-async def get_ai_config(
+def get_ai_config(
     user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
 ):
     """Provider attivo e modello scelto per ogni ruolo (col default se non scelto)."""
@@ -413,7 +413,7 @@ async def get_ai_config(
 
 
 @router.get("/ai/models")
-async def get_ai_models(
+def get_ai_models(
     q: str = "",
     _user_id: int = Depends(get_current_user_id),
 ):
@@ -436,7 +436,7 @@ async def get_ai_models(
 
 
 @router.put("/ai/models")
-async def update_ai_models(
+def update_ai_models(
     body: AiModelsUpdate,
     user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
@@ -458,14 +458,14 @@ async def update_ai_models(
             )
         setattr(prefs, f"ai_model_{role}", value or None)
     db.commit()
-    return await get_ai_config(user_id=user_id, db=db)
+    return get_ai_config(user_id=user_id, db=db)
 
 
 # ── Ricerca ingredienti (autocomplete) ─────────────────────────────────────────
 
 
 @router.get("/ingredients/search")
-async def search_ingredients(
+def search_ingredients(
     q: str = "", _user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
 ):
     """Suggerimenti per i campi "aggiungi ingrediente"."""

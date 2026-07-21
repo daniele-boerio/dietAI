@@ -149,6 +149,10 @@ la riga utente per farla ricreare dal seed **distrugge tutti i dati** (FK in CAS
   meno leggibili. Pydantic valida gli input.
 - Tutte le chiamate del frontend passano da `api.js` — mai `fetch` nei componenti.
 - Un solo file CSS (`index.css`) con custom properties. Niente CSS modules, niente Tailwind.
+- La griglia settimanale (≥1100px) allinea le righe sciogliendo `.day-column` con
+  `display: contents`, e **ogni cella dichiara riga e colonna** (inline, da `WeekGrid`).
+  Non affidarsi al posizionamento automatico: il cursore di CSS Grid non torna
+  indietro fra colonne e manderebbe l'intestazione del secondo giorno in fondo.
 - **Testo UI in italiano.** Codice, commenti e nomi in inglese solo dove è già così.
 - I prompt stanno tutti in `services/prompts.py`: i vincoli devono essere identici tra
   generazione, rigenerazione e chat, altrimenti l'AI si contraddice da una schermata all'altra.

@@ -617,9 +617,11 @@ textarea {
   margin-left: auto;
 }
 
+/* Sotto i 1100px ogni giorno è un blocco a sé che va a capo: l'allineamento fra
+   giorni non ha più senso, perché non stanno più uno accanto all'altro. */
 .week-grid {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 10px;
   align-items: start;
 }
@@ -629,6 +631,27 @@ textarea {
   flex-direction: column;
   gap: 8px;
   min-width: 0;
+}
+
+/* Vista settimanale piena: sette colonne per N righe. `display: contents` scioglie
+   il contenitore del giorno, così le sue celle diventano figlie della griglia e
+   possono allinearsi con quelle degli altri giorni — una riga per pasto. Senza,
+   ogni colonna si impila per conto suo e i pranzi finiscono a quote diverse. */
+@media (min-width: 1100px) {
+  .week-grid {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    align-items: stretch;
+  }
+
+  .day-column {
+    display: contents;
+  }
+
+  /* La cella prende l'altezza della riga (la card più alta): è ciò che fa quadrare
+     i bordi inferiori fra giorni diversi. */
+  .meal-card {
+    height: 100%;
+  }
 }
 
 .day-head {
@@ -673,7 +696,15 @@ textarea {
   gap: 7px;
   text-align: left;
   width: 100%;
+  min-width: 0; /* senza, i titoli lunghi allargano la colonna della griglia */
   transition: border-color var(--transition), transform var(--transition), box-shadow var(--transition);
+}
+
+/* Due righe riservate al titolo anche quando ne basta una: evita che le card di una
+   stessa riga differiscano di 20px solo per la lunghezza del nome del piatto. */
+.meal-title,
+.meal-empty {
+  min-height: 2.2em;
 }
 
 .meal-card:hover {
@@ -2024,11 +2055,8 @@ textarea:focus {
 }
 
 @media (max-width: 1000px) {
-  /* Sotto questa soglia sette colonne diventano illeggibili: la griglia
-     settimanale si trasforma in una lista di giorni. */
-  .week-grid {
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  }
+  /* La griglia a sette colonne vale solo da 1100px in su (vedi sopra): qui i giorni
+     vanno già a capo da soli, non serve ridichiararlo. */
   .settings-layout {
     grid-template-columns: minmax(0, 1fr);
   }

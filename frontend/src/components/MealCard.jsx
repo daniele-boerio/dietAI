@@ -4,11 +4,20 @@ import MacroBar from './MacroBar';
 
 // Card di un incrocio giorno × pasto. Mostra sempre lo slot e il target, anche
 // quando la casella è vuota: la struttura della dieta si legge prima delle ricette.
-export default function MealCard({ meal, locked, busy, onRegenerate, onToggleRecurring }) {
+export default function MealCard({
+  meal,
+  locked,
+  busy,
+  onRegenerate,
+  onToggleRecurring,
+  style,
+}) {
   const { recipe } = meal;
 
   return (
-    <div className="meal-card">
+    // `style` porta la posizione nella griglia settimanale (riga e colonna): sui
+    // monitor stretti il contenitore torna flex e queste proprietà vengono ignorate.
+    <div className="meal-card" style={style}>
       <Link to={`/meals/${meal.id}`} style={{ display: 'contents' }}>
         <div className="meal-slot">{meal.slot_name}</div>
 

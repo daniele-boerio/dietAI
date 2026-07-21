@@ -6,6 +6,7 @@ import { useApp } from '../App';
 import { useAuth } from '../AuthContext';
 import IngredientInput from '../components/IngredientInput';
 import ModelPicker from '../components/ModelPicker';
+import { addMeal, dailyTotals, removeMeal } from '../lib/macros';
 
 const TABS = [
   { key: 'diet', label: 'La mia dieta' },
@@ -105,7 +106,10 @@ function DietTab() {
       const updated = await api.updateDietMeals(diet.id, payload);
       setDiet(updated);
       setMeals(updated.meals);
-      addToast('Dieta aggiornata ✓');
+      // Le ricette già assegnate restano quelle di prima: se i target sono cambiati
+      // non sono più in bersaglio, e conviene dirlo subito invece di farlo scoprire
+      // dalla percentuale di aderenza in Andamento.
+      addToast('Dieta aggiornata ✓ — rigenera la settimana per adeguare le ricette');
     } catch (e) {
       addToast(e.message, 'error');
     } finally {
@@ -129,9 +133,30 @@ function DietTab() {
     }
   };
 
+  // Togliere o aggiungere un pasto non cambia quanto si mangia in un giorno: cambia
+  // come lo si divide. Le calorie e i macro del pasto rimosso si ridistribuiscono
+  // sugli altri, in proporzione a quanto pesavano già.
+  const dropMeal = (index) => {
+    if (meals.length <= 1) {
+      addToast('La dieta deve avere almeno un pasto', 'error');
+      return;
+    }
+    const removed = meals[index];
+    setMeals(removeMeal(meals, index));
+    addToast(
+      `${removed.name || 'Pasto'} rimosso: le sue ${Math.round(removed.calories) || 0} kcal ` +
+        'sono andate sugli altri pasti'
+    );
+  };
+
+  const appendMeal = () => {
+    setMeals(addMeal(meals, 'Nuovo pasto'));
+    addToast('Pasto aggiunto: la giornata è stata ridivisa fra tutti');
+  };
+
   if (loading) return <div className="spinner" />;
 
-  const total = meals.reduce((sum, m) => sum + (Number(m.calories) || 0), 0);
+  const totals = dailyTotals(meals);
 
   return (
     <>
@@ -176,40 +201,41 @@ function DietTab() {
             />
             <button
               className="icon-button danger"
-              onClick={() => setMeals((prev) => prev.filter((_, idx) => idx !== i))}
-              title="Rimuovi il pasto"
+              onClick={() => dropMeal(i)}
+              title="Rimuovi il pasto (le sue calorie vanno sugli altri)"
             >
               <X size={15} />
             </button>
           </div>
         ))}
 
+        <div
+          className="meal-editor-row"
+          style={{ borderTop: '1px solid var(--border)', paddingTop: 10, marginTop: 6 }}
+        >
+          <strong>Totale giornaliero</strong>
+          <strong>{totals.calories}</strong>
+          <strong>{totals.protein_g}</strong>
+          <strong>{totals.carbs_g}</strong>
+          <strong>{totals.fat_g}</strong>
+          <span />
+        </div>
+
+        <p className="field-hint" style={{ marginTop: 10 }}>
+          Aggiungendo o togliendo un pasto il totale giornaliero non cambia: calorie e
+          macro vengono ridistribuiti sugli altri pasti in proporzione a quanto già
+          pesavano. Se invece è cambiata la dieta e i totali sono diversi, correggi i
+          valori riga per riga.
+        </p>
+
         <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={() =>
-              setMeals((prev) => [
-                ...prev,
-                {
-                  name: 'Nuovo pasto',
-                  order: prev.length,
-                  calories: 300,
-                  protein_g: 20,
-                  carbs_g: 35,
-                  fat_g: 10,
-                },
-              ])
-            }
-          >
+          <button className="btn btn-secondary btn-sm" onClick={appendMeal}>
             Aggiungi pasto
           </button>
           <button className="btn btn-primary btn-sm" onClick={save} disabled={busy}>
             {busy ? <span className="spinner-inline" /> : <Save size={14} />}
             Salva
           </button>
-          <span style={{ marginLeft: 'auto', alignSelf: 'center', color: 'var(--text-secondary)' }}>
-            Totale: <strong>{total} kcal</strong>
-          </span>
         </div>
       </div>
 

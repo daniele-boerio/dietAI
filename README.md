@@ -81,12 +81,14 @@ API key → PDF della dieta → ingredienti di base ed esclusi → preferenze. P
 ## Test
 
 ```bash
-cd backend && .venv/Scripts/python.exe -m pytest tests -q
+cd backend && .venv/Scripts/python.exe -m pytest tests -q   # 48 test
+cd frontend && npm test                                     # 14 test
 ```
 
-Girano su SQLite in memoria col modello sostituito da una risposta finta: verificano la
-struttura della settimana, l'aggregazione della spesa, la dispensa, il blocco, i pasti
-fissi e le conversioni di unità — senza spendere un centesimo di API.
+Il backend gira su SQLite in memoria col modello sostituito da una risposta finta:
+verifica la struttura della settimana, l'aggregazione della spesa, la dispensa, il
+blocco, i pasti fissi e le conversioni di unità — senza spendere un centesimo di API.
+Il frontend testa la ripartizione di calorie e macro tra i pasti.
 
 ## Deploy
 

@@ -73,6 +73,7 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
     ├── AuthContext.jsx         # useAuth(): user, login, logout, refreshUser
     ├── api.js                  # TUTTE le fetch + refresh automatico sul 401
     ├── index.css               # design system completo (variabili CSS, tema chiaro/scuro)
+    ├── lib/macros.js           # ripartizione calorie/macro tra i pasti (+ test)
     ├── components/             # WeekGrid, MealCard, MealChat, RecipeView, MacroBar...
     └── pages/                  # Dashboard, Planning, MealDetail, Shopping, Recipes,
                                 # Tracking, Settings, Onboarding, Login
@@ -108,6 +109,13 @@ scansione (`looks_scanned`) serve il backend Anthropic, che lo legge nativamente
 **Una sola chiamata AI per settimana.** L'anti-spreco (mezza zucchina lunedì, l'altra
 metà giovedì) funziona solo se il modello vede tutti i pasti insieme. Sopra gli 8.000
 token di output `ai_client` passa in streaming da solo.
+
+**Il totale giornaliero è invariante.** Aggiungere o togliere un pasto dall'editor
+della dieta non cambia quanto si mangia in un giorno, cambia come lo si divide:
+`lib/macros.js` ridistribuisce calorie e macro sugli altri pasti in proporzione a
+quanto pesavano, con l'ultimo arrotondamento aggiustato perché la somma torni esatta.
+Il backend non impone la regola — riceve i pasti e li salva — perché l'editor è un
+foglio di lavoro locale e l'utente deve poter correggere prima di salvare.
 
 **I nomi degli ingredienti si normalizzano.** `services/ingredients.normalize_name`
 toglie i qualificatori ("zucchine fresche" → "zucchine") e mette in minuscolo: senza,

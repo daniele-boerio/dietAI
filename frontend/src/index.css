@@ -1648,10 +1648,20 @@ textarea:focus {
   letter-spacing: 0.05em;
 }
 
+/* È un <label>, e i label sono display:inline: senza questo il bordo tratteggiato
+   si spezza sulle righe di testo invece di disegnare un riquadro, e il padding
+   verticale non spinge via il contenuto sotto. */
 .dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 150px;
   border: 2px dashed var(--border-light);
   border-radius: var(--radius-md);
-  padding: 32px 20px;
+  padding: 28px 20px;
   text-align: center;
   color: var(--text-secondary);
   transition: border-color var(--transition), background var(--transition);
@@ -1667,8 +1677,14 @@ textarea:focus {
 .dropzone svg {
   width: 30px;
   height: 30px;
-  margin: 0 auto 10px;
   color: var(--accent);
+}
+
+/* Il file input è nascosto con l'attributo `hidden`: dentro un contenitore flex
+   va ribadito, altrimenti alcuni browser lo trattano come flex item vuoto e
+   aprono un buco nel riquadro. */
+.dropzone input[hidden] {
+  display: none;
 }
 
 /* ── Onboarding ────────────────────────────────────────────────── */

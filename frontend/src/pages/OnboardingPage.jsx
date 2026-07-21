@@ -214,8 +214,9 @@ function DietStep({ onNext, addToast }) {
     <>
       <h1 className="onboarding-title">Carica la dieta</h1>
       <p className="onboarding-text">
-        Il PDF del nutrizionista. Claude lo legge ed estrae i pasti con calorie e macro.
-        Il file non viene conservato: resta solo la struttura estratta.
+        Il PDF del nutrizionista. Il testo viene estratto qui sul server e passato al
+        modello, che ne ricava i pasti con calorie e macro. Il file non viene
+        conservato: resta solo la struttura estratta, che potrai correggere.
       </p>
 
       <label

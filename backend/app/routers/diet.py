@@ -123,7 +123,7 @@ async def upload_diet(
         logger.info("PDF con testo: %s caratteri estratti", len(text))
         data = client.generate_json(
             prompts.DIET_PARSE_SYSTEM,
-            prompts.DIET_PARSE_TEXT_PROMPT.format(text=text[:120_000]),
+            prompts.render(prompts.DIET_PARSE_TEXT_PROMPT, text=text[:120_000]),
             max_tokens=8000,
         )
 

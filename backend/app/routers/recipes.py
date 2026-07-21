@@ -185,7 +185,8 @@ async def substitute_ingredient(
     )
     base_line = next((line for line in context.splitlines() if "BASE" in line), "nessuno")
 
-    prompt = prompts.SUBSTITUTE_PROMPT.format(
+    prompt = prompts.render(
+        prompts.SUBSTITUTE_PROMPT,
         recipe=json.dumps(recipe_for_prompt(db, recipe), ensure_ascii=False, indent=2),
         ingredient=target_name,
         reason=body.reason or "non specificato",

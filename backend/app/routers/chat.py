@@ -92,7 +92,8 @@ async def send_message(
         else "- Il piano è modificabile: se l'utente chiede una modifica sensata, applicala."
     )
 
-    system = prompts.MEAL_CHAT_SYSTEM.format(
+    system = prompts.render(
+        prompts.MEAL_CHAT_SYSTEM,
         context=build_context(db, user.id),
         slot_name=slot.name,
         day_name=DAY_NAMES[day.day_of_week],

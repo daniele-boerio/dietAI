@@ -156,6 +156,11 @@ la riga utente per farla ricreare dal seed **distrugge tutti i dati** (FK in CAS
 - **Testo UI in italiano.** Codice, commenti e nomi in inglese solo dove è già così.
 - I prompt stanno tutti in `services/prompts.py`: i vincoli devono essere identici tra
   generazione, rigenerazione e chat, altrimenti l'AI si contraddice da una schermata all'altra.
+- **I segnaposto dei prompt si riempiono con `prompts.render()`, mai con `str.format()`**:
+  i prompt contengono esempi JSON, e per format() ogni graffa del JSON è un campo da
+  sostituire (la chat è rimasta morta così, con un KeyError su `{
+ "title"`).
+  `tests/test_chat.py` ha una guardia che rende il template su tutti i prompt.
 
 ## Sviluppo in locale
 

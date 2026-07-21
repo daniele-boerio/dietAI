@@ -1,10 +1,28 @@
-"""Prompt per Claude. Tutto il testo che finisce nel modello vive qui.
+"""Prompt per il modello. Tutto il testo che gli finisce davanti vive qui.
 
 Tenerli in un file solo serve a poterli leggere di fila: i vincoli (macro, esclusi,
 stagionalità, anti-spreco) devono essere formulati in modo coerente tra generazione
 del piano, rigenerazione del singolo pasto e chat, altrimenti l'AI si contraddice da
 una schermata all'altra.
+
+I segnaposto si riempiono con `render()`, MAI con `str.format()`: questi prompt
+contengono esempi JSON, e per format() ogni graffa del JSON è un segnaposto.
 """
+
+
+def render(template: str, **values: object) -> str:
+    """Riempie i segnaposto `{nome}` lasciando in pace tutte le altre graffe.
+
+    `str.format()` qui è una trappola: i prompt contengono lo schema JSON della
+    ricetta, e format() prova a interpretarne le graffe come campi da sostituire —
+    la chat moriva così, con un KeyError su `{\n  "title"`. Sostituire solo le chiavi
+    che passiamo davvero rende impossibile ricascarci aggiungendo un esempio JSON a
+    un prompt che prima non ne aveva.
+    """
+    text = template
+    for key, value in values.items():
+        text = text.replace("{" + key + "}", str(value))
+    return text
 
 # ── Parsing del PDF della dieta ────────────────────────────────────────────────
 

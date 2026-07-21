@@ -339,7 +339,8 @@ def build_context(db: Session, user_id: int) -> str:
     else:
         seasonality = "nessun vincolo di stagionalità."
 
-    return prompts.CONTEXT_TEMPLATE.format(
+    return prompts.render(
+        prompts.CONTEXT_TEMPLATE,
         daily_calories=diet.total_daily_calories,
         meals_config=meals_config,
         excluded=_fmt_list(_excluded_names(db, user_id)),
@@ -522,7 +523,8 @@ def generate_week(db: Session, user: User, week: WeekPlan) -> dict:
     else:
         already = "  (nessuno)"
 
-    prompt = prompts.WEEK_PLAN_PROMPT.format(
+    prompt = prompts.render(
+        prompts.WEEK_PLAN_PROMPT,
         context=build_context(db, user.id),
         slots_to_fill=slots_to_fill,
         already_assigned=already,
@@ -629,7 +631,8 @@ def regenerate_meal(
         .all()
     ]
 
-    prompt = prompts.SINGLE_MEAL_PROMPT.format(
+    prompt = prompts.render(
+        prompts.SINGLE_MEAL_PROMPT,
         context=build_context(db, user.id),
         slot_name=slot.name,
         day_name=DAY_NAMES[day.day_of_week],

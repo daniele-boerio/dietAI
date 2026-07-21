@@ -414,12 +414,17 @@ async def get_ai_models(
     Evita di far digitare gli slug a memoria: un errore di battitura si scoprirebbe
     solo alla prima generazione. La lista arriva dal provider, quindi comprende anche
     i modelli usciti dopo questo codice.
+
+    Si restituisce il catalogo **intero** (qualche centinaio di voci, una manciata di
+    KB, già in cache da un'ora): troncarlo qui significherebbe che la ricerca lato
+    client lavora su un sottoinsieme, e un modello in fondo all'alfabeto diventerebbe
+    introvabile invece che solo poco visibile.
     """
     models = list_models()
     term = q.strip().lower()
     if term:
         models = [m for m in models if term in m["id"].lower() or term in m["name"].lower()]
-    return {"models": models[:80], "total": len(models)}
+    return {"models": models, "total": len(models)}
 
 
 @router.put("/ai/models")

@@ -2,6 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronDown, Eye, X } from 'lucide-react';
 import { formatNumber } from '../api';
 
+// Quante righe disegnare nel menu. Il filtro lavora su tutto il catalogo: questo
+// limita solo il DOM, e quando taglia qualcosa lo dice.
+const RENDER_LIMIT = 120;
+
 // Selettore di modello con ricerca. Il catalogo arriva dal provider, quindi comprende
 // anche i modelli usciti dopo che questo codice è stato scritto: niente slug da
 // digitare a memoria e nessun errore di battitura scoperto alla prima generazione.
@@ -22,12 +26,15 @@ export default function ModelPicker({ role, models, value, defaultModel, onChang
   const current = value || defaultModel;
   const selected = models.find((m) => m.id === current);
 
-  const filtered = useMemo(() => {
+  // Si filtra sul catalogo completo e si disegna solo la prima parte: qualche
+  // centinaio di righe nel DOM rallenterebbe l'apertura del menu, ma il filtro deve
+  // vedere tutto, altrimenti un modello in fondo all'alfabeto è introvabile.
+  const { visible, hidden } = useMemo(() => {
     const t = term.trim().toLowerCase();
     const list = t
       ? models.filter((m) => m.id.toLowerCase().includes(t) || m.name.toLowerCase().includes(t))
       : models;
-    return list.slice(0, 60);
+    return { visible: list.slice(0, RENDER_LIMIT), hidden: Math.max(0, list.length - RENDER_LIMIT) };
   }, [models, term]);
 
   const price = (m) =>
@@ -98,7 +105,7 @@ export default function ModelPicker({ role, models, value, defaultModel, onChang
             </button>
           )}
 
-          {filtered.map((m) => (
+          {visible.map((m) => (
             <button
               key={m.id}
               className="btn btn-ghost btn-block btn-sm"
@@ -118,7 +125,13 @@ export default function ModelPicker({ role, models, value, defaultModel, onChang
             </button>
           ))}
 
-          {filtered.length === 0 && (
+          {hidden > 0 && (
+            <p className="field-hint" style={{ padding: '6px 10px' }}>
+              Altri {hidden} modelli corrispondono: scrivi qualcosa per restringere.
+            </p>
+          )}
+
+          {visible.length === 0 && (
             <p className="field-hint">Nessun modello trovato con questo nome.</p>
           )}
         </div>

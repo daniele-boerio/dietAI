@@ -58,6 +58,22 @@ npm install
 npm run dev
 ```
 
+### Sviluppare contro il backend del server
+
+Per lavorare sul frontend senza far girare backend e database in locale, punta il
+proxy di Vite al server:
+
+```bash
+cp frontend/.env.example frontend/.env.local
+#   poi scommenta:  VITE_API_TARGET=https://dietai.spassocasa.it
+npm run dev   # all'avvio stampa "API → <target>"
+```
+
+Il browser continua a vedere solo `localhost:3000`, quindi i cookie httpOnly
+funzionano come in produzione. Due avvertenze: stai lavorando sui **dati veri** (le
+generazioni consumano crediti e i blocchi settimanali sono reali), e il dev server va
+riavviato dopo aver cambiato `.env.local`.
+
 Apri http://localhost:3000, entra con le credenziali del seed e segui l'onboarding:
 API key → PDF della dieta → ingredienti di base ed esclusi → preferenze. Poi vai su
 **Settimana** e premi *Genera*.

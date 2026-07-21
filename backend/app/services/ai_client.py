@@ -36,6 +36,7 @@ from ..config import (
     AI_MAX_RETRIES,
     AI_PROVIDER,
     default_model,
+    model_matches_provider,
 )
 from ..crypto import decrypt_api_key
 from ..models import User, UserPreferences
@@ -105,6 +106,22 @@ def _extract_json(text: str) -> dict | list:
                         break
 
     raise ValueError("Nessun JSON valido nella risposta del modello")
+
+
+def _provider_message(exc) -> str:
+    """Il messaggio dell'errore così come lo ha scritto il fornitore.
+
+    OpenRouter lo mette in `body["error"]["message"]`; altri endpoint compatibili
+    variano, quindi si ripiega sul messaggio dell'eccezione.
+    """
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        error = body.get("error")
+        if isinstance(error, dict) and error.get("message"):
+            return str(error["message"])
+        if isinstance(error, str):
+            return error
+    return getattr(exc, "message", None) or str(exc)
 
 
 # ── Backend ────────────────────────────────────────────────────────────────────
@@ -238,6 +255,15 @@ class _OpenAICompatibleBackend:
                 "Impostazioni → Modelli AI.",
                 400,
             )
+        except openai.BadRequestError as exc:
+            # Sui 400 il messaggio del fornitore è quasi sempre preciso ("X is not a
+            # valid model ID"): riportarlo vale molto più di un generico "errore 400",
+            # che costringerebbe ad andare a leggere i log del server.
+            raise AIError(
+                f"Il fornitore ha rifiutato la richiesta per il modello '{model}': "
+                f"{_provider_message(exc)}",
+                400,
+            )
         except openai.RateLimitError:
             raise AIError(
                 "Limite di frequenza raggiunto, oppure crediti esauriti sul fornitore.",
@@ -254,10 +280,25 @@ class _OpenAICompatibleBackend:
 
 
 def model_for(db: Session, user_id: int, role: str) -> str:
-    """Il modello scelto dall'utente per quel ruolo, o il default dell'ambiente."""
+    """Il modello scelto dall'utente per quel ruolo, o il default dell'ambiente.
+
+    Se la scelta salvata non ha la forma giusta per il provider attivo (capita
+    cambiando provider dopo aver scelto i modelli) si ripiega sul default invece di
+    andare a sbattere contro una 400.
+    """
     prefs = db.query(UserPreferences).filter(UserPreferences.user_id == user_id).first()
-    chosen = getattr(prefs, f"ai_model_{role}", None) if prefs else None
-    return (chosen or "").strip() or default_model(role)
+    chosen = ((getattr(prefs, f"ai_model_{role}", None) if prefs else None) or "").strip()
+
+    if chosen and not model_matches_provider(chosen):
+        logger.warning(
+            "Il modello salvato per %r (%r) non vale per il provider %r: uso il default.",
+            role,
+            chosen,
+            AI_PROVIDER,
+        )
+        chosen = ""
+
+    return chosen or default_model(role)
 
 
 class AIClient:

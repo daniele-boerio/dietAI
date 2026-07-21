@@ -17,7 +17,13 @@ from ..models import (
     PantryItem,
     UserPreferences,
 )
-from ..config import AI_PROVIDER, API_KEY_PREFIX, API_KEY_URL, default_model
+from ..config import (
+    AI_PROVIDER,
+    API_KEY_PREFIX,
+    API_KEY_URL,
+    default_model,
+    model_matches_provider,
+)
 from ..schemas import (
     AiModelsUpdate,
     ExcludedCreate,
@@ -436,6 +442,18 @@ async def update_ai_models(
     prefs = _prefs_of(db, user_id)
     for role in ("planning", "chat", "diet"):
         value = (getattr(body, role) or "").strip()
+        # Meglio rifiutare qui che lasciar scoprire lo slug sbagliato dopo mezzo
+        # minuto di generazione, con una 400 del fornitore.
+        if value and not model_matches_provider(value):
+            raise HTTPException(
+                400,
+                f"'{value}' non è un modello valido per {AI_PROVIDER}: "
+                + (
+                    f"su OpenRouter serve lo slug completo, tipo 'anthropic/{value}'."
+                    if AI_PROVIDER == "openrouter"
+                    else "con l'SDK Anthropic serve l'ID senza il prefisso del fornitore."
+                ),
+            )
         setattr(prefs, f"ai_model_{role}", value or None)
     db.commit()
     return await get_ai_config(user_id=user_id, db=db)

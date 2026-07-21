@@ -83,7 +83,7 @@ API key → PDF della dieta → ingredienti di base ed esclusi → preferenze. P
 ## Test
 
 ```bash
-cd backend && .venv/Scripts/python.exe -m pytest tests -q   # 66 test
+cd backend && .venv/Scripts/python.exe -m pytest tests -q   # 79 test
 cd frontend && npm test                                     # 14 test
 ```
 

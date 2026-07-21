@@ -1,5 +1,6 @@
 """Configurazione centralizzata: tutte le env var si leggono da qui."""
 
+import logging
 import os
 from urllib.parse import quote_plus
 
@@ -91,11 +92,39 @@ _DEFAULTS = {
 }
 
 
+def model_matches_provider(model: str) -> bool:
+    """Il nome del modello ha la forma giusta per il provider configurato?
+
+    Su OpenRouter gli slug portano il fornitore davanti (`anthropic/claude-opus-4-8`);
+    l'SDK Anthropic vuole l'ID nudo (`claude-opus-4-8`). Scambiarli è l'errore che
+    capita passando da un provider all'altro e lasciandosi dietro una variabile
+    d'ambiente, e senza questo controllo si manifesta come una 400 del fornitore alla
+    prima generazione — mezzo minuto dopo, con un messaggio che non dice cosa fare.
+    """
+    model = (model or "").strip()
+    if not model:
+        return False
+    return ("/" in model) if AI_PROVIDER == "openrouter" else ("/" not in model)
+
+
 def default_model(role: str) -> str:
+    fallback = _DEFAULTS.get(AI_PROVIDER, _DEFAULTS["openrouter"])[role]
     env = _clean(os.getenv(f"AI_MODEL_{role.upper()}"))
-    if env:
-        return env
-    return _DEFAULTS.get(AI_PROVIDER, _DEFAULTS["openrouter"])[role]
+    if not env:
+        return fallback
+
+    if not model_matches_provider(env):
+        logging.getLogger(__name__).warning(
+            "AI_MODEL_%s vale %r, che non è un modello valido per il provider %r: "
+            "uso %r. Con OpenRouter serve lo slug completo, tipo 'anthropic/%s'.",
+            role.upper(),
+            env,
+            AI_PROVIDER,
+            fallback,
+            env,
+        )
+        return fallback
+    return env
 
 
 # Prefisso atteso per la chiave, per accorgersi subito di un incollaggio sbagliato.

@@ -489,26 +489,42 @@ def _is_fixed(meal: PlannedMeal, slot: MealSlot) -> bool:
     return meal.is_recurring or meal.source == "user_custom" or not slot.auto_generate
 
 
-def generate_week(db: Session, user: User, week: WeekPlan) -> dict:
-    """Genera in un'unica chiamata tutte le ricette mancanti della settimana.
+def generate_week(
+    db: Session, user: User, week: WeekPlan, *, only_missing: bool = True
+) -> dict:
+    """Genera in un'unica chiamata le ricette della settimana.
 
     Una chiamata sola, non una per pasto: è l'unico modo perché l'AI possa
     distribuire gli avanzi (mezza zucchina lunedì, l'altra metà giovedì) e non
     ripetere gli stessi ingredienti in giorni consecutivi.
+
+    `only_missing` è il default perché ogni chiamata si paga: riempire i buchi è
+    l'operazione di tutti i giorni, rifare da capo una settimana già piena è una
+    scelta esplicita che la UI fa confermare.
     """
     ensure_unlocked(week)
     rows = week_meals(db, week)
     if not rows:
         raise HTTPException(400, "La settimana non ha pasti da generare.")
 
-    to_fill = [(d, m, s) for d, m, s in rows if not _is_fixed(m, s)]
-    fixed = [(d, m, s) for d, m, s in rows if _is_fixed(m, s) and m.recipe_id]
+    generabili = [(d, m, s) for d, m, s in rows if not _is_fixed(m, s)]
+    to_fill = [t for t in generabili if t[1].recipe_id is None] if only_missing else generabili
 
     if not to_fill:
+        if generabili:
+            raise HTTPException(
+                400,
+                'Non ci sono pasti da riempire: usa "Rigenera tutto" per rifare la settimana.',
+            )
         raise HTTPException(
             400,
             "Non c'è niente da generare: tutti i pasti sono fissi o gestiti da te.",
         )
+
+    # Tutto ciò che conserva la sua ricetta va passato al modello come contesto: sono
+    # i piatti da non ripetere e gli ingredienti già in casa da riutilizzare.
+    da_rifare = {m.id for _, m, _ in to_fill}
+    fixed = [(d, m, s) for d, m, s in rows if m.recipe_id and m.id not in da_rifare]
 
     by_day: dict[int, list[str]] = {}
     for day, _meal, slot in to_fill:

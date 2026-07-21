@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Lock, LockOpen, Sparkles, Unlock } from 'lucide-react';
+import { Lock, RefreshCw, Sparkles, Unlock } from 'lucide-react';
 import { api, formatDate } from '../api';
 import { useApp } from '../App';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -16,6 +16,7 @@ export default function PlanningPage({ nextWeek = false }) {
   const [generating, setGenerating] = useState(false);
   const [busyMealId, setBusyMealId] = useState(null);
   const [confirmUnlock, setConfirmUnlock] = useState(false);
+  const [confirmRegenerate, setConfirmRegenerate] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -33,16 +34,17 @@ export default function PlanningPage({ nextWeek = false }) {
     load();
   }, [load]);
 
-  const generate = async () => {
+  const generate = async (regenerateAll = false) => {
     setGenerating(true);
+    setConfirmRegenerate(false);
     try {
-      const data = await api.generateWeek(week.id);
+      const data = await api.generateWeek(week.id, regenerateAll);
       setWeek(data);
       const { filled, missing } = data.generation || {};
       addToast(
         missing
           ? `Generati ${filled} pasti (${missing} non riusciti, riprova)`
-          : `Settimana generata: ${filled} ricette ✓`
+          : `${filled} ricette pronte ✓`
       );
     } catch (e) {
       addToast(e.message, 'error');
@@ -113,10 +115,31 @@ export default function PlanningPage({ nextWeek = false }) {
               <Unlock size={16} /> Sblocca
             </button>
           ) : (
-            <button className="btn btn-primary" onClick={generate} disabled={generating}>
-              {generating ? <span className="spinner-inline" /> : <Sparkles size={16} />}
-              {emptySlots === week.meals_total ? 'Genera la settimana' : 'Riempi i vuoti'}
-            </button>
+            <>
+              {/* Rifare tutto costa una chiamata al modello su tutta la settimana:
+                  sta in secondo piano e passa da una conferma. */}
+              {week.meals_filled > 0 && (
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => setConfirmRegenerate(true)}
+                  disabled={generating}
+                >
+                  <RefreshCw size={16} /> Rigenera tutto
+                </button>
+              )}
+              {emptySlots > 0 && (
+                <button
+                  className="btn btn-primary"
+                  onClick={() => generate(false)}
+                  disabled={generating}
+                >
+                  {generating ? <span className="spinner-inline" /> : <Sparkles size={16} />}
+                  {emptySlots === week.meals_total
+                    ? 'Genera la settimana'
+                    : `Riempi i ${emptySlots} vuoti`}
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -168,6 +191,23 @@ export default function PlanningPage({ nextWeek = false }) {
           busyMealId={busyMealId}
           onRegenerate={regenerate}
           onToggleRecurring={toggleRecurring}
+        />
+      )}
+
+      {confirmRegenerate && (
+        <ConfirmDialog
+          title={`Rigenerare tutte e ${week.meals_filled} le ricette?`}
+          text={
+            `Butti via il piano attuale e ne fai scrivere uno nuovo da zero: è una ` +
+            `chiamata al modello su tutta la settimana, la cosa più costosa che fa ` +
+            `l'app. Le ricette di adesso restano nel ricettario, e i pasti fissi o ` +
+            `che gestisci tu non vengono toccati. Se ti serve cambiare un piatto solo, ` +
+            `conviene rigenerare quello dalla sua card.`
+          }
+          confirmLabel="Sì, rigenera tutto"
+          busy={generating}
+          onConfirm={() => generate(true)}
+          onCancel={() => setConfirmRegenerate(false)}
         />
       )}
 

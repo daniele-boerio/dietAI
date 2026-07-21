@@ -86,12 +86,18 @@ async def get_next_week(
 async def generate(
     request: Request,
     week_id: int,
+    regenerate_all: bool = False,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Genera le ricette mancanti della settimana. Può richiedere anche un minuto."""
+    """Genera le ricette della settimana. Può richiedere anche un minuto.
+
+    Di default riempie solo le caselle vuote. Con `regenerate_all=true` rifà tutti i
+    pasti generabili: costa una chiamata al modello su tutta la settimana, quindi la
+    UI lo fa confermare.
+    """
     week = _get_week(db, user.id, week_id)
-    result = generate_week(db, user, week)
+    result = generate_week(db, user, week, only_missing=not regenerate_all)
     payload = serialize_week(db, week)
     payload["generation"] = result
     return payload

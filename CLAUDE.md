@@ -121,6 +121,12 @@ backend manda sempre `reasoning.effort` — `high` solo per la pianificazione, `
 chat, rigenerazione e lettura della dieta — e su risposta vuota diagnostica il
 `finish_reason` invece di dire genericamente "riprova".
 
+**Generare di default riempie solo i buchi.** `generate_week(..., only_missing=True)`
+è il default perché ogni chiamata si paga e quella sulla settimana intera è la più
+cara dell'app; `regenerate_all=true` rifà tutto e la UI lo fa confermare. Quello che
+conserva la ricetta va comunque nel prompt come `PASTI GIÀ ASSEGNATI`, altrimenti il
+modello ripropone un piatto che è già in settimana.
+
 **Una sola chiamata AI per settimana.** L'anti-spreco (mezza zucchina lunedì, l'altra
 metà giovedì) funziona solo se il modello vede tutti i pasti insieme. Sopra gli 8.000
 token di output `ai_client` passa in streaming da solo.

@@ -146,8 +146,13 @@ export const api = {
 
   getNextWeek: () => request('/planning/weeks/next'),
 
-  generateWeek: (weekId) =>
-    request(`/planning/weeks/${weekId}/generate`, { method: 'POST' }),
+  // Di default riempie solo le caselle vuote; regenerateAll rifà tutta la settimana
+  // (una chiamata al modello su tutti i pasti: la UI la fa confermare).
+  generateWeek: (weekId, regenerateAll = false) =>
+    request(
+      `/planning/weeks/${weekId}/generate${regenerateAll ? '?regenerate_all=true' : ''}`,
+      { method: 'POST' }
+    ),
 
   lockWeek: (weekId) => request(`/planning/weeks/${weekId}/lock`, { method: 'POST' }),
 

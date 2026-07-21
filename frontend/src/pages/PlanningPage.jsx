@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Lock, RefreshCw, Sparkles, Unlock } from 'lucide-react';
 import { api, formatDate } from '../api';
@@ -17,22 +17,45 @@ export default function PlanningPage({ nextWeek = false }) {
   const [busyMealId, setBusyMealId] = useState(null);
   const [confirmUnlock, setConfirmUnlock] = useState(false);
   const [confirmRegenerate, setConfirmRegenerate] = useState(false);
+  // Serve a distinguere "non sta generando" da "ha appena finito", per il messaggio.
+  const wasGenerating = useRef(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = nextWeek ? await api.getNextWeek() : await api.getCurrentWeek();
-      setWeek(data);
-    } catch (e) {
-      addToast(e.message, 'error');
-    } finally {
-      setLoading(false);
-    }
-  }, [nextWeek, addToast]);
+  const load = useCallback(
+    async ({ silent = false } = {}) => {
+      if (!silent) setLoading(true);
+      try {
+        const data = nextWeek ? await api.getNextWeek() : await api.getCurrentWeek();
+        setWeek(data);
+        return data;
+      } catch (e) {
+        if (!silent) addToast(e.message, 'error');
+      } finally {
+        if (!silent) setLoading(false);
+      }
+    },
+    [nextWeek, addToast]
+  );
 
   useEffect(() => {
     load();
   }, [load]);
+
+  // La generazione vive sul server, non in questa pagina: se cambi scheda, torni
+  // indietro o ricarichi, il lavoro prosegue. Finché il server la dà per in corso si
+  // ricontrolla ogni pochi secondi, e al termine si avvisa — anche se il pulsante
+  // l'aveva premuto un'altra sessione.
+  useEffect(() => {
+    if (!week?.is_generating) {
+      if (wasGenerating.current) {
+        wasGenerating.current = false;
+        addToast('Settimana pronta ✓');
+      }
+      return;
+    }
+    wasGenerating.current = true;
+    const timer = setInterval(() => load({ silent: true }), 4000);
+    return () => clearInterval(timer);
+  }, [week?.is_generating, load, addToast]);
 
   const generate = async (regenerateAll = false) => {
     setGenerating(true);
@@ -95,6 +118,9 @@ export default function PlanningPage({ nextWeek = false }) {
   if (!week) return null;
 
   const emptySlots = week.meals_total - week.meals_filled;
+  // `generating` è la richiesta partita da qui; `is_generating` è quella che il
+  // server sa essere in corso — comprese quelle avviate prima di ricaricare.
+  const busy = generating || week.is_generating;
 
   return (
     <>
@@ -122,7 +148,7 @@ export default function PlanningPage({ nextWeek = false }) {
                 <button
                   className="btn btn-secondary"
                   onClick={() => setConfirmRegenerate(true)}
-                  disabled={generating}
+                  disabled={busy}
                 >
                   <RefreshCw size={16} /> Rigenera tutto
                 </button>
@@ -131,9 +157,9 @@ export default function PlanningPage({ nextWeek = false }) {
                 <button
                   className="btn btn-primary"
                   onClick={() => generate(false)}
-                  disabled={generating}
+                  disabled={busy}
                 >
-                  {generating ? <span className="spinner-inline" /> : <Sparkles size={16} />}
+                  {busy ? <span className="spinner-inline" /> : <Sparkles size={16} />}
                   {emptySlots === week.meals_total
                     ? 'Genera la settimana'
                     : `Riempi i ${emptySlots} vuoti`}
@@ -176,12 +202,12 @@ export default function PlanningPage({ nextWeek = false }) {
         </div>
       )}
 
-      {generating ? (
+      {busy ? (
         <div className="generating">
           <div className="spinner" style={{ padding: 0 }} />
           <h3>Sto costruendo la settimana</h3>
           <p>
-            Claude sta incastrando macro, stagionalità e avanzi per non farti buttare
+            L'AI sta incastrando macro, stagionalità e avanzi per non farti buttare
             mezza zucchina. Ci vogliono da trenta secondi a un paio di minuti.
           </p>
         </div>
@@ -205,7 +231,7 @@ export default function PlanningPage({ nextWeek = false }) {
             `conviene rigenerare quello dalla sua card.`
           }
           confirmLabel="Sì, rigenera tutto"
-          busy={generating}
+          busy={busy}
           onConfirm={() => generate(true)}
           onCancel={() => setConfirmRegenerate(false)}
         />

@@ -240,6 +240,10 @@ class WeekPlan(Base):
     is_locked = Column(Boolean, nullable=False, default=False, server_default="false")
     locked_at = Column(DateTime(timezone=True))
     lock_expires_at = Column(DateTime(timezone=True))
+    # Valorizzato mentre una generazione è in corso, NULL quando finisce. Sta nel
+    # database e non nel browser perché deve sopravvivere a un cambio pagina e a un
+    # ricaricamento: senza, si riparte a premere "Genera" e si paga due volte.
+    generation_started_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (

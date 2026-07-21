@@ -27,7 +27,7 @@ export default function SettingsPage() {
         <div>
           <h1 className="page-title">Impostazioni</h1>
           <p className="page-subtitle">
-            Sono i vincoli che passo a Claude a ogni generazione: cambiarli cambia le
+            Sono i vincoli che passo al modello a ogni generazione: cambiarli cambia le
             ricette della prossima settimana.
           </p>
         </div>

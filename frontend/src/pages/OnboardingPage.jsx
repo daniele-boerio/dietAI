@@ -57,7 +57,7 @@ function Welcome({ onNext }) {
       <p className="onboarding-text">
         DietAI parte dalla dieta del tuo nutrizionista e la trasforma in ricette vere,
         una settimana alla volta, con la lista della spesa già pronta. Servono tre
-        cose: la tua API key di Claude, il PDF della dieta e due minuti per dirmi cosa
+        cose: la tua API key, il PDF della dieta e due minuti per dirmi cosa
         non vuoi vedere nel piatto.
       </p>
       <button className="btn btn-primary" onClick={onNext}>
@@ -406,7 +406,7 @@ function PreferencesStep({ onDone, addToast }) {
     <>
       <h1 className="onboarding-title">Come ti piace mangiare</h1>
       <p className="onboarding-text">
-        Sono i vincoli che passo a Claude a ogni generazione. Si cambiano quando vuoi
+        Sono i vincoli che passo al modello a ogni generazione. Si cambiano quando vuoi
         dalle impostazioni.
       </p>
 

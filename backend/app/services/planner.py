@@ -185,6 +185,31 @@ def get_or_create_week(db: Session, user_id: int, week_start: date) -> WeekPlan:
     return week
 
 
+# Oltre questo tempo una generazione si considera morta (processo riavviato, container
+# ricreato): senza, una settimana resterebbe "in generazione" per sempre.
+GENERATION_TIMEOUT = timedelta(minutes=15)
+
+
+def is_generating(week: WeekPlan) -> bool:
+    started = _as_utc(week.generation_started_at)
+    if started is None:
+        return False
+    return datetime.now(timezone.utc) - started < GENERATION_TIMEOUT
+
+
+def ensure_not_generating(week: WeekPlan) -> None:
+    """Una generazione alla volta per settimana.
+
+    Non è pignoleria: ogni chiamata si paga, e senza questo controllo bastava
+    ricaricare la pagina e ripremere il pulsante per farne partire una seconda.
+    """
+    if is_generating(week):
+        raise HTTPException(
+            409,
+            "C'è già una generazione in corso per questa settimana: aspetta che finisca.",
+        )
+
+
 def ensure_unlocked(week: WeekPlan) -> None:
     if week.is_locked:
         raise HTTPException(
@@ -461,6 +486,9 @@ def serialize_week(db: Session, week: WeekPlan) -> dict:
         "locked_at": week.locked_at.isoformat() if week.locked_at else None,
         "lock_expires_at": week.lock_expires_at.isoformat() if week.lock_expires_at else None,
         "is_current": week.week_start_date == current_week_start(),
+        # La UI ci si aggancia per rimettere il loader quando si torna sulla pagina
+        # a generazione avviata.
+        "is_generating": is_generating(week),
         "meals_total": total_slots,
         "meals_filled": filled,
         "meals_self_managed": self_managed,
@@ -503,6 +531,7 @@ def generate_week(
     scelta esplicita che la UI fa confermare.
     """
     ensure_unlocked(week)
+    ensure_not_generating(week)
     rows = week_meals(db, week)
     if not rows:
         raise HTTPException(400, "La settimana non ha pasti da generare.")
@@ -552,20 +581,28 @@ def generate_week(
 
     client = get_client(db, user, "planning")
 
-    # Le letture qui sopra hanno aperto una transazione, e la chiamata che segue può
-    # durare minuti: chiuderla adesso evita di lasciare una connessione "idle in
-    # transaction" su Postgres per tutta la generazione.
+    # Da qui in avanti la settimana risulta "in generazione". Il commit chiude anche
+    # la transazione aperta dalle letture qui sopra: senza, Postgres si terrebbe una
+    # connessione "idle in transaction" per tutta la durata della chiamata.
+    week.generation_started_at = datetime.now(timezone.utc)
     db.commit()
 
     # Budget: ~2.000 token a ricetta più il margine per il ragionamento. Sopra la
     # soglia il client passa automaticamente in streaming.
     max_tokens = min(64000, 2000 * len(to_fill) + 6000)
-    data = client.generate_json(
-        prompts.WEEK_PLAN_SYSTEM,
-        prompt,
-        max_tokens=max_tokens,
-        thinking=True,
-    )
+    try:
+        data = client.generate_json(
+            prompts.WEEK_PLAN_SYSTEM,
+            prompt,
+            max_tokens=max_tokens,
+            thinking=True,
+        )
+    except Exception:
+        # Anche se va male la settimana deve tornare generabile, altrimenti resta
+        # bloccata su "sto generando" fino allo scadere del timeout.
+        week.generation_started_at = None
+        db.commit()
+        raise
 
     if not isinstance(data, dict) or not isinstance(data.get("days"), list):
         raise AIError("Claude ha restituito un piano in un formato inatteso.")
@@ -597,8 +634,11 @@ def generate_week(
             meal.is_followed = None
             filled += 1
 
+    week.generation_started_at = None
+
     if filled == 0:
-        raise AIError("Claude non ha prodotto nessuna ricetta utilizzabile. Riprova.")
+        db.commit()
+        raise AIError("Il modello non ha prodotto nessuna ricetta utilizzabile. Riprova.")
 
     if week.status == "draft" and week.week_start_date == current_week_start():
         week.status = "active"

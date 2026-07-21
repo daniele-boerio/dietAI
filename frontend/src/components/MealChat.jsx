@@ -33,7 +33,7 @@ export default function MealChat({ mealId, locked, onRecipeUpdated }) {
 
     setDraft('');
     setSending(true);
-    // Messaggio ottimistico: la risposta di Claude può metterci qualche secondo e
+    // Messaggio ottimistico: la risposta del modello può metterci qualche secondo e
     // vedere il proprio testo sparire nel nulla è la cosa più fastidiosa di tutte.
     setMessages((prev) => [...prev, { id: `tmp-${Date.now()}`, role: 'user', content }]);
 

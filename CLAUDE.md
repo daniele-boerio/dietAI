@@ -127,6 +127,15 @@ cara dell'app; `regenerate_all=true` rifà tutto e la UI lo fa confermare. Quell
 conserva la ricetta va comunque nel prompt come `PASTI GIÀ ASSEGNATI`, altrimenti il
 modello ripropone un piatto che è già in settimana.
 
+**La generazione in corso è stato del server, non della pagina.**
+`WeekPlan.generation_started_at` viene valorizzato prima della chiamata al modello e
+azzerato alla fine (anche in caso di errore); `serialize_week` lo espone come
+`is_generating` e il frontend ci si riaggancia con un polling. Serve a ritrovare il
+caricamento dopo un cambio pagina o un F5, ma soprattutto a rifiutare con 409 una
+seconda generazione in parallelo — che sarebbe una spesa doppia. Dopo
+`GENERATION_TIMEOUT` (15 minuti) il segno si considera morto, così un processo
+riavviato a metà non blocca la settimana per sempre.
+
 **Una sola chiamata AI per settimana.** L'anti-spreco (mezza zucchina lunedì, l'altra
 metà giovedì) funziona solo se il modello vede tutti i pasti insieme. Sopra gli 8.000
 token di output `ai_client` passa in streaming da solo.

@@ -98,6 +98,10 @@
 
 html {
   font-size: 16px;
+  /* Senza, iOS e Android ingrandiscono da soli il testo dopo una rotazione dello
+     schermo: la pagina sembra "zoomata" senza che nessuno l'abbia toccata. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
@@ -107,6 +111,11 @@ body {
   line-height: 1.6;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
+  /* Toglie lo zoom da doppio tocco (e i 300 ms di attesa che ne derivano): in una
+     app che si usa a colpi di spunte sulla lista della spesa, due tocchi rapidi
+     sullo stesso punto sono la norma, non la richiesta di ingrandire.
+     Il pinch resta attivo: chi ha bisogno di ingrandire può farlo. */
+  touch-action: manipulation;
 }
 
 a {
@@ -924,6 +933,18 @@ textarea {
   color: var(--text-primary);
 }
 
+/* Testo che arriva dal modello: può contenere parole lunghissime o slug senza spazi.
+   Se non si spezza, allarga la pagina oltre lo schermo e su mobile ci si ritrova a
+   scorrere in orizzontale — che si scambia facilmente per un problema di zoom. */
+.instructions,
+.chat-bubble,
+.field-hint,
+.modal-text,
+.recipe-description,
+.ingredient-name {
+  overflow-wrap: anywhere;
+}
+
 /* ── Chat ──────────────────────────────────────────────────────── */
 
 .chat-panel {
@@ -1490,6 +1511,26 @@ select:focus,
 textarea:focus {
   outline: none;
   border-color: var(--accent);
+}
+
+/* Sui dispositivi touch i campi vanno a 16px esatti.
+   È la regola meno intuitiva di tutto il foglio: iOS ingrandisce la pagina quando
+   si mette a fuoco un campo con testo sotto i 16px — e poi NON la rimpicciolisce
+   più. Da lì in poi ci si trova a navigare tutto ingrandito, apparentemente senza
+   motivo. Le dimensioni più piccole restano su desktop, dove il problema non esiste. */
+@media (pointer: coarse) {
+  input[type='text'],
+  input[type='email'],
+  input[type='password'],
+  input[type='number'],
+  input[type='search'],
+  select,
+  textarea,
+  .auth-input,
+  .chat-input textarea,
+  .search-field input {
+    font-size: 16px;
+  }
 }
 
 .inline-form {

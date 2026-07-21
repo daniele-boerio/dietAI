@@ -195,7 +195,7 @@ async def substitute_ingredient(
     )
 
     client = get_client(db, user, "chat")
-    data = client.generate_json(prompts.SUBSTITUTE_SYSTEM, prompt, max_tokens=2000)
+    data = client.generate_json(prompts.SUBSTITUTE_SYSTEM, prompt, max_tokens=4000)
     if not isinstance(data, dict) or not data.get("substitute"):
         raise AIError("Claude non ha proposto un sostituto valido.")
 

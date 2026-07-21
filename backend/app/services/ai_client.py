@@ -108,6 +108,29 @@ def _extract_json(text: str) -> dict | list:
     raise ValueError("Nessun JSON valido nella risposta del modello")
 
 
+def _empty_response_error(model: str, max_tokens: int, finish_reason: str | None) -> AIError:
+    """Diagnosi per una risposta senza testo.
+
+    Il caso di gran lunga più comune non è un guasto: è un modello che ragiona molto,
+    consuma tutto `max_tokens` in ragionamento (che conta come output) e non arriva a
+    scrivere la risposta. Dirlo esplicitamente evita di far cercare un guasto che non
+    c'è, e suggerisce l'unica cosa che serve davvero: cambiare modello.
+    """
+    if finish_reason == "length":
+        return AIError(
+            f"Il modello '{model}' ha esaurito i {max_tokens} token disponibili prima di "
+            "scrivere la risposta: di solito succede con i modelli che ragionano molto. "
+            "Prova un modello più diretto da Impostazioni → Modelli AI."
+        )
+    if finish_reason in ("content_filter", "error"):
+        return AIError(f"Il modello '{model}' ha rifiutato di rispondere a questa richiesta.")
+    return AIError(
+        f"Il modello '{model}' ha restituito una risposta vuota"
+        + (f" (motivo: {finish_reason})" if finish_reason else "")
+        + ". Riprova, oppure cambia modello da Impostazioni → Modelli AI."
+    )
+
+
 def _provider_message(exc) -> str:
     """Il messaggio dell'errore così come lo ha scritto il fornitore.
 
@@ -175,7 +198,16 @@ class _AnthropicBackend:
 
         # Con il thinking attivo i primi blocchi sono di tipo "thinking": si tiene
         # solo il testo, che è l'unica cosa che ci interessa.
-        return "".join(b.text for b in message.content if b.type == "text")
+        text = "".join(b.text for b in message.content if b.type == "text")
+        if not text.strip():
+            # Stessa diagnosi dell'altro backend: "max_tokens" qui significa che il
+            # budget è finito prima della risposta.
+            raise _empty_response_error(
+                model,
+                max_tokens,
+                "length" if message.stop_reason == "max_tokens" else message.stop_reason,
+            )
+        return text
 
     def complete_with_pdf(self, *, model, system, pdf_b64, prompt) -> str:
         """Manda il PDF così com'è: serve per le diete scansionate, dove non c'è testo
@@ -219,10 +251,14 @@ class _OpenAICompatibleBackend:
         )
 
     def complete(self, *, model, system, messages, max_tokens, thinking) -> str:
-        # `thinking` non ha un equivalente unico tra i fornitori: chi ragiona lo fa
-        # da sé in base al prompt, quindi qui si ignora invece di inventare un
-        # parametro che alcuni modelli rifiuterebbero.
         payload = [{"role": "system", "content": system}, *messages]
+
+        # Sui modelli che ragionano (GLM, Hy3, o-series...) il ragionamento è ACCESO
+        # di default, spesso a effort alto, e i suoi token si scalano da max_tokens.
+        # Senza questo limite un modello può bruciare l'intero budget pensando e
+        # restituire contenuto vuoto: è esattamente ciò che succedeva in chat.
+        # Chi non supporta il parametro lo ignora, quindi si può mandare sempre.
+        extra_body = {"reasoning": {"effort": "high" if thinking else "low"}}
 
         openai = self._openai
         try:
@@ -230,21 +266,35 @@ class _OpenAICompatibleBackend:
                 # Streaming: una generazione da trentamila token può richiedere
                 # minuti, e senza stream molti proxy chiudono la connessione prima.
                 chunks = []
+                finish_reason = None
                 stream = self._client.chat.completions.create(
-                    model=model, messages=payload, max_tokens=max_tokens, stream=True
+                    model=model,
+                    messages=payload,
+                    max_tokens=max_tokens,
+                    stream=True,
+                    extra_body=extra_body,
                 )
                 for chunk in stream:
                     if not chunk.choices:
                         continue
-                    piece = chunk.choices[0].delta.content
+                    choice = chunk.choices[0]
+                    if choice.finish_reason:
+                        finish_reason = choice.finish_reason
+                    piece = choice.delta.content
                     if piece:
                         chunks.append(piece)
-                return "".join(chunks)
+                text = "".join(chunks)
+            else:
+                response = self._client.chat.completions.create(
+                    model=model, messages=payload, max_tokens=max_tokens, extra_body=extra_body
+                )
+                choice = response.choices[0]
+                text = choice.message.content or ""
+                finish_reason = choice.finish_reason
 
-            response = self._client.chat.completions.create(
-                model=model, messages=payload, max_tokens=max_tokens
-            )
-            return response.choices[0].message.content or ""
+            if not text.strip():
+                raise _empty_response_error(model, max_tokens, finish_reason)
+            return text
         except openai.AuthenticationError:
             raise AIError("API key non valida. Controllala in Impostazioni → Account.", 400)
         except openai.PermissionDeniedError:

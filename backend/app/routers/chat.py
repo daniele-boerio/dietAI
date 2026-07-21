@@ -119,7 +119,9 @@ async def send_message(
     db.flush()
 
     client = get_client(db, user, "chat")
-    answer = client.chat(system, messages, max_tokens=4000)
+    # Budget largo: sui modelli che ragionano una parte se ne va in ragionamento
+    # prima ancora che comincino a scrivere.
+    answer = client.chat(system, messages, max_tokens=8000)
 
     recipe_updated = False
     visible = answer

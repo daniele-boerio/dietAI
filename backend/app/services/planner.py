@@ -653,7 +653,7 @@ def regenerate_meal(
 
     client = get_client(db, user, "planning")
     data = client.generate_json(
-        prompts.SINGLE_MEAL_SYSTEM, prompt, max_tokens=4000, thinking=False
+        prompts.SINGLE_MEAL_SYSTEM, prompt, max_tokens=8000, thinking=False
     )
     if not isinstance(data, dict) or not data.get("title"):
         raise AIError("Claude non ha restituito una ricetta valida.")

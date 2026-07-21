@@ -114,6 +114,13 @@ o col default d'ambiente. Aggiungendo un ruolo, aggiornare `ROLES` in `ai_client
 indipendente dal modello (funziona anche senza vista) ed è gratis. Solo se il PDF è una
 scansione (`looks_scanned`) serve il backend Anthropic, che lo legge nativamente.
 
+**Il ragionamento va tenuto a bada.** Su OpenRouter i modelli che ragionano lo fanno
+di default, spesso a effort alto, e i token di ragionamento si scalano da `max_tokens`:
+un modello può bruciare l'intero budget pensando e restituire contenuto vuoto. Il
+backend manda sempre `reasoning.effort` — `high` solo per la pianificazione, `low` per
+chat, rigenerazione e lettura della dieta — e su risposta vuota diagnostica il
+`finish_reason` invece di dire genericamente "riprova".
+
 **Una sola chiamata AI per settimana.** L'anti-spreco (mezza zucchina lunedì, l'altra
 metà giovedì) funziona solo se il modello vede tutti i pasti insieme. Sopra gli 8.000
 token di output `ai_client` passa in streaming da solo.

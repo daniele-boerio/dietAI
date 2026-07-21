@@ -12,7 +12,8 @@ from ..models import DietPlan, MealSlot, User
 from ..rate_limit import AI_LIMIT, limiter
 from ..schemas import DietMealsUpdate
 from ..services import prompts
-from ..services.ai_client import AIError, ClaudeClient
+from ..services.ai_client import AIError, get_client
+from ..services.pdf import extract_text, looks_scanned
 from ..services.planner import get_active_diet, meal_slots_of
 
 logger = logging.getLogger(__name__)
@@ -80,7 +81,11 @@ async def upload_diet(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Carica il PDF della dieta e lo fa leggere a Claude.
+    """Carica il PDF della dieta e lo fa leggere al modello.
+
+    Prima si prova a estrarre il testo (services/pdf.py): quasi tutte le diete sono
+    PDF generati da un gestionale, l'estrazione è gratis e funziona con qualunque
+    modello. Solo se il PDF è una scansione serve un modello che veda la pagina.
 
     Il PDF non viene conservato: quello che serve è la struttura estratta (pasti e
     macro), e tenerne una copia significherebbe custodire un documento sanitario.
@@ -94,12 +99,31 @@ async def upload_diet(
     if len(content) > MAX_PDF_BYTES:
         raise HTTPException(400, "Il PDF è troppo grande (massimo 10 MB).")
 
-    client = ClaudeClient(user)
-    data = client.parse_pdf(
-        prompts.DIET_PARSE_SYSTEM,
-        base64.standard_b64encode(content).decode(),
-        prompts.DIET_PARSE_PROMPT,
-    )
+    client = get_client(db, user, "diet")
+    text = extract_text(content)
+
+    if looks_scanned(text):
+        if not client.supports_native_pdf:
+            raise HTTPException(
+                400,
+                "Questo PDF sembra una scansione o una foto: non contiene testo da "
+                "leggere, e il modello configurato non può guardarne le pagine. "
+                "Inserisci i pasti a mano dalla schermata della dieta — sono pochi "
+                "campi e li correggi una volta sola.",
+            )
+        logger.info("PDF senza testo: passo al modello il documento originale")
+        data = client.parse_pdf(
+            prompts.DIET_PARSE_SYSTEM,
+            base64.standard_b64encode(content).decode(),
+            prompts.DIET_PARSE_PROMPT,
+        )
+    else:
+        logger.info("PDF con testo: %s caratteri estratti", len(text))
+        data = client.generate_json(
+            prompts.DIET_PARSE_SYSTEM,
+            prompts.DIET_PARSE_TEXT_PROMPT.format(text=text[:120_000]),
+            max_tokens=8000,
+        )
 
     if not isinstance(data, dict) or not isinstance(data.get("meals"), list) or not data["meals"]:
         raise AIError("Nel PDF non ho trovato pasti riconoscibili. Inseriscili a mano.")

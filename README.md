@@ -3,7 +3,7 @@
 La dieta del nutrizionista diventa un piano settimanale di ricette vere e una lista
 della spesa che si compila da sola.
 
-Carichi il PDF della dieta, Claude ne estrae pasti e macro, e ogni settimana genera
+Carichi il PDF della dieta, un modello ne estrae pasti e macro, e ogni settimana genera
 ricette che stanno dentro quei numeri — italiane, di stagione, senza gli ingredienti
 che hai escluso, pensate per non farti buttare mezza zucchina. Quando fai la spesa il
 piano si blocca per sette giorni: il cibo è comprato, cambiare le ricette
@@ -12,6 +12,8 @@ significherebbe sprecarlo.
 ## Cosa fa
 
 - **Legge la dieta dal PDF** e ne ricava pasti, calorie e macro (correggibili a mano).
+- **Modello a scelta tua**: via OpenRouter puoi usare Claude, GLM, DeepSeek o altro, con
+  un modello diverso per pianificazione, chat e lettura della dieta.
 - **Genera la settimana** in un'unica passata, così può distribuire gli avanzi tra i giorni.
 - **Chat su ogni pasto**: "sostituisci il pollo", "rendilo più proteico", "come lo preparo
   la sera prima?" — e la ricetta si aggiorna davvero.
@@ -27,7 +29,7 @@ significherebbe sprecarlo.
 - Python 3.12 (su 3.13+ `pydantic-core` non ha wheel e prova a compilare da sorgente)
 - Node 20+
 - PostgreSQL 16 (in locale: `docker-compose.dev.yml`)
-- Una API key di Anthropic — la inserisci nell'app, non nei file di configurazione
+- Una API key di [OpenRouter](https://openrouter.ai/keys) — la inserisci nell'app, non nei file di configurazione
 
 ## Avvio in locale
 
@@ -66,7 +68,7 @@ API key → PDF della dieta → ingredienti di base ed esclusi → preferenze. P
 cd backend && .venv/Scripts/python.exe -m pytest tests -q
 ```
 
-Girano su SQLite in memoria con Claude sostituito da una risposta finta: verificano la
+Girano su SQLite in memoria col modello sostituito da una risposta finta: verificano la
 struttura della settimana, l'aggregazione della spesa, la dispensa, il blocco, i pasti
 fissi e le conversioni di unità — senza spendere un centesimo di API.
 
@@ -79,15 +81,15 @@ il backend è raggiungibile solo dalla rete Docker interna.
 Variabili obbligatorie nelle Environment Variables: `DB_USER`, `DB_PASSWORD`, `DB_HOST`,
 `DB_PORT`, `DB_NAME`, `SECRET_KEY`, `ENCRYPTION_KEY`, `SEED_USER_EMAIL`,
 `SEED_USER_PASSWORD`, `COOKIE_SECURE=true`. Facoltative (hanno un default nel compose):
-`AI_MODEL_PLANNING`, `AI_MODEL_CHAT`, `AI_MAX_RETRIES`, `ACCESS_TOKEN_EXPIRE_MINUTES`,
-`REFRESH_TOKEN_EXPIRE_DAYS`.
+`AI_PROVIDER`, `AI_BASE_URL`, `AI_MODEL_PLANNING`, `AI_MODEL_CHAT`, `AI_MODEL_DIET`,
+`AI_MAX_RETRIES`, `ACCESS_TOKEN_EXPIRE_MINUTES`, `REFRESH_TOKEN_EXPIRE_DAYS`.
 
 All'avvio il container backend esegue migrazioni e seed da solo: entrambi sono
 idempotenti, quindi ogni redeploy allinea lo schema e l'anagrafica ingredienti senza
 toccare i dati. L'utente viene creato solo la prima volta — cambiare
 `SEED_USER_PASSWORD` dopo non cambia la password (si usa *Impostazioni → Account*).
 
-⚠️ `ENCRYPTION_KEY` non va più cambiata dopo il primo avvio: la API key di Claude
+⚠️ `ENCRYPTION_KEY` non va più cambiata dopo il primo avvio: la API key del provider
 salvata diventerebbe indecifrabile e andrebbe reinserita.
 
 ## Password dimenticata
@@ -104,17 +106,37 @@ Revoca anche tutte le sessioni aperte. **Non cancellare la riga dell'utente** pe
 ricreare dal seed: le foreign key sono in CASCADE e si porterebbero via dieta, ricette,
 settimane e lista della spesa.
 
-## Costi
+## Modelli e costi
 
-Ogni generazione settimanale è una chiamata a Claude con tutte le ricette in un colpo
-solo (indicativamente qualche decina di centesimi con Opus 4.8); rigenerare un singolo
-pasto o scrivere in chat costa molto meno. Il modello si cambia con `AI_MODEL_PLANNING`
-e `AI_MODEL_CHAT`. Gli endpoint AI hanno un limite di 20 chiamate al minuto per non
-prosciugare la chiave in caso di loop.
+Di default l'app parla con **OpenRouter**: una chiave sola dà accesso ai modelli di
+tutti i fornitori — Claude, GLM, DeepSeek, Qwen, Gemini — e si sceglie quale usare
+**per ogni ruolo** da *Impostazioni → Modelli AI*, pescandoli da una lista con prezzo
+e finestra di contesto (niente slug da digitare a memoria).
+
+I tre ruoli non hanno lo stesso peso, ed è lì che si risparmia davvero:
+
+| Ruolo | Quando | Quanto conta il modello |
+|---|---|---|
+| Pianificazione settimanale | una volta a settimana | molto: incastrare i pasti nei macro è la parte difficile |
+| Chat e modifiche | tante volte al giorno | poco: sono compiti brevi |
+| Lettura della dieta | due o tre volte l'anno | irrilevante come costo |
+
+Con Opus la generazione settimanale sta sui 0,60–0,90 €; un modello economico sulla
+sola chat taglia la spesa quotidiana senza toccare la qualità del piano.
+
+**Come capire se un modello economico regge:** genera una settimana e guarda la
+percentuale di aderenza in *Andamento* — è la quota di pasti entro il ±10% dei macro.
+È una misura oggettiva, non un'impressione.
+
+Per usare l'SDK Anthropic diretto invece di OpenRouter: `AI_PROVIDER=anthropic` e una
+chiave `sk-ant-`. È l'unico modo per far leggere al modello un PDF **scansionato**.
+
+Gli endpoint AI hanno un limite di 20 chiamate al minuto per non prosciugare la chiave
+in caso di loop.
 
 ## Sicurezza
 
-- La API key di Claude è cifrata in database (Fernet) e decifrata solo al momento della
+- La API key del provider è cifrata in database (Fernet) e decifrata solo al momento della
   chiamata: non compare mai in una risposta HTTP o in un log.
 - I token di sessione stanno in cookie `httpOnly`, non in `localStorage`.
 - Il refresh token ruota a ogni uso; il riuso di un token vecchio revoca tutta la catena.

@@ -61,12 +61,50 @@ ENCRYPTION_KEY = _clean(os.getenv("ENCRYPTION_KEY"))
 SEED_USER_EMAIL = os.getenv("SEED_USER_EMAIL", "utente@dietai.local")
 SEED_USER_PASSWORD = os.getenv("SEED_USER_PASSWORD", "")
 
-# --- Modelli Claude ---
-# Opus per la generazione (rispettare i macro su 7 giorni è un problema di
-# pianificazione, non di scrittura); lo stesso modello regge la chat, dove però
-# il contesto è molto più piccolo e quindi costa poco.
-AI_MODEL_PLANNING = os.getenv("AI_MODEL_PLANNING", "claude-opus-4-8")
-AI_MODEL_CHAT = os.getenv("AI_MODEL_CHAT", "claude-opus-4-8")
+# --- Provider AI ---
+# "openrouter": una chiave sola per tutti i modelli di tutti i fornitori, API
+#   OpenAI-compatibile. È il default perché permette di cambiare modello senza
+#   toccare il codice né aprire altri account.
+# "anthropic": SDK ufficiale, l'unico che sa leggere un PDF nativamente (serve
+#   solo per le diete scansionate: vedi services/pdf.py).
+AI_PROVIDER = (_clean(os.getenv("AI_PROVIDER")) or "openrouter").lower()
+
+AI_BASE_URL = _clean(os.getenv("AI_BASE_URL")) or "https://openrouter.ai/api/v1"
+
+# Modelli di default per ruolo. L'utente li cambia dalla UI (finiscono in
+# user_preferences); questi valgono finché non lo fa.
+#
+# Perché ruoli diversi: la pianificazione settimanale è un problema di incastro
+# (macro, ripetizioni, avanzi) e vuole il modello più capace; la chat sono tante
+# chiamate piccole su compiti facili; la lettura della dieta si fa tre volte l'anno.
+_DEFAULTS = {
+    "openrouter": {
+        "planning": "anthropic/claude-opus-4-8",
+        "chat": "anthropic/claude-opus-4-8",
+        "diet": "anthropic/claude-opus-4-8",
+    },
+    "anthropic": {
+        "planning": "claude-opus-4-8",
+        "chat": "claude-opus-4-8",
+        "diet": "claude-opus-4-8",
+    },
+}
+
+
+def default_model(role: str) -> str:
+    env = _clean(os.getenv(f"AI_MODEL_{role.upper()}"))
+    if env:
+        return env
+    return _DEFAULTS.get(AI_PROVIDER, _DEFAULTS["openrouter"])[role]
+
+
+# Prefisso atteso per la chiave, per accorgersi subito di un incollaggio sbagliato.
+API_KEY_PREFIX = {"openrouter": "sk-or-", "anthropic": "sk-ant-"}.get(AI_PROVIDER, "")
+
+API_KEY_URL = {
+    "openrouter": "https://openrouter.ai/keys",
+    "anthropic": "https://console.anthropic.com/settings/keys",
+}.get(AI_PROVIDER, "")
 
 # Quante volte ritentare una risposta AI non parsabile come JSON prima di arrendersi.
 AI_MAX_RETRIES = int(os.getenv("AI_MAX_RETRIES", 3))

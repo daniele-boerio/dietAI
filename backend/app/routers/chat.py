@@ -11,8 +11,7 @@ from ..models import DayPlan, MealChatMessage, PlannedMeal, User, WeekPlan
 from ..rate_limit import AI_LIMIT, limiter
 from ..schemas import ChatMessageRequest
 from ..services import prompts
-from ..services.ai_client import _extract_json
-from ..services.ai_client import ClaudeClient
+from ..services.ai_client import _extract_json, get_client
 from ..services.planner import DAY_NAMES, build_context, meal_context_for_chat
 from ..services.recipes import serialize_recipe, update_recipe_from_ai
 from ..services.shopping import rebuild_shopping_list
@@ -118,7 +117,7 @@ async def send_message(
     db.add(MealChatMessage(planned_meal_id=meal_id, role="user", content=body.content))
     db.flush()
 
-    client = ClaudeClient(user)
+    client = get_client(db, user, "chat")
     answer = client.chat(system, messages, max_tokens=4000)
 
     recipe_updated = False

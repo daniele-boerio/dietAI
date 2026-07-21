@@ -2,8 +2,8 @@
 
 ## Cos'è questo progetto
 
-Webapp **single-user** che prende la dieta del nutrizionista (PDF), la fa leggere a
-Claude e genera ogni settimana un piano di ricette che rispetta i macro, con la lista
+Webapp **single-user** che prende la dieta del nutrizionista (PDF), la fa leggere a un
+modello linguistico e genera ogni settimana un piano di ricette che rispetta i macro, con la lista
 della spesa già compilata. Quando l'utente fa la spesa il piano si **blocca per 7
 giorni**: il cibo è comprato, cambiare le ricette vorrebbe dire buttarlo.
 
@@ -11,10 +11,11 @@ Spec di riferimento: `.claude/DietAI_Technical_Spec.md`.
 
 ## Stack
 
-- **Backend:** Python 3.12 · FastAPI · PostgreSQL (SQLAlchemy + Alembic) · anthropic SDK
+- **Backend:** Python 3.12 · FastAPI · PostgreSQL (SQLAlchemy + Alembic)
 - **Frontend:** React 18 · Vite · React Router 6 · Lucide icons (JSX, nessun TypeScript)
 - **Auth:** bcrypt · JWT (python-jose) · refresh token con rotazione · cookie httpOnly
-- **AI:** Claude (Opus 4.8 di default) con la **API key dell'utente**, cifrata in DB
+- **AI:** provider a scelta — OpenRouter (default, API OpenAI-compatibile) o SDK
+  Anthropic — con la **API key dell'utente**, cifrata in DB. Modello configurabile per ruolo
 - **Infra:** Docker Compose · Nginx (reverse proxy) · Coolify
 
 ## Architettura
@@ -24,7 +25,7 @@ Traefik (Coolify) → Nginx (container frontend, :80)
                         ├─ /          → build React statica
                         └─ /api/*     → proxy_pass → backend:8000 (FastAPI)
                                                         ├─ PostgreSQL (risorsa Coolify separata)
-                                                        └─ api.anthropic.com (con la key dell'utente)
+                                                        └─ provider AI (OpenRouter o Anthropic, con la key dell'utente)
 ```
 
 Frontend e backend sono **same-origin** (Nginx in prod, il proxy di Vite in dev): è ciò
@@ -40,7 +41,7 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
 ├── docker-compose.dev.yml      # solo Postgres, per lo sviluppo
 ├── backend/
 │   ├── alembic/versions/       # migrazioni (l'URL viene da app.config)
-│   ├── tests/                  # pytest su SQLite, Claude mockato
+│   ├── tests/                  # pytest su SQLite, modello mockato
 │   └── app/
 │       ├── main.py             # app FastAPI, CORS, include_router
 │       ├── config.py           # env var + load_dotenv()
@@ -48,13 +49,15 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
 │       ├── models.py           # tutte le tabelle (17)
 │       ├── schemas.py          # Pydantic (input; le risposte sono dict espliciti)
 │       ├── auth.py             # hashing, JWT, cookie, get_current_user
-│       ├── crypto.py           # Fernet per la API key di Claude
+│       ├── crypto.py           # Fernet per la API key del provider
 │       ├── rate_limit.py       # slowapi (AI_LIMIT = 20/minuto)
 │       ├── seed.py             # `python -m app.seed`: utente + anagrafica ingredienti
 │       ├── reset_password.py   # `python -m app.reset_password '...'`: unica via di rientro
 │       ├── routers/            # auth, diet, config, planning, recipes, chat, shopping, tracking
 │       ├── services/
-│       │   ├── ai_client.py    # wrapper Anthropic: retry, streaming, estrazione JSON
+│       │   ├── ai_client.py    # due backend (openrouter/anthropic) dietro una interfaccia
+│       │   ├── catalog.py      # catalogo modelli del provider (per il selettore)
+│       │   ├── pdf.py          # estrazione testo dal PDF della dieta
 │       │   ├── prompts.py      # TUTTI i prompt stanno qui
 │       │   ├── planner.py      # settimane, generazione, ricorrenti, contesto
 │       │   ├── recipes.py      # creazione/serializzazione ricette
@@ -91,6 +94,16 @@ e tracking restano permessi; la chat diventa informativa (non aggiorna la ricett
 **I pasti fissi non si rigenerano.** `is_recurring` o `source == 'user_custom'` →
 `_is_fixed()` li salta nella generazione e la settimana successiva se li ricopia
 (`apply_recurring_meals`, con `copy_recipe`: copia, non riferimento).
+
+**Il modello si sceglie per ruolo.** `planning`, `chat`, `diet` hanno pesi diversi:
+incastrare trenta pasti nei macro è difficile, rispondere in chat no. `get_client(db,
+user, role)` costruisce il client col modello scelto dall'utente (`user_preferences`)
+o col default d'ambiente. Aggiungendo un ruolo, aggiornare `ROLES` in `ai_client.py`,
+`_DEFAULTS` in `config.py` e `ROLE_LABELS` in `routers/config.py`.
+
+**Il PDF passa prima da `pypdf`.** Estrarre il testo rende la lettura della dieta
+indipendente dal modello (funziona anche senza vista) ed è gratis. Solo se il PDF è una
+scansione (`looks_scanned`) serve il backend Anthropic, che lo legge nativamente.
 
 **Una sola chiamata AI per settimana.** L'anti-spreco (mezza zucchina lunedì, l'altra
 metà giovedì) funziona solo se il modello vede tutti i pasti insieme. Sopra gli 8.000
@@ -143,12 +156,12 @@ cd backend && py -3.12 -m venv .venv
 # Frontend (altro terminale)
 cd frontend && npm install && npm run dev               # http://localhost:3000
 
-# Test (SQLite in memoria, nessuna chiamata a Claude)
+# Test (SQLite in memoria, nessuna chiamata al modello)
 cd backend && .venv/Scripts/python.exe -m pytest tests -q
 ```
 
-Al primo login parte l'onboarding: API key di Claude → PDF della dieta → ingredienti →
-preferenze. Senza API key le funzioni AI rispondono 400 con un messaggio esplicito.
+Al primo login parte l'onboarding: API key del provider → PDF della dieta → ingredienti
+→ preferenze. Senza API key le funzioni AI rispondono 400 con un messaggio esplicito.
 
 ## Deploy (Coolify)
 
@@ -156,8 +169,8 @@ Push sul branch principale → Coolify ricostruisce via Docker Compose. Variabil
 impostare: `DB_*`, `SECRET_KEY`, `ENCRYPTION_KEY`, `SEED_USER_EMAIL`,
 `SEED_USER_PASSWORD`, `COOKIE_SECURE=true`. Solo il frontend ha un dominio pubblico.
 
-⚠️ `ENCRYPTION_KEY` non va più cambiata dopo il primo avvio: la API key di Claude
-salvata diventerebbe indecifrabile e andrebbe reinserita.
+⚠️ `ENCRYPTION_KEY` non va più cambiata dopo il primo avvio: la API key salvata
+diventerebbe indecifrabile e andrebbe reinserita.
 
 ## Operazioni frequenti
 
@@ -166,6 +179,8 @@ salvata diventerebbe indecifrabile e andrebbe reinserita.
 - **Nuova pagina:** file in `pages/`, `<Route>` in `App.jsx`, voce nella sidebar.
 - **Cambiare il comportamento dell'AI:** `services/prompts.py`. Se cambia la forma del
   JSON atteso, aggiornare anche chi lo consuma (`planner.generate_week`, `recipes.create_recipe`).
-- **Cambiare i modelli Claude:** `AI_MODEL_PLANNING` / `AI_MODEL_CHAT` nell'ambiente.
+- **Cambiare modello:** dalla UI (Impostazioni → Modelli AI, per ruolo) oppure
+  `AI_MODEL_PLANNING` / `AI_MODEL_CHAT` / `AI_MODEL_DIET` per il default d'ambiente.
+- **Cambiare provider:** `AI_PROVIDER` + `AI_BASE_URL`; la API key salvata va reinserita.
 - **Aggiungere ingredienti al catalogo:** `utils/pricing.py` (categoria + prezzo), poi
   `python -m app.seed` per riallineare l'anagrafica.

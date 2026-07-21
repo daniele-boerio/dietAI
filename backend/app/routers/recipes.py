@@ -12,7 +12,7 @@ from ..models import DayPlan, Ingredient, PlannedMeal, Recipe, RecipeIngredient,
 from ..rate_limit import AI_LIMIT, limiter
 from ..schemas import FavoriteRequest, RatingRequest, RecipeCreate, SubstituteRequest
 from ..services import prompts
-from ..services.ai_client import AIError, ClaudeClient
+from ..services.ai_client import AIError, get_client
 from ..services.ingredients import get_or_create_ingredient, normalize_name
 from ..services.planner import DAY_NAMES, build_context
 from ..services.recipes import create_recipe, ingredients_of, recipe_for_prompt, serialize_recipe
@@ -193,7 +193,7 @@ async def substitute_ingredient(
         base=base_line,
     )
 
-    client = ClaudeClient(user)
+    client = get_client(db, user, "chat")
     data = client.generate_json(prompts.SUBSTITUTE_SYSTEM, prompt, max_tokens=2000)
     if not isinstance(data, dict) or not data.get("substitute"):
         raise AIError("Claude non ha proposto un sostituto valido.")

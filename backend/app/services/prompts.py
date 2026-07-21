@@ -46,6 +46,18 @@ DIET_PARSE_PROMPT = (
     "Rispondi solo con il JSON nel formato indicato."
 )
 
+# Variante per quando il testo è già stato estratto dal PDF (vedi services/pdf.py):
+# così la lettura della dieta funziona con qualunque modello, anche senza vista.
+DIET_PARSE_TEXT_PROMPT = """Questo è il testo estratto dal PDF di un piano alimentare.
+L'impaginazione è andata persa, quindi tabelle e colonne possono risultare disordinate:
+ricostruisci la struttura dei pasti dal contenuto.
+
+--- INIZIO DEL DOCUMENTO ---
+{text}
+--- FINE DEL DOCUMENTO ---
+
+Estrai i pasti e i valori nutrizionali. Rispondi solo con il JSON nel formato indicato."""
+
 
 # ── Contesto condiviso ─────────────────────────────────────────────────────────
 

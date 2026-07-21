@@ -405,6 +405,12 @@ class UserPreferences(Base):
     prefer_italian = Column(Boolean, nullable=False, default=True, server_default="true")
     max_prep_time_min = Column(Integer)
     budget_level = Column(String)  # "economico", "medio", "premium"
+    # Modello scelto per ciascun ruolo (slug del provider, es. "anthropic/claude-opus-4-8").
+    # NULL = si usa il default dell'ambiente. Sono qui e non in configurazione perché
+    # cambiarli è una decisione di tutti i giorni — costo contro qualità — non di deploy.
+    ai_model_planning = Column(String)
+    ai_model_chat = Column(String)
+    ai_model_diet = Column(String)
 
 
 # ─────────────────────────── Lista della spesa ───────────────────────────

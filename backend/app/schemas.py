@@ -76,6 +76,14 @@ class PreferencesUpdate(BaseModel):
     budget_level: str | None = None
 
 
+class AiModelsUpdate(BaseModel):
+    """Slug del modello per ciascun ruolo. None (o stringa vuota) = default d'ambiente."""
+
+    planning: str | None = Field(default=None, max_length=120)
+    chat: str | None = Field(default=None, max_length=120)
+    diet: str | None = Field(default=None, max_length=120)
+
+
 # ── Ricette ────────────────────────────────────────────────────────────────────
 
 

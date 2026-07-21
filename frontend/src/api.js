@@ -133,6 +133,14 @@ export const api = {
   searchIngredients: (q) =>
     request(`/config/ingredients/search?q=${encodeURIComponent(q)}`),
 
+  // ── Modelli AI ──
+  getAiConfig: () => request('/config/ai'),
+
+  getAiModels: (q = '') => request(`/config/ai/models?q=${encodeURIComponent(q)}`),
+
+  updateAiModels: (payload) =>
+    request('/config/ai/models', { method: 'PUT', body: JSON.stringify(payload) }),
+
   // ── Pianificazione ──
   getCurrentWeek: () => request('/planning/weeks/current'),
 

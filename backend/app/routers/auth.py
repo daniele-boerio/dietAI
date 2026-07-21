@@ -22,6 +22,7 @@ from ..auth import (
     set_refresh_cookie,
     verify_password,
 )
+from ..config import AI_PROVIDER, API_KEY_PREFIX
 from ..crypto import encrypt_api_key
 from ..database import get_db
 from ..models import DietPlan, User, UserPreferences
@@ -116,10 +117,17 @@ async def set_api_key(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Salva la API key di Claude, cifrata."""
+    """Salva la API key del provider AI, cifrata."""
     key = body.api_key.strip()
-    if not key.startswith("sk-ant-"):
-        raise HTTPException(400, "La API key di Anthropic inizia con 'sk-ant-'.")
+    # Il prefisso dipende dal provider configurato (sk-or- per OpenRouter,
+    # sk-ant- per Anthropic): accorgersene qui evita di scoprire l'errore alla
+    # prima generazione, trenta secondi dopo.
+    if API_KEY_PREFIX and not key.startswith(API_KEY_PREFIX):
+        raise HTTPException(
+            400,
+            f"La API key di {AI_PROVIDER} inizia con '{API_KEY_PREFIX}'. "
+            "Controlla di aver copiato quella giusta.",
+        )
 
     user.claude_api_key_enc = encrypt_api_key(key)
     db.commit()

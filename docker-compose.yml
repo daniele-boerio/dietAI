@@ -37,9 +37,14 @@ services:
       - COOKIE_SECURE=${COOKIE_SECURE:-true}
       - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
       - REFRESH_TOKEN_EXPIRE_DAYS=${REFRESH_TOKEN_EXPIRE_DAYS:-90}
-      - AI_MODEL_PLANNING=${AI_MODEL_PLANNING:-claude-opus-4-8}
-      - AI_MODEL_CHAT=${AI_MODEL_CHAT:-claude-opus-4-8}
+      - AI_PROVIDER=${AI_PROVIDER:-openrouter}
+      - AI_BASE_URL=${AI_BASE_URL:-https://openrouter.ai/api/v1}
       - AI_MAX_RETRIES=${AI_MAX_RETRIES:-3}
+      # Modelli per ruolo: qui si imposta solo il default iniziale, poi si scelgono
+      # dalla UI (Impostazioni → Modelli AI) e finiscono in user_preferences.
+      - AI_MODEL_PLANNING=${AI_MODEL_PLANNING:-}
+      - AI_MODEL_CHAT=${AI_MODEL_CHAT:-}
+      - AI_MODEL_DIET=${AI_MODEL_DIET:-}
     healthcheck:
       test:
         [

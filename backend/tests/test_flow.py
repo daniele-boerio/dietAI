@@ -32,11 +32,13 @@ def _fake_recipe(title, calories, ingredients):
     }
 
 
-class FakeClaude:
-    """Sostituto di ClaudeClient: restituisce un piano coerente con gli slot chiesti."""
+class FakeModel:
+    """Sostituto del client AI: restituisce un piano coerente con gli slot chiesti."""
 
     def __init__(self, user):
         self.user = user
+        self.model = "finto/modello-di-test"
+        self.supports_native_pdf = False
 
     def generate_json(self, system, prompt, **kwargs):
         days = []
@@ -88,9 +90,9 @@ class FakeClaude:
 
 @pytest.fixture()
 def fake_ai(monkeypatch, client):
-    """Sostituisce Claude e dà all'utente una API key finta (serve a costruire il client)."""
-    monkeypatch.setattr(planner, "ClaudeClient", FakeClaude)
-    res = client.put("/api/auth/api-key", json={"api_key": "sk-ant-chiave-finta-per-i-test"})
+    """Sostituisce il modello e dà all'utente una API key finta (serve a costruire il client)."""
+    monkeypatch.setattr(planner, "get_client", lambda db, user, role: FakeModel(user))
+    res = client.put("/api/auth/api-key", json={"api_key": "sk-or-chiave-finta-per-i-test"})
     assert res.status_code == 200, res.text
 
 

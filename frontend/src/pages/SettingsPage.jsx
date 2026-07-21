@@ -5,6 +5,7 @@ import { api } from '../api';
 import { useApp } from '../App';
 import { useAuth } from '../AuthContext';
 import IngredientInput from '../components/IngredientInput';
+import ModelPicker from '../components/ModelPicker';
 
 const TABS = [
   { key: 'diet', label: 'La mia dieta' },
@@ -12,6 +13,7 @@ const TABS = [
   { key: 'excluded', label: 'Alimenti esclusi' },
   { key: 'pantry', label: 'Dispensa' },
   { key: 'preferences', label: 'Preferenze' },
+  { key: 'models', label: 'Modelli AI' },
   { key: 'account', label: 'Account e API key' },
 ];
 
@@ -49,6 +51,7 @@ export default function SettingsPage() {
           {tab === 'excluded' && <ExcludedTab />}
           {tab === 'pantry' && <PantryTab />}
           {tab === 'preferences' && <PreferencesTab />}
+          {tab === 'models' && <ModelsTab />}
           {tab === 'account' && <AccountTab />}
         </div>
       </div>
@@ -539,6 +542,99 @@ function PreferencesTab() {
   );
 }
 
+// ── Modelli AI ─────────────────────────────────────────────────────────────────
+
+function ModelsTab() {
+  const { addToast } = useApp();
+  const [config, setConfig] = useState(null);
+  const [models, setModels] = useState([]);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api.getAiConfig().then(setConfig).catch(() => {});
+    api
+      .getAiModels()
+      .then((d) => setModels(d.models))
+      .catch(() => setModels([]));
+  }, []);
+
+  if (!config) return <div className="spinner" />;
+
+  const change = async (role, model) => {
+    const payload = Object.fromEntries(
+      config.roles.map((r) => [r.key, r.key === role ? model : r.model])
+    );
+    setBusy(true);
+    try {
+      setConfig(await api.updateAiModels(payload));
+      addToast('Modello aggiornato ✓');
+    } catch (e) {
+      addToast(e.message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="card settings-section">
+        <div className="card-title">Provider: {config.provider}</div>
+        <p className="field-hint">
+          {config.can_list_models ? (
+            <>
+              Con OpenRouter una sola chiave ti dà accesso ai modelli di tutti i
+              fornitori. Puoi usare un modello diverso per ogni ruolo: quello che conta
+              davvero è la pianificazione settimanale, il resto può costare molto meno.
+              {models.length > 0 && ` ${models.length} modelli disponibili.`}
+            </>
+          ) : (
+            <>
+              Provider fisso via configurazione. Per poter scegliere tra più modelli
+              imposta <code>AI_PROVIDER=openrouter</code> nelle variabili d'ambiente.
+            </>
+          )}
+        </p>
+      </div>
+
+      {config.roles.map((role) => (
+        <div key={role.key} className="card settings-section">
+          <div className="card-title">{role.label}</div>
+          <p className="field-hint" style={{ marginBottom: 12 }}>
+            {role.hint}
+          </p>
+
+          {models.length > 0 ? (
+            <ModelPicker
+              role={role.key}
+              models={models}
+              value={role.model}
+              defaultModel={role.default}
+              onChange={change}
+            />
+          ) : (
+            <div className="inline-form">
+              <input
+                type="text"
+                defaultValue={role.model || ''}
+                placeholder={role.default}
+                onBlur={(e) => change(role.key, e.target.value.trim() || null)}
+                disabled={busy}
+              />
+            </div>
+          )}
+        </div>
+      ))}
+
+      <p className="field-hint">
+        Un modello più economico si nota soprattutto in due punti: quanto spesso sbaglia
+        il formato JSON (e va ritentato) e quanti pasti finiscono fuori dal ±10% dei
+        macro. Il secondo lo misuri da solo: genera una settimana e guarda la
+        percentuale di aderenza in <strong>Andamento</strong>.
+      </p>
+    </>
+  );
+}
+
 // ── Account ────────────────────────────────────────────────────────────────────
 
 function AccountTab() {
@@ -548,6 +644,11 @@ function AccountTab() {
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [busy, setBusy] = useState(false);
+  const [ai, setAi] = useState(null);
+
+  useEffect(() => {
+    api.getAiConfig().then(setAi).catch(() => {});
+  }, []);
 
   const saveKey = async () => {
     setBusy(true);
@@ -579,17 +680,22 @@ function AccountTab() {
     <>
       <div className="card settings-section">
         <div className="card-title">
-          <KeyRound /> API key di Claude
+          <KeyRound /> API key {ai ? `(${ai.provider})` : ''}
         </div>
         <p className="field-hint" style={{ marginBottom: 12 }}>
           {user.has_api_key
             ? 'Una chiave è già salvata (cifrata). Inserirne una nuova sostituisce la vecchia.'
-            : 'Nessuna chiave salvata: le funzioni AI sono spente.'}
+            : 'Nessuna chiave salvata: le funzioni AI sono spente.'}{' '}
+          {ai?.key_url && (
+            <a href={ai.key_url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>
+              Dove trovarla
+            </a>
+          )}
         </p>
         <div className="inline-form">
           <input
             type="password"
-            placeholder="sk-ant-..."
+            placeholder={`${ai?.key_prefix || 'sk-'}...`}
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
           />

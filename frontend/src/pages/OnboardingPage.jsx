@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowRight, Check, FileUp, KeyRound, Sprout, X } from 'lucide-react';
 import { api } from '../api';
 import { useApp } from '../App';
@@ -70,6 +70,11 @@ function Welcome({ onNext }) {
 function ApiKeyStep({ onNext, addToast, alreadySet }) {
   const [key, setKey] = useState('');
   const [busy, setBusy] = useState(false);
+  const [ai, setAi] = useState(null);
+
+  useEffect(() => {
+    api.getAiConfig().then(setAi).catch(() => {});
+  }, []);
 
   const save = async () => {
     setBusy(true);
@@ -86,19 +91,32 @@ function ApiKeyStep({ onNext, addToast, alreadySet }) {
 
   return (
     <>
-      <h1 className="onboarding-title">La tua API key di Claude</h1>
+      <h1 className="onboarding-title">La tua API key</h1>
       <p className="onboarding-text">
-        Le ricette le scrive Claude, e le chiamate vengono pagate dalla tua chiave.
-        Viene salvata cifrata sul server e non lascia mai il backend. La generi da{' '}
-        <a
-          href="https://console.anthropic.com/settings/keys"
-          target="_blank"
-          rel="noreferrer"
-          style={{ color: 'var(--accent)', fontWeight: 600 }}
-        >
-          console.anthropic.com
-        </a>
-        .
+        Le ricette le scrive un modello linguistico, e le chiamate vengono pagate dalla
+        tua chiave. Viene salvata cifrata sul server e non lascia mai il backend.
+        {ai?.key_url && (
+          <>
+            {' '}
+            La generi da{' '}
+            <a
+              href={ai.key_url}
+              target="_blank"
+              rel="noreferrer"
+              style={{ color: 'var(--accent)', fontWeight: 600 }}
+            >
+              {new URL(ai.key_url).hostname}
+            </a>
+            .
+          </>
+        )}
+        {ai?.can_list_models && (
+          <>
+            {' '}
+            Con OpenRouter una chiave sola ti dà accesso a tutti i modelli: quale usare
+            lo scegli poi da <strong>Impostazioni → Modelli AI</strong>.
+          </>
+        )}
       </p>
 
       <div className="field">
@@ -108,7 +126,7 @@ function ApiKeyStep({ onNext, addToast, alreadySet }) {
         </label>
         <input
           type="password"
-          placeholder="sk-ant-..."
+          placeholder={`${ai?.key_prefix || 'sk-'}...`}
           value={key}
           onChange={(e) => setKey(e.target.value)}
         />

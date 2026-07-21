@@ -17,13 +17,16 @@ from ..models import (
     PantryItem,
     UserPreferences,
 )
+from ..config import AI_PROVIDER, API_KEY_PREFIX, API_KEY_URL, default_model
 from ..schemas import (
+    AiModelsUpdate,
     ExcludedCreate,
     IngredientNameRequest,
     PantryCreate,
     PantryUpdate,
     PreferencesUpdate,
 )
+from ..services.catalog import list_models
 from ..services.ingredients import get_or_create_ingredient, normalize_name
 from ..utils.pricing import DEFAULT_BASE_INGREDIENTS
 from ..utils.units import format_quantity, normalize_unit
@@ -341,6 +344,96 @@ async def update_preferences(
     prefs.budget_level = body.budget_level
     db.commit()
     return _serialize_prefs(prefs)
+
+
+# ── Modelli AI ─────────────────────────────────────────────────────────────────
+
+ROLE_LABELS = {
+    "planning": "Pianificazione settimanale",
+    "chat": "Chat e modifiche",
+    "diet": "Lettura della dieta",
+}
+
+ROLE_HINTS = {
+    "planning": (
+        "La parte difficile: incastrare tutti i pasti dentro i macro senza ripetizioni "
+        "e riusando gli avanzi. Si esegue una volta a settimana — è qui che conviene "
+        "spendere."
+    ),
+    "chat": (
+        "Tante chiamate piccole su compiti facili ('sostituisci il pollo'). Un modello "
+        "economico qui si nota poco e si sente sulla bolletta."
+    ),
+    "diet": (
+        "Due o tre volte l'anno. Se il PDF contiene testo va bene qualunque modello; "
+        "se è una scansione serve un modello che sappia guardare le immagini."
+    ),
+}
+
+
+def _prefs_of(db: Session, user_id: int) -> UserPreferences:
+    prefs = db.query(UserPreferences).filter(UserPreferences.user_id == user_id).first()
+    if not prefs:
+        prefs = UserPreferences(user_id=user_id)
+        db.add(prefs)
+        db.commit()
+    return prefs
+
+
+@router.get("/ai")
+async def get_ai_config(
+    user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
+):
+    """Provider attivo e modello scelto per ogni ruolo (col default se non scelto)."""
+    prefs = _prefs_of(db, user_id)
+    return {
+        "provider": AI_PROVIDER,
+        "key_prefix": API_KEY_PREFIX,
+        "key_url": API_KEY_URL,
+        "can_list_models": AI_PROVIDER == "openrouter",
+        "roles": [
+            {
+                "key": role,
+                "label": ROLE_LABELS[role],
+                "hint": ROLE_HINTS[role],
+                "model": getattr(prefs, f"ai_model_{role}", None),
+                "default": default_model(role),
+            }
+            for role in ("planning", "chat", "diet")
+        ],
+    }
+
+
+@router.get("/ai/models")
+async def get_ai_models(
+    q: str = "",
+    _user_id: int = Depends(get_current_user_id),
+):
+    """Catalogo dei modelli del provider, filtrabile.
+
+    Evita di far digitare gli slug a memoria: un errore di battitura si scoprirebbe
+    solo alla prima generazione. La lista arriva dal provider, quindi comprende anche
+    i modelli usciti dopo questo codice.
+    """
+    models = list_models()
+    term = q.strip().lower()
+    if term:
+        models = [m for m in models if term in m["id"].lower() or term in m["name"].lower()]
+    return {"models": models[:80], "total": len(models)}
+
+
+@router.put("/ai/models")
+async def update_ai_models(
+    body: AiModelsUpdate,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    prefs = _prefs_of(db, user_id)
+    for role in ("planning", "chat", "diet"):
+        value = (getattr(body, role) or "").strip()
+        setattr(prefs, f"ai_model_{role}", value or None)
+    db.commit()
+    return await get_ai_config(user_id=user_id, db=db)
 
 
 # ── Ricerca ingredienti (autocomplete) ─────────────────────────────────────────

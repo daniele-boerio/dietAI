@@ -32,7 +32,7 @@ from ..models import (
 from ..utils.seasonality import current_month, current_month_name, in_season
 from ..utils.units import format_quantity
 from . import prompts
-from .ai_client import AIError, ClaudeClient
+from .ai_client import AIError, get_client
 from .recipes import copy_recipe, create_recipe, recipe_for_prompt, serialize_recipe
 
 logger = logging.getLogger(__name__)
@@ -502,7 +502,7 @@ def generate_week(db: Session, user: User, week: WeekPlan) -> dict:
         already_assigned=already,
     )
 
-    client = ClaudeClient(user)
+    client = get_client(db, user, "planning")
     # Budget: ~2.000 token a ricetta più il margine per il ragionamento. Sopra la
     # soglia il client passa automaticamente in streaming.
     max_tokens = min(64000, 2000 * len(to_fill) + 6000)
@@ -511,7 +511,6 @@ def generate_week(db: Session, user: User, week: WeekPlan) -> dict:
         prompt,
         max_tokens=max_tokens,
         thinking=True,
-        effort="high",
     )
 
     if not isinstance(data, dict) or not isinstance(data.get("days"), list):
@@ -623,7 +622,7 @@ def regenerate_meal(
         ),
     )
 
-    client = ClaudeClient(user)
+    client = get_client(db, user, "planning")
     data = client.generate_json(
         prompts.SINGLE_MEAL_SYSTEM, prompt, max_tokens=4000, thinking=False
     )

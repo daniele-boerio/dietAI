@@ -1,0 +1,24 @@
+# Solo il database, per lo sviluppo in locale:
+#
+#   docker compose -f docker-compose.dev.yml up -d
+#
+# Backend e frontend in dev si lanciano a mano (vedi README), così si ha il reload.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: dietai
+      POSTGRES_PASSWORD: dietai
+      POSTGRES_DB: dietai
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dietai"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:

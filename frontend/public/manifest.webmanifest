@@ -1,0 +1,18 @@
+{
+  "name": "DietAI",
+  "short_name": "DietAI",
+  "description": "La tua dieta, tradotta in ricette e lista della spesa.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f4ee",
+  "theme_color": "#4a7c59",
+  "lang": "it",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

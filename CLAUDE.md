@@ -1,0 +1,165 @@
+# DietAI — Dieta, ricette e lista della spesa
+
+## Cos'è questo progetto
+
+Webapp **single-user** che prende la dieta del nutrizionista (PDF), la fa leggere a
+Claude e genera ogni settimana un piano di ricette che rispetta i macro, con la lista
+della spesa già compilata. Quando l'utente fa la spesa il piano si **blocca per 7
+giorni**: il cibo è comprato, cambiare le ricette vorrebbe dire buttarlo.
+
+Spec di riferimento: `.claude/DietAI_Technical_Spec.md`.
+
+## Stack
+
+- **Backend:** Python 3.12 · FastAPI · PostgreSQL (SQLAlchemy + Alembic) · anthropic SDK
+- **Frontend:** React 18 · Vite · React Router 6 · Lucide icons (JSX, nessun TypeScript)
+- **Auth:** bcrypt · JWT (python-jose) · refresh token con rotazione · cookie httpOnly
+- **AI:** Claude (Opus 4.8 di default) con la **API key dell'utente**, cifrata in DB
+- **Infra:** Docker Compose · Nginx (reverse proxy) · Coolify
+
+## Architettura
+
+```
+Traefik (Coolify) → Nginx (container frontend, :80)
+                        ├─ /          → build React statica
+                        └─ /api/*     → proxy_pass → backend:8000 (FastAPI)
+                                                        ├─ PostgreSQL (risorsa Coolify separata)
+                                                        └─ api.anthropic.com (con la key dell'utente)
+```
+
+Frontend e backend sono **same-origin** (Nginx in prod, il proxy di Vite in dev): è ciò
+che permette di tenere i token in cookie `httpOnly`, irraggiungibili da JavaScript.
+
+Il PostgreSQL **non** è nel `docker-compose.yml`: è una risorsa Coolify a sé, e il
+backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col solo db.
+
+## Struttura
+
+```
+├── docker-compose.yml          # Coolify (frontend + backend, NO db)
+├── docker-compose.dev.yml      # solo Postgres, per lo sviluppo
+├── backend/
+│   ├── alembic/versions/       # migrazioni (l'URL viene da app.config)
+│   ├── tests/                  # pytest su SQLite, Claude mockato
+│   └── app/
+│       ├── main.py             # app FastAPI, CORS, include_router
+│       ├── config.py           # env var + load_dotenv()
+│       ├── database.py         # engine, SessionLocal, get_db
+│       ├── models.py           # tutte le tabelle (17)
+│       ├── schemas.py          # Pydantic (input; le risposte sono dict espliciti)
+│       ├── auth.py             # hashing, JWT, cookie, get_current_user
+│       ├── crypto.py           # Fernet per la API key di Claude
+│       ├── rate_limit.py       # slowapi (AI_LIMIT = 20/minuto)
+│       ├── seed.py             # `python -m app.seed`: utente + anagrafica ingredienti
+│       ├── routers/            # auth, diet, config, planning, recipes, chat, shopping, tracking
+│       ├── services/
+│       │   ├── ai_client.py    # wrapper Anthropic: retry, streaming, estrazione JSON
+│       │   ├── prompts.py      # TUTTI i prompt stanno qui
+│       │   ├── planner.py      # settimane, generazione, ricorrenti, contesto
+│       │   ├── recipes.py      # creazione/serializzazione ricette
+│       │   ├── ingredients.py  # normalizzazione nomi, anagrafica
+│       │   ├── shopping.py     # aggregazione lista, costo, blocco
+│       │   └── tracking.py     # pianificato vs target
+│       └── utils/
+│           ├── units.py        # conversione unità (g/ml/unità)
+│           ├── seasonality.py  # stagionalità prodotti italiani
+│           └── pricing.py      # catalogo ingredienti: categoria + prezzo medio
+└── frontend/src/
+    ├── App.jsx                 # layout, routing, gate onboarding, AppContext (toast)
+    ├── AuthContext.jsx         # useAuth(): user, login, logout, refreshUser
+    ├── api.js                  # TUTTE le fetch + refresh automatico sul 401
+    ├── index.css               # design system completo (variabili CSS, tema chiaro/scuro)
+    ├── components/             # WeekGrid, MealCard, MealChat, RecipeView, MacroBar...
+    └── pages/                  # Dashboard, Planning, MealDetail, Shopping, Recipes,
+                                # Tracking, Settings, Onboarding, Login
+```
+
+## Concetti da avere in testa
+
+**La settimana esiste sempre.** `GET /api/planning/weeks/current` crea al volo
+`WeekPlan` + 7 `DayPlan` + una `PlannedMeal` per ogni incrocio giorno × pasto, anche
+vuota. Generare vuol dire riempire le caselle libere. Se la dieta cambia,
+`ensure_week_structure` riallinea le settimane esistenti.
+
+**Il blocco è la regola di business centrale.** `POST /api/shopping/current/complete`
+mette `is_locked`, `lock_expires_at = now + 7 giorni` e sposta gli articoli spuntati in
+dispensa. Da lì: lettura sì, `regenerate`/`assign`/`generate` → **409**; voti, preferiti
+e tracking restano permessi; la chat diventa informativa (non aggiorna la ricetta).
+`refresh_week_statuses` archivia le settimane scadute a ogni lettura, senza scheduler.
+
+**I pasti fissi non si rigenerano.** `is_recurring` o `source == 'user_custom'` →
+`_is_fixed()` li salta nella generazione e la settimana successiva se li ricopia
+(`apply_recurring_meals`, con `copy_recipe`: copia, non riferimento).
+
+**Una sola chiamata AI per settimana.** L'anti-spreco (mezza zucchina lunedì, l'altra
+metà giovedì) funziona solo se il modello vede tutti i pasti insieme. Sopra gli 8.000
+token di output `ai_client` passa in streaming da solo.
+
+**I nomi degli ingredienti si normalizzano.** `services/ingredients.normalize_name`
+toglie i qualificatori ("zucchine fresche" → "zucchine") e mette in minuscolo: senza,
+la lista della spesa avrebbe tre righe di zucchine e la dispensa non ne coprirebbe
+nessuna.
+
+## Convenzioni
+
+- **Ogni query su dati personali va filtrata per `user_id`.** L'app è single-user ma lo
+  schema no: un endpoint che dimentica il filtro è un bug di sicurezza, non di stile.
+  Per i pasti si passa da `_get_meal()`, che risale la catena pasto → giorno → settimana.
+- **Lo schema lo gestisce Alembic**, non l'app: nessun `create_all` all'avvio. Cambiato
+  un modello, serve `alembic revision --autogenerate -m "..."` e la migrazione va **riletta**.
+- I modelli usano `JSONType` (`JSON` con variante `JSONB` su Postgres): serve a far
+  girare i test su SQLite senza duplicare le tabelle.
+- Le risposte dell'API sono **dict costruiti a mano** nei router/servizi: le entità sono
+  aggregate (pasto + ricetta + ingredienti + target) e dieci schemi annidati sarebbero
+  meno leggibili. Pydantic valida gli input.
+- Tutte le chiamate del frontend passano da `api.js` — mai `fetch` nei componenti.
+- Un solo file CSS (`index.css`) con custom properties. Niente CSS modules, niente Tailwind.
+- **Testo UI in italiano.** Codice, commenti e nomi in inglese solo dove è già così.
+- I prompt stanno tutti in `services/prompts.py`: i vincoli devono essere identici tra
+  generazione, rigenerazione e chat, altrimenti l'AI si contraddice da una schermata all'altra.
+
+## Sviluppo in locale
+
+Serve Python **3.12** (su 3.13+ `pydantic-core` prova a compilare da sorgente Rust).
+Il `.env` sta in `backend/.env` e lo carica `config.py` da solo.
+
+```bash
+# Database
+docker compose -f docker-compose.dev.yml up -d
+
+# Backend
+cd backend && py -3.12 -m venv .venv
+.venv/Scripts/python.exe -m pip install -r requirements-dev.txt
+.venv/Scripts/python.exe -m alembic upgrade head        # crea lo schema
+.venv/Scripts/python.exe -m app.seed                    # utente + ~180 ingredienti
+.venv/Scripts/python.exe -m uvicorn app.main:app --reload --port 8000
+
+# Frontend (altro terminale)
+cd frontend && npm install && npm run dev               # http://localhost:3000
+
+# Test (SQLite in memoria, nessuna chiamata a Claude)
+cd backend && .venv/Scripts/python.exe -m pytest tests -q
+```
+
+Al primo login parte l'onboarding: API key di Claude → PDF della dieta → ingredienti →
+preferenze. Senza API key le funzioni AI rispondono 400 con un messaggio esplicito.
+
+## Deploy (Coolify)
+
+Push sul branch principale → Coolify ricostruisce via Docker Compose. Variabili da
+impostare: `DB_*`, `SECRET_KEY`, `ENCRYPTION_KEY`, `SEED_USER_EMAIL`,
+`SEED_USER_PASSWORD`, `COOKIE_SECURE=true`. Solo il frontend ha un dominio pubblico.
+
+⚠️ `ENCRYPTION_KEY` non va più cambiata dopo il primo avvio: la API key di Claude
+salvata diventerebbe indecifrabile e andrebbe reinserita.
+
+## Operazioni frequenti
+
+- **Nuovo endpoint:** rotta nel router giusto sotto `routers/`, funzione in `api.js`,
+  chiamata dalla pagina.
+- **Nuova pagina:** file in `pages/`, `<Route>` in `App.jsx`, voce nella sidebar.
+- **Cambiare il comportamento dell'AI:** `services/prompts.py`. Se cambia la forma del
+  JSON atteso, aggiornare anche chi lo consuma (`planner.generate_week`, `recipes.create_recipe`).
+- **Cambiare i modelli Claude:** `AI_MODEL_PLANNING` / `AI_MODEL_CHAT` nell'ambiente.
+- **Aggiungere ingredienti al catalogo:** `utils/pricing.py` (categoria + prezzo), poi
+  `python -m app.seed` per riallineare l'anagrafica.

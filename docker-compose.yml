@@ -1,0 +1,45 @@
+services:
+  # ── Frontend (Nginx + build React) ──
+  # È l'unico servizio con un dominio pubblico: Traefik/Coolify manda qui il traffico.
+  frontend:
+    build: ./frontend
+    environment:
+      - SERVICE_FQDN_FRONTEND
+    depends_on:
+      - backend
+    healthcheck:
+      # 127.0.0.1 e non localhost: nginx.conf fa solo `listen 80` (IPv4), mentre dentro
+      # il container localhost risolve prima su ::1 e busybox wget non ripiega su IPv4.
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:80"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ── Backend (FastAPI) ──
+  # Nessun dominio pubblico: ci parla solo nginx, via rete Docker interna.
+  # Il Postgres NON è qui: è una risorsa separata (Coolify), e le DB_* vanno
+  # impostate nelle Environment Variables. In locale c'è docker-compose.dev.yml.
+  backend:
+    build: ./backend
+    environment:
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_NAME=${DB_NAME}
+      - SECRET_KEY=${SECRET_KEY}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - SEED_USER_EMAIL=${SEED_USER_EMAIL}
+      - SEED_USER_PASSWORD=${SEED_USER_PASSWORD}
+      - COOKIE_SECURE=${COOKIE_SECURE:-true}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3

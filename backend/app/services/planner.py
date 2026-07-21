@@ -1,0 +1,662 @@
+"""Pianificazione settimanale: struttura delle settimane e generazione AI.
+
+Il modello mentale: una settimana esiste sempre (lunedì → domenica) e contiene già
+una casella per ogni incrocio giorno × pasto della dieta, anche vuota. Generare
+significa riempire le caselle libere; rigenerare significa svuotarne una e
+richiederla di nuovo. Le caselle "fissate" (pasti ricorrenti e ricette scelte a mano
+dall'utente) l'AI non le tocca mai.
+"""
+
+import json
+import logging
+from datetime import date, datetime, timedelta, timezone
+
+from fastapi import HTTPException
+from sqlalchemy.orm import Session
+
+from ..models import (
+    BaseIngredient,
+    DayPlan,
+    DietPlan,
+    ExcludedIngredient,
+    Ingredient,
+    MealSlot,
+    PantryItem,
+    PlannedMeal,
+    Recipe,
+    RecipeIngredient,
+    User,
+    UserPreferences,
+    WeekPlan,
+)
+from ..utils.seasonality import current_month, current_month_name, in_season
+from ..utils.units import format_quantity
+from . import prompts
+from .ai_client import AIError, ClaudeClient
+from .recipes import copy_recipe, create_recipe, recipe_for_prompt, serialize_recipe
+
+logger = logging.getLogger(__name__)
+
+DAY_NAMES = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
+
+LOCK_DAYS = 7
+
+
+# ── Settimane ──────────────────────────────────────────────────────────────────
+
+
+def monday_of(day: date) -> date:
+    return day - timedelta(days=day.weekday())
+
+
+def current_week_start() -> date:
+    return monday_of(date.today())
+
+
+def next_week_start() -> date:
+    return current_week_start() + timedelta(days=7)
+
+
+def get_active_diet(db: Session, user_id: int) -> DietPlan | None:
+    return (
+        db.query(DietPlan)
+        .filter(DietPlan.user_id == user_id, DietPlan.is_active.is_(True))
+        .order_by(DietPlan.created_at.desc())
+        .first()
+    )
+
+
+def require_active_diet(db: Session, user_id: int) -> DietPlan:
+    diet = get_active_diet(db, user_id)
+    if not diet:
+        raise HTTPException(
+            400, "Nessuna dieta attiva: carica il PDF del nutrizionista per iniziare."
+        )
+    return diet
+
+
+def meal_slots_of(db: Session, diet_plan_id: int) -> list[MealSlot]:
+    return (
+        db.query(MealSlot)
+        .filter(MealSlot.diet_plan_id == diet_plan_id)
+        .order_by(MealSlot.order_index)
+        .all()
+    )
+
+
+def _as_utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
+
+
+def refresh_week_statuses(db: Session, user_id: int) -> None:
+    """Archivia le settimane scadute e promuove quella corrente.
+
+    Il blocco della spesa dura 7 giorni; quando scade la settimana diventa storia e
+    quella nuova prende il posto di "corrente". Viene chiamato all'inizio di ogni
+    lettura del piano, così lo stato è sempre coerente senza bisogno di uno scheduler.
+    """
+    now = datetime.now(timezone.utc)
+    this_monday = current_week_start()
+    changed = False
+
+    for week in db.query(WeekPlan).filter(WeekPlan.user_id == user_id).all():
+        expired_lock = (
+            week.is_locked
+            and week.lock_expires_at is not None
+            and _as_utc(week.lock_expires_at) < now
+        )
+        if expired_lock:
+            week.is_locked = False
+            changed = True
+
+        if week.week_start_date < this_monday:
+            if week.status != "archived":
+                week.status = "archived"
+                changed = True
+        elif week.week_start_date == this_monday:
+            target = "locked" if week.is_locked else "active"
+            if week.status != target:
+                week.status = target
+                changed = True
+
+    if changed:
+        db.commit()
+
+
+def ensure_week_structure(db: Session, week: WeekPlan, slots: list[MealSlot]) -> None:
+    """Crea i giorni e le caselle mancanti.
+
+    Serve anche dopo una modifica della dieta (pasti aggiunti o rinominati): le
+    settimane già create devono adeguarsi senza essere buttate via.
+    """
+    days = {d.day_of_week: d for d in db.query(DayPlan).filter(DayPlan.week_plan_id == week.id)}
+
+    for offset in range(7):
+        if offset not in days:
+            day = DayPlan(
+                week_plan_id=week.id,
+                date=week.week_start_date + timedelta(days=offset),
+                day_of_week=offset,
+            )
+            db.add(day)
+            db.flush()
+            days[offset] = day
+
+    slot_ids = {s.id for s in slots}
+    for day in days.values():
+        existing = {
+            m.meal_slot_id
+            for m in db.query(PlannedMeal).filter(PlannedMeal.day_plan_id == day.id)
+        }
+        for slot_id in slot_ids - existing:
+            db.add(
+                PlannedMeal(day_plan_id=day.id, meal_slot_id=slot_id, source="ai_generated")
+            )
+    db.flush()
+
+
+def get_or_create_week(db: Session, user_id: int, week_start: date) -> WeekPlan:
+    diet = require_active_diet(db, user_id)
+    slots = meal_slots_of(db, diet.id)
+    if not slots:
+        raise HTTPException(400, "La dieta attiva non ha pasti configurati.")
+
+    week = (
+        db.query(WeekPlan)
+        .filter(WeekPlan.user_id == user_id, WeekPlan.week_start_date == week_start)
+        .first()
+    )
+    created = week is None
+    if created:
+        week = WeekPlan(
+            user_id=user_id,
+            week_start_date=week_start,
+            status="active" if week_start == current_week_start() else "draft",
+        )
+        db.add(week)
+        db.flush()
+
+    ensure_week_structure(db, week, slots)
+    if created:
+        apply_recurring_meals(db, user_id, week)
+    db.commit()
+    return week
+
+
+def ensure_unlocked(week: WeekPlan) -> None:
+    if week.is_locked:
+        raise HTTPException(
+            409,
+            "Piano bloccato: hai già fatto la spesa per questa settimana. "
+            "Modifica la settimana successiva, oppure sblocca il piano dalle impostazioni.",
+        )
+
+
+# ── Pasti ricorrenti ───────────────────────────────────────────────────────────
+
+
+def apply_recurring_meals(db: Session, user_id: int, week: WeekPlan) -> int:
+    """Pre-assegna alla settimana i pasti marcati come ricorrenti nella precedente.
+
+    La ricetta viene COPIATA, non condivisa: modificare la colazione di questa
+    settimana non deve riscrivere quella delle settimane già archiviate.
+    """
+    previous = (
+        db.query(WeekPlan)
+        .filter(WeekPlan.user_id == user_id, WeekPlan.week_start_date < week.week_start_date)
+        .order_by(WeekPlan.week_start_date.desc())
+        .first()
+    )
+    if not previous:
+        return 0
+
+    recurring = (
+        db.query(PlannedMeal, DayPlan)
+        .join(DayPlan, DayPlan.id == PlannedMeal.day_plan_id)
+        .filter(
+            DayPlan.week_plan_id == previous.id,
+            PlannedMeal.is_recurring.is_(True),
+            PlannedMeal.recipe_id.isnot(None),
+        )
+        .all()
+    )
+    if not recurring:
+        return 0
+
+    days = {d.day_of_week: d for d in db.query(DayPlan).filter(DayPlan.week_plan_id == week.id)}
+    applied = 0
+
+    for meal, source_day in recurring:
+        rule = meal.recurring_rule or {"type": "weekly", "day": source_day.day_of_week}
+        if rule.get("type") == "daily":
+            targets = list(days.values())
+        else:
+            day = days.get(rule.get("day", source_day.day_of_week))
+            targets = [day] if day else []
+
+        recipe = db.get(Recipe, meal.recipe_id)
+        if not recipe:
+            continue
+
+        for target_day in targets:
+            target = (
+                db.query(PlannedMeal)
+                .filter(
+                    PlannedMeal.day_plan_id == target_day.id,
+                    PlannedMeal.meal_slot_id == meal.meal_slot_id,
+                )
+                .first()
+            )
+            if not target or target.recipe_id:
+                continue
+            target.recipe_id = copy_recipe(db, recipe).id
+            target.source = meal.source
+            target.is_recurring = True
+            target.recurring_rule = rule
+            applied += 1
+
+    db.flush()
+    return applied
+
+
+# ── Contesto per i prompt ──────────────────────────────────────────────────────
+
+
+def _excluded_names(db: Session, user_id: int) -> list[str]:
+    rows = (
+        db.query(ExcludedIngredient, Ingredient)
+        .outerjoin(Ingredient, Ingredient.id == ExcludedIngredient.ingredient_id)
+        .filter(ExcludedIngredient.user_id == user_id)
+        .all()
+    )
+    return [ing.name if ing else (exc.custom_name or "") for exc, ing in rows if ing or exc.custom_name]
+
+
+def _base_names(db: Session, user_id: int) -> list[str]:
+    rows = (
+        db.query(Ingredient.name)
+        .join(BaseIngredient, BaseIngredient.ingredient_id == Ingredient.id)
+        .filter(BaseIngredient.user_id == user_id)
+        .all()
+    )
+    return [r[0] for r in rows]
+
+
+def _pantry_descriptions(db: Session, user_id: int) -> list[str]:
+    rows = (
+        db.query(PantryItem, Ingredient)
+        .join(Ingredient, Ingredient.id == PantryItem.ingredient_id)
+        .filter(PantryItem.user_id == user_id)
+        .all()
+    )
+    out = []
+    for item, ing in rows:
+        if item.quantity_available:
+            out.append(f"{ing.name} ({format_quantity(item.quantity_available, item.unit or 'unità')})")
+        else:
+            out.append(ing.name)
+    return out
+
+
+def _rated_titles(db: Session, user_id: int, high: bool) -> list[str]:
+    query = db.query(Recipe.title).filter(Recipe.user_id == user_id)
+    query = query.filter(Recipe.rating >= 4) if high else query.filter(Recipe.rating <= 2)
+    return [r[0] for r in query.order_by(Recipe.id.desc()).limit(15).all()]
+
+
+def _fmt_list(values: list[str], empty: str = "nessuno") -> str:
+    values = [v for v in values if v]
+    return ", ".join(sorted(set(values))) if values else empty
+
+
+def build_context(db: Session, user_id: int) -> str:
+    """Il blocco di contesto comune a tutti i prompt di generazione."""
+    diet = require_active_diet(db, user_id)
+    slots = meal_slots_of(db, diet.id)
+    prefs = db.query(UserPreferences).filter(UserPreferences.user_id == user_id).first()
+
+    meals_config = "\n".join(
+        f"  · {s.name}: {s.target_calories} kcal — proteine {s.target_protein_g:g}g, "
+        f"carboidrati {s.target_carbs_g:g}g, grassi {s.target_fat_g:g}g"
+        + (f" — note: {s.notes}" if s.notes else "")
+        for s in slots
+    )
+
+    prefer_seasonal = prefs.prefer_seasonal if prefs else True
+    prefer_italian = prefs.prefer_italian if prefs else True
+
+    if prefer_seasonal:
+        seasonal = ", ".join(in_season(current_month())[:25])
+        seasonality = (
+            f"privilegia gli ingredienti di stagione. Siamo a {current_month_name()}: "
+            f"di stagione ci sono {seasonal}."
+        )
+    else:
+        seasonality = "nessun vincolo di stagionalità."
+
+    return prompts.CONTEXT_TEMPLATE.format(
+        daily_calories=diet.total_daily_calories,
+        meals_config=meals_config,
+        excluded=_fmt_list(_excluded_names(db, user_id)),
+        base=_fmt_list(_base_names(db, user_id)),
+        pantry=_fmt_list(_pantry_descriptions(db, user_id), "vuota"),
+        cuisine=(
+            "italiana o mediterranea, piatti che si cucinano davvero in casa"
+            if prefer_italian
+            else "nessuna preferenza particolare"
+        ),
+        seasonality=seasonality,
+        max_prep=(
+            f"{prefs.max_prep_time_min} minuti"
+            if prefs and prefs.max_prep_time_min
+            else "nessun limite"
+        ),
+        budget=(prefs.budget_level if prefs and prefs.budget_level else "medio"),
+        liked=_fmt_list(_rated_titles(db, user_id, True), "nessuna ancora"),
+        disliked=_fmt_list(_rated_titles(db, user_id, False), "nessuna ancora"),
+    )
+
+
+# ── Lettura della settimana ────────────────────────────────────────────────────
+
+
+def week_meals(db: Session, week: WeekPlan) -> list[tuple[DayPlan, PlannedMeal, MealSlot]]:
+    return (
+        db.query(DayPlan, PlannedMeal, MealSlot)
+        .join(PlannedMeal, PlannedMeal.day_plan_id == DayPlan.id)
+        .join(MealSlot, MealSlot.id == PlannedMeal.meal_slot_id)
+        .filter(DayPlan.week_plan_id == week.id)
+        .order_by(DayPlan.day_of_week, MealSlot.order_index)
+        .all()
+    )
+
+
+def serialize_meal(
+    db: Session, day: DayPlan, meal: PlannedMeal, slot: MealSlot, *, full: bool = False
+) -> dict:
+    recipe = db.get(Recipe, meal.recipe_id) if meal.recipe_id else None
+    return {
+        "id": meal.id,
+        "day_of_week": day.day_of_week,
+        "day_name": DAY_NAMES[day.day_of_week],
+        "date": day.date.isoformat(),
+        "slot_id": slot.id,
+        "slot_name": slot.name,
+        "slot_order": slot.order_index,
+        "target": {
+            "calories": slot.target_calories,
+            "protein_g": slot.target_protein_g,
+            "carbs_g": slot.target_carbs_g,
+            "fat_g": slot.target_fat_g,
+            "notes": slot.notes,
+        },
+        "source": meal.source,
+        "is_recurring": meal.is_recurring,
+        "recurring_rule": meal.recurring_rule,
+        "is_followed": meal.is_followed,
+        "deviation_notes": meal.deviation_notes,
+        "recipe": serialize_recipe(db, recipe, full=full),
+    }
+
+
+def serialize_week(db: Session, week: WeekPlan) -> dict:
+    rows = week_meals(db, week)
+    days: dict[int, dict] = {}
+
+    for day, meal, slot in rows:
+        entry = days.setdefault(
+            day.day_of_week,
+            {
+                "id": day.id,
+                "date": day.date.isoformat(),
+                "day_of_week": day.day_of_week,
+                "day_name": DAY_NAMES[day.day_of_week],
+                "meals": [],
+            },
+        )
+        entry["meals"].append(serialize_meal(db, day, meal, slot))
+
+    for entry in days.values():
+        planned = [m["recipe"] for m in entry["meals"] if m["recipe"]]
+        entry["totals"] = {
+            "calories": sum(r["calories"] for r in planned),
+            "protein_g": round(sum(r["protein_g"] for r in planned), 1),
+            "carbs_g": round(sum(r["carbs_g"] for r in planned), 1),
+            "fat_g": round(sum(r["fat_g"] for r in planned), 1),
+            "target_calories": sum(m["target"]["calories"] for m in entry["meals"]),
+        }
+
+    total_slots = len(rows)
+    filled = sum(1 for _, meal, _ in rows if meal.recipe_id)
+
+    return {
+        "id": week.id,
+        "week_start_date": week.week_start_date.isoformat(),
+        "status": week.status,
+        "is_locked": week.is_locked,
+        "locked_at": week.locked_at.isoformat() if week.locked_at else None,
+        "lock_expires_at": week.lock_expires_at.isoformat() if week.lock_expires_at else None,
+        "is_current": week.week_start_date == current_week_start(),
+        "meals_total": total_slots,
+        "meals_filled": filled,
+        "days": [days[k] for k in sorted(days)],
+    }
+
+
+# ── Generazione ────────────────────────────────────────────────────────────────
+
+
+def _slot_line(slot: MealSlot) -> str:
+    line = (
+        f"{slot.name} — {slot.target_calories} kcal, P {slot.target_protein_g:g}g, "
+        f"C {slot.target_carbs_g:g}g, G {slot.target_fat_g:g}g"
+    )
+    return line + (f" (note: {slot.notes})" if slot.notes else "")
+
+
+def _is_fixed(meal: PlannedMeal) -> bool:
+    """Un pasto fissato non viene toccato dalla generazione automatica."""
+    return meal.is_recurring or meal.source == "user_custom"
+
+
+def generate_week(db: Session, user: User, week: WeekPlan) -> dict:
+    """Genera in un'unica chiamata tutte le ricette mancanti della settimana.
+
+    Una chiamata sola, non una per pasto: è l'unico modo perché l'AI possa
+    distribuire gli avanzi (mezza zucchina lunedì, l'altra metà giovedì) e non
+    ripetere gli stessi ingredienti in giorni consecutivi.
+    """
+    ensure_unlocked(week)
+    rows = week_meals(db, week)
+    if not rows:
+        raise HTTPException(400, "La settimana non ha pasti da generare.")
+
+    to_fill = [(d, m, s) for d, m, s in rows if not _is_fixed(m)]
+    fixed = [(d, m, s) for d, m, s in rows if _is_fixed(m) and m.recipe_id]
+
+    if not to_fill:
+        raise HTTPException(400, "Tutti i pasti della settimana sono fissati a mano.")
+
+    by_day: dict[int, list[str]] = {}
+    for day, _meal, slot in to_fill:
+        by_day.setdefault(day.day_of_week, []).append(_slot_line(slot))
+    slots_to_fill = "\n".join(
+        f"{DAY_NAMES[dow]} (day_of_week {dow}):\n" + "\n".join(f"  · {line}" for line in lines)
+        for dow, lines in sorted(by_day.items())
+    )
+
+    if fixed:
+        already = "\n".join(
+            f"  · {DAY_NAMES[d.day_of_week]} / {s.name}: "
+            f"{db.get(Recipe, m.recipe_id).title}"
+            for d, m, s in fixed
+        )
+    else:
+        already = "  (nessuno)"
+
+    prompt = prompts.WEEK_PLAN_PROMPT.format(
+        context=build_context(db, user.id),
+        slots_to_fill=slots_to_fill,
+        already_assigned=already,
+    )
+
+    client = ClaudeClient(user)
+    # Budget: ~2.000 token a ricetta più il margine per il ragionamento. Sopra la
+    # soglia il client passa automaticamente in streaming.
+    max_tokens = min(64000, 2000 * len(to_fill) + 6000)
+    data = client.generate_json(
+        prompts.WEEK_PLAN_SYSTEM,
+        prompt,
+        max_tokens=max_tokens,
+        thinking=True,
+        effort="high",
+    )
+
+    if not isinstance(data, dict) or not isinstance(data.get("days"), list):
+        raise AIError("Claude ha restituito un piano in un formato inatteso.")
+
+    # Indice delle caselle da riempire: (giorno, nome pasto normalizzato) → riga DB.
+    index = {(d.day_of_week, s.name.strip().lower()): (d, m, s) for d, m, s in to_fill}
+    filled = 0
+
+    for day_data in data["days"]:
+        try:
+            dow = int(day_data.get("day_of_week"))
+        except (TypeError, ValueError):
+            continue
+        for meal_data in day_data.get("meals") or []:
+            slot_name = (meal_data.get("slot_name") or "").strip().lower()
+            target = index.pop((dow, slot_name), None)
+            if not target:
+                # L'AI ha inventato un pasto che non esiste (o l'ha già riempito):
+                # ignorarlo è meglio che sovrascrivere qualcosa a caso.
+                logger.info("Pasto ignorato dalla risposta AI: giorno %s, slot %r", dow, slot_name)
+                continue
+            recipe_data = meal_data.get("recipe") or {}
+            if not recipe_data.get("title"):
+                continue
+            _day, meal, _slot = target
+            recipe = create_recipe(db, user.id, recipe_data, generation_prompt="week_plan")
+            meal.recipe_id = recipe.id
+            meal.source = "ai_generated"
+            meal.is_followed = None
+            filled += 1
+
+    if filled == 0:
+        raise AIError("Claude non ha prodotto nessuna ricetta utilizzabile. Riprova.")
+
+    if week.status == "draft" and week.week_start_date == current_week_start():
+        week.status = "active"
+
+    db.commit()
+
+    # La lista della spesa segue sempre il piano: ricostruirla qui evita che l'utente
+    # veda una lista che non c'entra con le ricette appena generate.
+    from .shopping import rebuild_shopping_list
+
+    rebuild_shopping_list(db, user.id, week)
+    db.commit()
+
+    return {
+        "filled": filled,
+        "missing": len(index),
+        "notes": data.get("ingredient_reuse_notes"),
+    }
+
+
+def _partial_ingredients(db: Session, week: WeekPlan, exclude_meal_id: int) -> list[str]:
+    """Ingredienti già previsti in settimana: la nuova ricetta dovrebbe riusarli."""
+    rows = (
+        db.query(Ingredient.name)
+        .join(RecipeIngredient, RecipeIngredient.ingredient_id == Ingredient.id)
+        .join(PlannedMeal, PlannedMeal.recipe_id == RecipeIngredient.recipe_id)
+        .join(DayPlan, DayPlan.id == PlannedMeal.day_plan_id)
+        .filter(DayPlan.week_plan_id == week.id, PlannedMeal.id != exclude_meal_id)
+        .distinct()
+        .all()
+    )
+    return [r[0] for r in rows]
+
+
+def regenerate_meal(
+    db: Session, user: User, meal: PlannedMeal, *, user_request: str | None = None
+) -> Recipe:
+    """Rigenera la ricetta di un singolo pasto.
+
+    La vecchia ricetta non viene cancellata: resta nel ricettario (magari era
+    votata) e semplicemente non è più assegnata a questo pasto.
+    """
+    day = db.get(DayPlan, meal.day_plan_id)
+    week = db.get(WeekPlan, day.week_plan_id)
+    ensure_unlocked(week)
+
+    slot = db.get(MealSlot, meal.meal_slot_id)
+    previous = db.get(Recipe, meal.recipe_id) if meal.recipe_id else None
+
+    week_titles = [
+        r.title
+        for r in db.query(Recipe)
+        .join(PlannedMeal, PlannedMeal.recipe_id == Recipe.id)
+        .join(DayPlan, DayPlan.id == PlannedMeal.day_plan_id)
+        .filter(DayPlan.week_plan_id == week.id, PlannedMeal.id != meal.id)
+        .all()
+    ]
+
+    prompt = prompts.SINGLE_MEAL_PROMPT.format(
+        context=build_context(db, user.id),
+        slot_name=slot.name,
+        day_name=DAY_NAMES[day.day_of_week],
+        target_calories=slot.target_calories,
+        target_protein=f"{slot.target_protein_g:g}",
+        target_carbs=f"{slot.target_carbs_g:g}",
+        target_fat=f"{slot.target_fat_g:g}",
+        slot_notes=slot.notes or "nessuna",
+        previous_recipe=previous.title if previous else "nessuna",
+        week_recipes=_fmt_list(week_titles, "nessuna"),
+        partial_ingredients=_fmt_list(_partial_ingredients(db, week, meal.id), "nessuno"),
+        user_request=(
+            f"\nRichiesta esplicita dell'utente da rispettare: {user_request}"
+            if user_request
+            else ""
+        ),
+    )
+
+    client = ClaudeClient(user)
+    data = client.generate_json(
+        prompts.SINGLE_MEAL_SYSTEM, prompt, max_tokens=4000, thinking=False
+    )
+    if not isinstance(data, dict) or not data.get("title"):
+        raise AIError("Claude non ha restituito una ricetta valida.")
+
+    recipe = create_recipe(db, user.id, data, generation_prompt=json.dumps({"slot": slot.name}))
+    meal.recipe_id = recipe.id
+    meal.source = "ai_generated"
+    meal.is_followed = None
+    db.commit()
+
+    from .shopping import rebuild_shopping_list
+
+    rebuild_shopping_list(db, user.id, week)
+    db.commit()
+    return recipe
+
+
+def meal_context_for_chat(db: Session, meal: PlannedMeal) -> dict:
+    """Dati del pasto usati per costruire il system prompt della chat."""
+    day = db.get(DayPlan, meal.day_plan_id)
+    week = db.get(WeekPlan, day.week_plan_id)
+    slot = db.get(MealSlot, meal.meal_slot_id)
+    recipe = db.get(Recipe, meal.recipe_id) if meal.recipe_id else None
+    return {
+        "day": day,
+        "week": week,
+        "slot": slot,
+        "recipe": recipe,
+        "recipe_json": (
+            json.dumps(recipe_for_prompt(db, recipe), ensure_ascii=False, indent=2)
+            if recipe
+            else "nessuna ricetta ancora assegnata a questo pasto"
+        ),
+    }

@@ -1201,6 +1201,43 @@ textarea {
   opacity: 0.5;
 }
 
+/* Chat della spesa: un cassetto sopra la lista, non una colonna fissa come quella
+   del pasto — la si apre solo quando serve, al supermercato, spesso da telefono. */
+.chat-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(30, 25, 15, 0.45);
+}
+
+.shopping-chat {
+  position: fixed;
+  z-index: 61;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* Desktop: cassetto a destra, tutta altezza. */
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(420px, 92vw);
+  box-shadow: var(--shadow-popup);
+}
+
+@media (max-width: 640px) {
+  /* Telefono: foglio dal basso, così il pollice arriva all'input. */
+  .shopping-chat {
+    top: auto;
+    left: 0;
+    right: 0;
+    width: auto;
+    height: 82vh;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  }
+}
+
 .typing {
   display: inline-flex;
   gap: 4px;

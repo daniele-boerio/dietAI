@@ -6,12 +6,14 @@ import {
   ChevronRight,
   Copy,
   Lock,
+  MessageSquare,
   ShoppingCart,
 } from 'lucide-react';
 import { api, formatDate, formatMoney } from '../api';
 import { useApp } from '../App';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
+import ShoppingChat from '../components/ShoppingChat';
 
 export default function ShoppingPage() {
   const { addToast } = useApp();
@@ -21,6 +23,7 @@ export default function ShoppingPage() {
   const [collapsed, setCollapsed] = useState({});
   const [confirmDone, setConfirmDone] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -98,6 +101,9 @@ export default function ShoppingPage() {
           </p>
         </div>
         <div className="page-actions">
+          <button className="btn btn-secondary" onClick={() => setChatOpen(true)}>
+            <MessageSquare size={16} /> Assistente
+          </button>
           <button className="btn btn-secondary" onClick={copyList}>
             <Copy size={16} /> Copia
           </button>
@@ -229,6 +235,19 @@ export default function ShoppingPage() {
           onConfirm={complete}
           onCancel={() => setConfirmDone(false)}
         />
+      )}
+
+      {chatOpen && (
+        <>
+          <div className="chat-backdrop" onClick={() => setChatOpen(false)} />
+          <ShoppingChat
+            key={list.week_plan_id}
+            weekId={list.week_plan_id}
+            locked={list.is_locked}
+            onClose={() => setChatOpen(false)}
+            onListUpdated={(updated) => updated && setList(updated)}
+          />
+        </>
       )}
     </>
   );

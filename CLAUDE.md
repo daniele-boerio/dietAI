@@ -145,6 +145,17 @@ per un pasto che invece rispetta la dieta. Vedi `_is_fixed`, `serialize_week` e
 `_is_fixed()` li salta nella generazione e la settimana successiva se li ricopia
 (`apply_recurring_meals`, con `copy_recipe`: copia, non riferimento).
 
+**La chat della spesa cambia un ingrediente in tutta la settimana.** Oltre alla chat
+sul singolo pasto (`/api/chat/meals/...`, marcatore `[RECIPE_UPDATE]`) c'è la chat "da
+supermercato" (`/api/chat/shopping/{week_id}/...`, marcatore `[RECIPES_UPDATE]`): serve a
+quando non trovi o vuoi cambiare un alimento, e riscrive in un colpo solo **tutte** le
+ricette della settimana che lo usano, poi rifà la lista. Vive sulla settimana
+(`ShoppingChatMessage`, non sul pasto), passa al modello un indice compatto dei pasti
+modificabili (`_editable_meals`: quelli con ricetta, non su giorno/pasto saltato — cioè
+quelli che pesano sulla spesa) con i loro `meal_id`, e applica solo gli aggiornamenti
+che citano un `meal_id` valido. A spesa fatta (`is_locked`) resta informativa, come la
+chat sul pasto. Il prompt (`SHOPPING_CHAT_SYSTEM`) sta in `prompts.py` con gli altri.
+
 **Il modello si sceglie per ruolo.** `planning`, `chat`, `diet` hanno pesi diversi:
 incastrare trenta pasti nei macro è difficile, rispondere in chat no. `get_client(db,
 user, role)` costruisce il client col modello scelto dall'utente (`user_preferences`)

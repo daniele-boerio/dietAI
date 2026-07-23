@@ -245,6 +245,18 @@ export const api = {
 
   exportShoppingList: (which = 'current') => text(`/shopping/export?which=${which}`),
 
+  // Chat della spesa: legata alla settimana (week_plan_id della lista mostrata).
+  getShoppingChat: (weekId) => request(`/chat/shopping/${weekId}/messages`),
+
+  sendShoppingChat: (weekId, content) =>
+    request(`/chat/shopping/${weekId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    }),
+
+  clearShoppingChat: (weekId) =>
+    request(`/chat/shopping/${weekId}/messages`, { method: 'DELETE' }),
+
   // ── Tracking ──
   getTracking: (weekStartDate) =>
     request(`/tracking/weekly${weekStartDate ? `?week_start_date=${weekStartDate}` : ''}`),

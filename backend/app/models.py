@@ -345,6 +345,32 @@ class MealChatMessage(Base):
     )
 
 
+class ShoppingChatMessage(Base):
+    """Chat "da supermercato": è legata alla settimana, non a un pasto.
+
+    Serve a cambiare un ingrediente ovunque compaia — non lo trovo, non mi va — e a
+    farsi riscrivere tutte le ricette che lo usano in un colpo solo. Per questo vive
+    sulla settimana e non su una singola casella.
+    """
+
+    __tablename__ = "shopping_chat_messages"
+
+    id = Column(Integer, primary_key=True)
+    week_plan_id = Column(
+        Integer,
+        ForeignKey("week_plans.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    role = Column(String, nullable=False)
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint("role IN ('user','assistant')", name="ck_shopping_chat_role"),
+    )
+
+
 # ─────────────────────────── Configurazione utente ───────────────────────────
 
 

@@ -230,6 +230,21 @@ def serialize_shopping_list(db: Session, week: WeekPlan, lst: ShoppingList) -> d
     }
 
 
+def shopping_list_summary(db: Session, lst: ShoppingList) -> str:
+    """Gli articoli in lista come stringa piatta, per infilarli nel prompt della chat."""
+    rows = (
+        db.query(ShoppingListItem, Ingredient)
+        .join(Ingredient, Ingredient.id == ShoppingListItem.ingredient_id)
+        .filter(ShoppingListItem.shopping_list_id == lst.id)
+        .all()
+    )
+    names = [
+        f"{ing.name} ({format_quantity(item.total_quantity, item.unit)})"
+        for item, ing in rows
+    ]
+    return ", ".join(sorted(names)) if names else "(lista vuota)"
+
+
 def complete_shopping(db: Session, user_id: int, week: WeekPlan, lst: ShoppingList) -> dict:
     """Segna la spesa come fatta: blocca il piano per 7 giorni e riempie la dispensa.
 

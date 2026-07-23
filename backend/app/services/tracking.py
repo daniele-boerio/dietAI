@@ -5,10 +5,12 @@ giorno e pasto per pasto. Non è un diario alimentare: misura quanto il piano
 generato aderisce alla dieta, più l'aderenza dichiarata dall'utente (`is_followed`).
 """
 
+from datetime import date
+
 from sqlalchemy.orm import Session
 
-from ..models import MealSlot, Recipe, WeekPlan
-from .planner import DAY_NAMES, week_meals
+from ..models import DayPlan, MealSlot, PlannedMeal, Recipe, WeekPlan
+from .planner import DAY_NAMES, today, week_meals
 
 # Sotto il 10% di scarto il piano è "in linea"; oltre il 20% è fuori bersaglio.
 # Sono le stesse soglie che i prompt danno all'AI, così UI e generazione concordano.
@@ -194,6 +196,98 @@ def weekly_tracking(db: Session, week: WeekPlan) -> dict:
             },
         },
     }
+
+
+# ── Aderenza dell'anno ─────────────────────────────────────────────────────────
+
+
+def _day_status(followed: list[bool]) -> str:
+    """Riassume in una parola com'è andato un giorno, dai suoi pasti tracciati.
+
+    Stessa lettura del riepilogo settimanale, ma a tre stati invece di due: basta un
+    "no" perché il giorno non sia "pieno", e se sono tutti "no" è mancato del tutto.
+    """
+    if all(followed):
+        return "full"
+    if not any(followed):
+        return "missed"
+    return "partial"
+
+
+def year_adherence(db: Session, user_id: int, year: int) -> dict:
+    """Quanto è stata rispettata la dieta ogni giorno dell'anno.
+
+    Guarda solo i pasti su cui l'utente si è espresso (`is_followed` non nullo): un
+    giorno mai tracciato non è un fallimento, è semplicemente senza dato, e nel
+    calendario resta neutro. Contarlo come mancato punirebbe chi non annota, non chi
+    sgarra.
+    """
+    start = date(year, 1, 1)
+    end = date(year, 12, 31)
+
+    rows = (
+        db.query(DayPlan.date, PlannedMeal.is_followed)
+        .join(PlannedMeal, PlannedMeal.day_plan_id == DayPlan.id)
+        .join(WeekPlan, WeekPlan.id == DayPlan.week_plan_id)
+        .filter(
+            WeekPlan.user_id == user_id,
+            DayPlan.date >= start,
+            DayPlan.date <= end,
+            PlannedMeal.is_followed.isnot(None),
+        )
+        .all()
+    )
+
+    by_day: dict[date, list[bool]] = {}
+    for day_date, followed in rows:
+        by_day.setdefault(day_date, []).append(bool(followed))
+
+    statuses: dict[str, str] = {}
+    counts = {"full": 0, "partial": 0, "missed": 0}
+    for day_date, followed in by_day.items():
+        status = _day_status(followed)
+        statuses[day_date.isoformat()] = status
+        counts[status] += 1
+
+    tracked = len(by_day)
+    # "Quanto sei stato bravo" in un numero: un giorno pieno vale 1, uno parziale
+    # mezzo, uno mancato zero. È una media pesata sui soli giorni con un dato.
+    score = (counts["full"] + 0.5 * counts["partial"]) / tracked if tracked else 0.0
+
+    # Serie più lunga di giorni pieni di fila: il numero che dà soddisfazione a
+    # guardarlo. Solo fino a oggi, così un anno in corso non conta i giorni futuri.
+    limit = today() if year == today().year else end
+    best_streak = current = 0
+    day = start
+    while day <= min(end, limit):
+        if statuses.get(day.isoformat()) == "full":
+            current += 1
+            best_streak = max(best_streak, current)
+        else:
+            current = 0
+        day = date.fromordinal(day.toordinal() + 1)
+
+    return {
+        "year": year,
+        "days": statuses,
+        "counts": counts,
+        "tracked_days": tracked,
+        "score_pct": round(100 * score, 1),
+        "best_streak": best_streak,
+        "available_years": _tracked_years(db, user_id),
+    }
+
+
+def _tracked_years(db: Session, user_id: int) -> list[int]:
+    """Gli anni in cui esiste almeno una settimana, per il selettore. Oggi c'è sempre."""
+    rows = (
+        db.query(WeekPlan.week_start_date)
+        .filter(WeekPlan.user_id == user_id)
+        .all()
+    )
+    years = {r[0].year for r in rows}
+    years.add(today().year)
+    return sorted(years)
 
 
 def diet_targets(db: Session, diet_plan_id: int) -> list[dict]:

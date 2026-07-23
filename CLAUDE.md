@@ -124,6 +124,15 @@ traboccata sulla settimana dopo dallo slittamento). `_eaten` guarda solo `is_fol
 True`, così un "ho mangiato altro" non impedisce a `shift_past_days` di dare il giorno
 per saltato.
 
+**L'aderenza dell'anno è un calendario a colpo d'occhio.** `GET /api/tracking/year`
+(`year_adherence`) classifica ogni giorno da `PlannedMeal.is_followed`: tutti "sì" →
+`full`, tutti "no" → `missed`, misto → `partial`; un giorno senza nessun pasto tracciato
+resta **fuori** (non è un fallimento, è un buco di dati, e contarlo punirebbe chi non
+annota). È la stessa lettura del riepilogo settimanale (`entry["is_followed"]`) estesa a
+tre stati. Lo `score_pct` pesa full=1, partial=0.5, missed=0 sui soli giorni tracciati.
+Il frontend (`YearHeatmap`, scheda "Anno" in Andamento) lo disegna come griglia
+settimane×giorni riusando le tinte del tracking (`--success/--warning/--danger`).
+
 **"Lo faccio io" è un flag della dieta, non della settimana.** `MealSlot.auto_generate`
 a False significa che l'utente quel pasto lo prepara da sé: l'AI non lo genera mai e i
 suoi ingredienti non entrano in lista della spesa, **ma i suoi macro contano lo stesso**

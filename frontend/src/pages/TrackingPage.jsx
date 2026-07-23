@@ -3,6 +3,7 @@ import { TrendingUp } from 'lucide-react';
 import { api, formatDate, formatNumber } from '../api';
 import { useApp } from '../App';
 import EmptyState from '../components/EmptyState';
+import YearHeatmap from '../components/YearHeatmap';
 
 // Gauge ad anello disegnato con conic-gradient: nessuna libreria di grafici per tre
 // cerchi e sette barre, che qui è tutto quello che serve.
@@ -30,7 +31,47 @@ function Gauge({ label, value, target, color }) {
   );
 }
 
+// Una pagina, due sguardi sugli stessi dati: la settimana in dettaglio e l'anno a
+// colpo d'occhio. Il selettore in alto sceglie quale.
 export default function TrackingPage() {
+  const [view, setView] = useState('week');
+
+  return (
+    <>
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Andamento</h1>
+          <p className="page-subtitle">
+            {view === 'week'
+              ? 'Quanto il piano generato aderisce alla dieta, giorno per giorno.'
+              : "Quanto hai rispettato la dieta ogni giorno dell'anno."}
+          </p>
+        </div>
+      </div>
+
+      <div className="week-toolbar">
+        <div className="week-tabs">
+          <button
+            className={`week-tab ${view === 'week' ? 'active' : ''}`}
+            onClick={() => setView('week')}
+          >
+            Settimana
+          </button>
+          <button
+            className={`week-tab ${view === 'year' ? 'active' : ''}`}
+            onClick={() => setView('year')}
+          >
+            Anno
+          </button>
+        </div>
+      </div>
+
+      {view === 'week' ? <WeeklyView /> : <YearHeatmap />}
+    </>
+  );
+}
+
+function WeeklyView() {
   const { addToast } = useApp();
   const [weeks, setWeeks] = useState([]);
   const [selected, setSelected] = useState('');
@@ -62,29 +103,21 @@ export default function TrackingPage() {
 
   return (
     <>
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Andamento</h1>
-          <p className="page-subtitle">
-            Quanto il piano generato aderisce alla dieta, giorno per giorno.
-          </p>
-        </div>
-        <div className="page-actions">
-          <select
-            value={selected}
-            onChange={(e) => setSelected(e.target.value)}
-            style={{ width: 'auto' }}
-          >
-            <option value="">Settimana corrente</option>
-            {weeks
-              .filter((w) => !w.is_current)
-              .map((w) => (
-                <option key={w.id} value={w.week_start_date}>
-                  Dal {formatDate(w.week_start_date)}
-                </option>
-              ))}
-          </select>
-        </div>
+      <div className="week-toolbar" style={{ marginTop: -4 }}>
+        <select
+          value={selected}
+          onChange={(e) => setSelected(e.target.value)}
+          style={{ width: 'auto' }}
+        >
+          <option value="">Settimana corrente</option>
+          {weeks
+            .filter((w) => !w.is_current)
+            .map((w) => (
+              <option key={w.id} value={w.week_start_date}>
+                Dal {formatDate(w.week_start_date)}
+              </option>
+            ))}
+        </select>
       </div>
 
       {!planned ? (

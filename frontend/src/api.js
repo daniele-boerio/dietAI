@@ -251,6 +251,9 @@ export const api = {
 
   getWeeks: () => request('/tracking/weeks'),
 
+  getYearTracking: (year) =>
+    request(`/tracking/year${year ? `?year=${year}` : ''}`),
+
   getDashboard: () => request('/tracking/dashboard'),
 };
 

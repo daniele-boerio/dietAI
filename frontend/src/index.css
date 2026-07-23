@@ -1487,6 +1487,140 @@ textarea {
   background: var(--border-light);
 }
 
+/* ── Calendario dell'anno ──────────────────────────────────────── */
+
+.year-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.year-nav-label {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 700;
+  min-width: 3ch;
+  text-align: center;
+}
+
+.heatmap-card {
+  overflow: hidden;
+}
+
+/* L'anno intero è largo ~53 settimane: su schermo stretto scorre in orizzontale
+   dentro la card, senza spingere fuori il resto della pagina. */
+.heatmap-scroll {
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.heatmap {
+  /* Dimensioni delle celle in un posto solo: mesi, giorni e caselle ci si agganciano
+     tutti, così le colonne restano allineate a qualsiasi larghezza. */
+  --cell: 13px;
+  --cell-gap: 3px;
+  --gutter: 30px;
+  display: inline-block;
+  min-width: 100%;
+}
+
+.heatmap-months {
+  display: flex;
+  gap: var(--cell-gap);
+  margin-bottom: 5px;
+}
+
+.heatmap-gutter {
+  width: var(--gutter);
+  flex-shrink: 0;
+}
+
+.heatmap-month {
+  width: var(--cell);
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.heatmap-body {
+  display: flex;
+  gap: var(--cell-gap);
+}
+
+.heatmap-weekdays {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cell-gap);
+  width: var(--gutter);
+  flex-shrink: 0;
+}
+
+.heatmap-weekdays span {
+  height: var(--cell);
+  font-size: 0.62rem;
+  line-height: var(--cell);
+  color: var(--text-muted);
+}
+
+.heatmap-columns {
+  display: flex;
+  gap: var(--cell-gap);
+}
+
+.heatmap-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cell-gap);
+}
+
+.heatmap-cell {
+  width: var(--cell);
+  height: var(--cell);
+  border-radius: 3px;
+  background: var(--bg-surface);
+}
+
+/* Le tre tinte dell'aderenza sono le stesse del resto del tracking: verde seguita,
+   giallo in parte, rosso mancata. Così un colore vuol dire la stessa cosa ovunque. */
+.heatmap-cell.full {
+  background: var(--success);
+}
+.heatmap-cell.partial {
+  background: var(--warning);
+}
+.heatmap-cell.missed {
+  background: var(--danger);
+}
+.heatmap-cell.untracked {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+}
+.heatmap-cell.future {
+  background: transparent;
+  border: 1px dashed var(--border);
+  opacity: 0.5;
+}
+/* Giorno di un altro anno, in coda alla prima o all'ultima colonna: buco invisibile. */
+.heatmap-cell.pad {
+  background: transparent;
+}
+
+.heatmap-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 14px;
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+}
+
+.heatmap-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 /* ── Ricettario ────────────────────────────────────────────────── */
 
 .recipe-grid {

@@ -20,7 +20,7 @@ from ..services.planner import (
     week_meals,
 )
 from ..services.shopping import get_or_create_list
-from ..services.tracking import diet_targets, weekly_tracking
+from ..services.tracking import diet_targets, weekly_tracking, year_adherence
 
 router = APIRouter(prefix="/api/tracking", tags=["Tracking"])
 
@@ -50,6 +50,17 @@ def weekly(
         "meals": diet_targets(db, diet.id) if diet else [],
     }
     return data
+
+
+@router.get("/year")
+def year(
+    year: int | None = Query(None, description="Anno solare, default: quello corrente"),
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    """Aderenza giorno per giorno nell'anno, per il calendario a colpo d'occhio."""
+    refresh_week_statuses(db, user_id)
+    return year_adherence(db, user_id, year or date.today().year)
 
 
 @router.get("/weeks")

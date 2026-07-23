@@ -84,13 +84,24 @@ def send_message(
     slot = ctx["slot"]
     recipe = ctx["recipe"]
 
-    lock_note = (
-        "- IMPORTANTE: il piano di questa settimana è BLOCCATO (spesa già fatta). "
-        "Non proporre modifiche alla ricetta: dai consigli su come cucinarla con quello "
-        "che è già stato comprato."
-        if week.is_locked
-        else "- Il piano è modificabile: se l'utente chiede una modifica sensata, applicala."
-    )
+    # Un giorno saltato è passato senza spesa: come a piano bloccato, la chat può
+    # commentare ma non riscrivere niente.
+    frozen = week.is_locked or day.is_skipped
+    if week.is_locked:
+        lock_note = (
+            "- IMPORTANTE: il piano di questa settimana è BLOCCATO (spesa già fatta). "
+            "Non proporre modifiche alla ricetta: dai consigli su come cucinarla con quello "
+            "che è già stato comprato."
+        )
+    elif day.is_skipped:
+        lock_note = (
+            "- IMPORTANTE: questo giorno è già passato senza che la spesa fosse fatta. "
+            "Non proporre modifiche alla ricetta: non verrebbero applicate."
+        )
+    else:
+        lock_note = (
+            "- Il piano è modificabile: se l'utente chiede una modifica sensata, applicala."
+        )
 
     system = prompts.render(
         prompts.MEAL_CHAT_SYSTEM,
@@ -129,8 +140,12 @@ def send_message(
     if UPDATE_MARKER in answer:
         head, _, tail = answer.partition(UPDATE_MARKER)
         visible = head.strip() or "Ho aggiornato la ricetta."
-        if week.is_locked:
-            visible += "\n\n(Il piano è bloccato: la modifica non è stata applicata.)"
+        if frozen:
+            visible += (
+                "\n\n(Il piano è bloccato: la modifica non è stata applicata.)"
+                if week.is_locked
+                else "\n\n(Giorno già passato: la modifica non è stata applicata.)"
+            )
         elif not recipe:
             visible += "\n\n(Non c'è ancora una ricetta da aggiornare per questo pasto.)"
         else:

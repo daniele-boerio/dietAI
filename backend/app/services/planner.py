@@ -25,6 +25,7 @@ from ..models import (
     PlannedMeal,
     Recipe,
     RecipeIngredient,
+    ShoppingList,
     User,
     UserPreferences,
     WeekPlan,
@@ -49,8 +50,18 @@ def monday_of(day: date) -> date:
     return day - timedelta(days=day.weekday())
 
 
+def today() -> date:
+    """Il punto unico da cui l'app legge la data di oggi.
+
+    Esiste perché lo slittamento dei giorni saltati dipende da che giorno è: i test
+    devono poterlo spostare, altrimenti la stessa suite darebbe risultati diversi il
+    lunedì e il venerdì.
+    """
+    return date.today()
+
+
 def current_week_start() -> date:
-    return monday_of(date.today())
+    return monday_of(today())
 
 
 def next_week_start() -> date:
@@ -181,6 +192,10 @@ def get_or_create_week(db: Session, user_id: int, week_start: date) -> WeekPlan:
     ensure_week_structure(db, week, slots)
     if created:
         apply_recurring_meals(db, user_id, week)
+    # Sta qui e non nel router perché ogni lettura del piano passa da questa funzione:
+    # aprire l'app è ciò che fa scattare lo slittamento, senza pulsanti da premere.
+    if week.week_start_date == current_week_start():
+        shift_past_days(db, user_id, week)
     db.commit()
     return week
 
@@ -217,6 +232,34 @@ def ensure_unlocked(week: WeekPlan) -> None:
             "Piano bloccato: hai già fatto la spesa per questa settimana. "
             "Modifica la settimana successiva, oppure sblocca il piano dalle impostazioni.",
         )
+
+
+def ensure_not_skipped(day: DayPlan, meal: PlannedMeal | None = None) -> None:
+    if meal is not None and meal.is_skipped:
+        raise HTTPException(
+            409,
+            "Questo pasto è saltato: la sua ricetta si è accodata più avanti. "
+            'Segnalo come seguito per riportarlo qui.',
+        )
+    if day.is_skipped:
+        raise HTTPException(
+            409,
+            "Questo giorno è saltato: è passato senza che la spesa fosse fatta e le "
+            "sue ricette sono slittate in avanti.",
+        )
+
+
+# ── Pasti fissi ────────────────────────────────────────────────────────────────
+
+
+def _is_fixed(meal: PlannedMeal, slot: MealSlot) -> bool:
+    """Un pasto fissato non viene toccato né dalla generazione né dallo slittamento.
+
+    Tre modi per esserlo: è ricorrente, l'utente gli ha assegnato una ricetta a mano,
+    oppure il pasto è marcato nella dieta come "lo gestisco io" (`auto_generate` a
+    False) — la colazione di sempre, che non ha senso far reinventare ogni settimana.
+    """
+    return meal.is_recurring or meal.source == "user_custom" or not slot.auto_generate
 
 
 # ── Pasti ricorrenti ───────────────────────────────────────────────────────────
@@ -284,6 +327,294 @@ def apply_recurring_meals(db: Session, user_id: int, week: WeekPlan) -> int:
 
     db.flush()
     return applied
+
+
+# ── Giorni saltati e slittamento ───────────────────────────────────────────────
+
+
+def _shopping_done(db: Session, week: WeekPlan) -> bool:
+    return (
+        db.query(ShoppingList)
+        .filter(ShoppingList.week_plan_id == week.id, ShoppingList.is_completed.is_(True))
+        .first()
+        is not None
+    )
+
+
+def _eaten(db: Session, day: DayPlan) -> bool:
+    """L'utente ha confermato di aver seguito almeno un pasto di quel giorno.
+
+    Solo il "sì" conta: "ho mangiato altro" vuol dire l'opposto — quel piatto non è
+    stato cucinato — e non deve impedire di dare il giorno per saltato.
+    """
+    return (
+        db.query(PlannedMeal)
+        .filter(PlannedMeal.day_plan_id == day.id, PlannedMeal.is_followed.is_(True))
+        .first()
+        is not None
+    )
+
+
+def _empty_meal(meal: PlannedMeal) -> None:
+    meal.recipe_id = None
+    meal.source = "ai_generated"
+    meal.is_shifted = False
+    meal.is_followed = None
+    meal.deviation_notes = None
+
+
+def _overflow_week(db: Session, user_id: int, week: WeekPlan) -> WeekPlan | None:
+    """La settimana dopo, dove finisce quello che in questa non entra più."""
+    if not get_active_diet(db, user_id):
+        return None
+    following = get_or_create_week(db, user_id, week.week_start_date + timedelta(days=7))
+    # Se per la prossima la spesa è già stata fatta, quel piano è intoccabile: le
+    # ricette in eccedenza restano nel ricettario e basta.
+    return None if following.is_locked else following
+
+
+def shift_past_days(db: Session, user_id: int, week: WeekPlan) -> int:
+    """Finché la spesa non è fatta, i giorni che passano si saltano e il piano slitta.
+
+    Il piano è ancorato alla spesa, non al calendario. Se lunedì non sei andato a fare
+    la spesa, lunedì non hai cucinato quello che c'era in piano: comprarne mercoledì
+    gli ingredienti vorrebbe dire comprare roba per un giorno che non tornerà. Il
+    giorno diventa "saltato" — fuori dalla lista della spesa, dalla generazione e dal
+    tracking — e le ricette scalano tutte in avanti di un posto, così quello che avevi
+    in programma lo mangi lo stesso. Quelle che non entrano più in settimana
+    traboccano su quella dopo.
+
+    Due eccezioni. I pasti fissi non slittano: la pizza del sabato è del sabato, non
+    di giovedì. E un giorno già tracciato non si salta — aver detto "questo pasto
+    l'ho seguito" significa che quel giorno hai mangiato, spesa o no.
+
+    Ritorna quanti giorni sono stati saltati adesso; 0 se non c'era niente da fare.
+    """
+    if week.is_locked or week.week_start_date != current_week_start():
+        return 0
+    # Non basta guardare il blocco: dopo uno sblocco d'emergenza la spesa resta fatta,
+    # e allora il cibo è in casa. Slittare lì vorrebbe dire spostare piatti di cui gli
+    # ingredienti sono già nel frigo.
+    if _shopping_done(db, week):
+        return 0
+    # Il modello sta scrivendo proprio in queste caselle: si rimanda alla lettura dopo.
+    if is_generating(week):
+        return 0
+
+    days = (
+        db.query(DayPlan)
+        .filter(DayPlan.week_plan_id == week.id)
+        .order_by(DayPlan.day_of_week)
+        .all()
+    )
+    to_skip = [
+        d for d in days if d.date < today() and not d.is_skipped and not _eaten(db, d)
+    ]
+    if not to_skip:
+        return 0
+
+    for day in to_skip:
+        day.is_skipped = True
+    db.flush()
+
+    _reflow_recipes(db, user_id, week)
+    db.flush()
+    return len(to_skip)
+
+
+# ── Pasti saltati a mano ───────────────────────────────────────────────────────
+
+
+def _free_cells(db: Session, user_id: int, week: WeekPlan, slot_id: int) -> list[PlannedMeal]:
+    """Le caselle libere di quello slot da oggi in avanti, in ordine di giorno.
+
+    Prima quelle rimaste vuote in questa settimana, poi quelle della prossima: è la
+    coda su cui si accoda un piatto saltato.
+    """
+    now = today()
+    out = []
+    for source in (week, _overflow_week(db, user_id, week)):
+        if source is None:
+            continue
+        for day, meal, slot in week_meals(db, source):
+            if slot.id != slot_id or _is_fixed(meal, slot):
+                continue
+            if day.is_skipped or meal.is_skipped or meal.recipe_id:
+                continue
+            if source is week and day.date < now:
+                continue  # un giorno già passato non è un posto dove rimandare niente
+            out.append(meal)
+    return out
+
+
+def skip_meal(db: Session, user_id: int, meal: PlannedMeal, day: DayPlan, week: WeekPlan) -> dict:
+    """"Ho mangiato altro": il piatto non è stato cucinato, la ricetta va in fondo.
+
+    Non fa slittare niente: gli altri giorni restano dove sono e la ricetta saltata si
+    accoda sulla prima casella libera di quel pasto — più avanti in settimana se ce
+    n'è una, altrimenti nella settimana prossima. È la lettura giusta a spesa fatta:
+    gli ingredienti sono in frigo, quel piatto lo cucini un altro giorno.
+
+    La casella saltata tiene la sua `recipe_id` come memoria di cosa c'era in
+    programma, ma smette di contare ovunque: spesa, totali, tracking, generazione.
+    """
+    if meal.is_skipped:
+        return {"moved_to": None}
+
+    slot = db.get(MealSlot, meal.meal_slot_id)
+    meal.is_skipped = True
+
+    # Un pasto fisso o gestito dall'utente non si sposta: è ancorato a quel giorno
+    # per scelta di chi l'ha messo lì, e la settimana prossima si ricopia da solo.
+    if _is_fixed(meal, slot) or not meal.recipe_id:
+        db.flush()
+        return {"moved_to": None}
+
+    free = _free_cells(db, user_id, week, slot.id)
+    if not free:
+        db.flush()
+        return {"moved_to": None}
+
+    target = free[0]
+    target.recipe_id = meal.recipe_id
+    target.source = meal.source
+    target.is_followed = None
+    target.deviation_notes = None
+    db.flush()
+
+    target_day = db.get(DayPlan, target.day_plan_id)
+    return {
+        "moved_to": {
+            "meal_id": target.id,
+            "date": target_day.date.isoformat(),
+            "day_name": DAY_NAMES[target_day.day_of_week],
+            "next_week": target_day.week_plan_id != week.id,
+        }
+    }
+
+
+def unskip_meal(db: Session, user_id: int, meal: PlannedMeal, week: WeekPlan) -> None:
+    """Annulla il salto: la ricetta torna qui dalla casella dov'era stata accodata."""
+    if not meal.is_skipped:
+        return
+
+    meal.is_skipped = False
+    if not meal.recipe_id:
+        db.flush()
+        return
+
+    for source in (week, _overflow_week(db, user_id, week)):
+        if source is None:
+            continue
+        for _day, other, slot in week_meals(db, source):
+            same = (
+                other.id != meal.id
+                and other.meal_slot_id == meal.meal_slot_id
+                and other.recipe_id == meal.recipe_id
+                and not other.is_skipped
+                and not _is_fixed(other, slot)
+            )
+            if same:
+                _empty_meal(other)
+                db.flush()
+                return
+    db.flush()
+
+
+def skip_day(db: Session, user_id: int, day: DayPlan, week: WeekPlan, skipped: bool) -> None:
+    """Salta (o rimette) l'intera giornata: vale per tutti i suoi pasti insieme.
+
+    Serve per il weekend fuori. Solo da oggi in avanti: i giorni passati senza spesa
+    li salta già `shift_past_days`, e lì le ricette slittano invece di accodarsi —
+    sono due cose diverse, perché lì il cibo non è mai stato comprato.
+    """
+    if day.date < today():
+        raise HTTPException(409, "Un giorno già passato non si salta a mano.")
+
+    day.is_skipped = skipped
+    meals = db.query(PlannedMeal).filter(PlannedMeal.day_plan_id == day.id).all()
+    for meal in meals:
+        if skipped:
+            skip_meal(db, user_id, meal, day, week)
+        else:
+            unskip_meal(db, user_id, meal, week)
+    db.flush()
+
+
+def _reflow_recipes(db: Session, user_id: int, week: WeekPlan) -> None:
+    """Rimette in fila le ricette dopo che uno o più giorni sono stati saltati.
+
+    Una fila per ogni pasto della dieta: si prendono le ricette ancora da mangiare —
+    in ordine di giorno, comprese quelle rimaste sui giorni saltati — e si riscrivono
+    sulle caselle libere da oggi in avanti, poi su quelle della settimana dopo. Fila
+    per slot e non per giornata intera perché così un pasto fisso non viene
+    sovrascritto: la coda lo scavalca e prosegue.
+    """
+    now = today()
+    # Prima la settimana di sbocco: crearla fa un commit, e leggere i pasti dopo evita
+    # di ritrovarsi in mano oggetti scaduti da ricaricare uno per uno.
+    following = _overflow_week(db, user_id, week)
+    rows = week_meals(db, week)
+    next_rows = week_meals(db, following) if following else []
+
+    # Un giorno passato ma non saltato è un giorno già mangiato (l'utente l'ha
+    # tracciato): non mette ricette in fila e non ne riceve. Un pasto saltato a mano
+    # è fuori da entrambe le parti: la sua ricetta si è già accodata altrove, e la
+    # casella resta com'è a ricordare cosa c'era.
+    def gives(day: DayPlan, meal: PlannedMeal) -> bool:
+        return (day.is_skipped or day.date >= now) and not meal.is_skipped
+
+    def takes(day: DayPlan, meal: PlannedMeal) -> bool:
+        return not day.is_skipped and not meal.is_skipped and day.date >= now
+
+    for slot_id in sorted({s.id for _, _, s in rows}):
+        queue = [
+            m
+            for d, m, s in rows
+            if s.id == slot_id and gives(d, m) and not _is_fixed(m, s) and m.recipe_id
+        ]
+        # Quello che era già traboccato sulla settimana dopo rientra in fila: senza,
+        # slittando due giorni di seguito la ricetta di oggi gli passerebbe davanti.
+        queue += [
+            m
+            for _, m, s in next_rows
+            if s.id == slot_id
+            and m.is_shifted
+            and not m.is_skipped
+            and not _is_fixed(m, s)
+            and m.recipe_id
+        ]
+        recipes = [(m.recipe_id, m.source) for m in queue]
+
+        cells = [
+            (m, False)
+            for d, m, s in rows
+            if s.id == slot_id and takes(d, m) and not _is_fixed(m, s)
+        ]
+        cells += [
+            (m, True)
+            for _, m, s in next_rows
+            if s.id == slot_id
+            and not _is_fixed(m, s)
+            and not m.is_skipped
+            and (m.recipe_id is None or m.is_shifted)
+        ]
+
+        for meal in queue:
+            _empty_meal(meal)
+        for (meal, overflowed), (recipe_id, source) in zip(cells, recipes):
+            meal.recipe_id = recipe_id
+            meal.source = source
+            meal.is_shifted = overflowed
+            meal.is_followed = None
+            meal.deviation_notes = None
+
+        if len(recipes) > len(cells):
+            logger.info(
+                "Slittamento: %s ricette senza più posto (slot %s), restano nel ricettario",
+                len(recipes) - len(cells),
+                slot_id,
+            )
 
 
 # ── Contesto per i prompt ──────────────────────────────────────────────────────
@@ -415,6 +746,9 @@ def serialize_meal(
         "day_of_week": day.day_of_week,
         "day_name": DAY_NAMES[day.day_of_week],
         "date": day.date.isoformat(),
+        # Il giorno è passato senza spesa: la casella è in sola lettura come quando
+        # il piano è bloccato, ma per un motivo diverso.
+        "day_is_skipped": day.is_skipped,
         "slot_id": slot.id,
         "slot_name": slot.name,
         "slot_order": slot.order_index,
@@ -428,6 +762,9 @@ def serialize_meal(
         # "lo gestisco io": niente da generare, ma i macro contano nella giornata
         "self_managed": not slot.auto_generate,
         "source": meal.source,
+        # "Ho mangiato altro": la ricetta qui sotto è quella che era in programma, ma
+        # non è stata cucinata — si è accodata più avanti e qui non conta più.
+        "is_skipped": meal.is_skipped,
         "is_recurring": meal.is_recurring,
         "recurring_rule": meal.recurring_rule,
         "is_followed": meal.is_followed,
@@ -448,6 +785,9 @@ def serialize_week(db: Session, week: WeekPlan) -> dict:
                 "date": day.date.isoformat(),
                 "day_of_week": day.day_of_week,
                 "day_name": DAY_NAMES[day.day_of_week],
+                # Giorno passato senza spesa: le ricette sono slittate via, la
+                # griglia lo mostra spento e la lista della spesa lo ignora.
+                "is_skipped": day.is_skipped,
                 "meals": [],
             },
         )
@@ -458,6 +798,10 @@ def serialize_week(db: Session, week: WeekPlan) -> dict:
         # i target: contarli col loro target è l'unico modo perché il totale del giorno
         # rappresenti quello che si mangia davvero e non solo quello che ha scritto l'AI.
         def _macros(meal: dict) -> dict:
+            # Un pasto saltato conserva la ricetta per memoria, ma non è stato
+            # mangiato: contarlo gonfierebbe la giornata di un piatto mai cucinato.
+            if meal["is_skipped"]:
+                return {}
             if meal["recipe"]:
                 return meal["recipe"]
             return meal["target"] if meal["self_managed"] else {}
@@ -468,15 +812,21 @@ def serialize_week(db: Session, week: WeekPlan) -> dict:
             "protein_g": round(sum(c.get("protein_g", 0) for c in contributi), 1),
             "carbs_g": round(sum(c.get("carbs_g", 0) for c in contributi), 1),
             "fat_g": round(sum(c.get("fat_g", 0) for c in contributi), 1),
-            "target_calories": sum(m["target"]["calories"] for m in entry["meals"]),
+            # Anche il target scende: un pasto saltato non è un buco da colmare, è un
+            # pasto che quel giorno non era in programma mangiare.
+            "target_calories": sum(
+                m["target"]["calories"] for m in entry["meals"] if not m["is_skipped"]
+            ),
         }
 
     # "Da riempire" conta solo le caselle che l'AI deve generare: includere quelle
-    # gestite dall'utente farebbe sembrare il piano perennemente incompleto.
-    generabili = [(d, m, s) for d, m, s in rows if s.auto_generate]
+    # gestite dall'utente farebbe sembrare il piano perennemente incompleto. Stesso
+    # motivo per i giorni saltati: sono passati, non c'è più niente da riempirci.
+    da_vivere = [(d, m, s) for d, m, s in rows if not d.is_skipped and not m.is_skipped]
+    generabili = [(d, m, s) for d, m, s in da_vivere if s.auto_generate]
     total_slots = len(generabili)
     filled = sum(1 for _, meal, _ in generabili if meal.recipe_id)
-    self_managed = len(rows) - total_slots
+    self_managed = len(da_vivere) - total_slots
 
     return {
         "id": week.id,
@@ -492,6 +842,7 @@ def serialize_week(db: Session, week: WeekPlan) -> dict:
         "meals_total": total_slots,
         "meals_filled": filled,
         "meals_self_managed": self_managed,
+        "days_skipped": sum(1 for d in days.values() if d["is_skipped"]),
         "days": [days[k] for k in sorted(days)],
     }
 
@@ -505,16 +856,6 @@ def _slot_line(slot: MealSlot) -> str:
         f"C {slot.target_carbs_g:g}g, G {slot.target_fat_g:g}g"
     )
     return line + (f" (note: {slot.notes})" if slot.notes else "")
-
-
-def _is_fixed(meal: PlannedMeal, slot: MealSlot) -> bool:
-    """Un pasto fissato non viene toccato dalla generazione automatica.
-
-    Tre modi per esserlo: è ricorrente, l'utente gli ha assegnato una ricetta a mano,
-    oppure il pasto è marcato nella dieta come "lo gestisco io" (`auto_generate` a
-    False) — la colazione di sempre, che non ha senso far reinventare ogni settimana.
-    """
-    return meal.is_recurring or meal.source == "user_custom" or not slot.auto_generate
 
 
 def generate_week(
@@ -536,6 +877,10 @@ def generate_week(
     if not rows:
         raise HTTPException(400, "La settimana non ha pasti da generare.")
 
+    # I giorni saltati sono passati e i pasti saltati sono già stati risolti altrove:
+    # generarci una ricetta vorrebbe dire pagare una chiamata per un piatto che nessuno
+    # cucinerà. Vale anche per "Rigenera tutto", che altrimenti li ripescherebbe.
+    rows = [(d, m, s) for d, m, s in rows if not d.is_skipped and not m.is_skipped]
     generabili = [(d, m, s) for d, m, s in rows if not _is_fixed(m, s)]
     to_fill = [t for t in generabili if t[1].recipe_id is None] if only_missing else generabili
 
@@ -684,6 +1029,7 @@ def regenerate_meal(
     day = db.get(DayPlan, meal.day_plan_id)
     week = db.get(WeekPlan, day.week_plan_id)
     ensure_unlocked(week)
+    ensure_not_skipped(day, meal)
 
     slot = db.get(MealSlot, meal.meal_slot_id)
     previous = db.get(Recipe, meal.recipe_id) if meal.recipe_id else None

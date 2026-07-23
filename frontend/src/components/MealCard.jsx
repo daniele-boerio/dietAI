@@ -7,17 +7,21 @@ import MacroBar from './MacroBar';
 export default function MealCard({
   meal,
   locked,
+  skipped,
   busy,
   onRegenerate,
   onToggleRecurring,
   style,
 }) {
   const { recipe } = meal;
+  // Il pasto singolo saltato ("ho mangiato altro") tiene la ricetta scritta ma non
+  // conta più: la si mostra spenta, con la sua etichetta.
+  const off = skipped || meal.is_skipped;
 
   return (
     // `style` porta la posizione nella griglia settimanale (riga e colonna): sui
     // monitor stretti il contenitore torna flex e queste proprietà vengono ignorate.
-    <div className="meal-card" style={style}>
+    <div className={`meal-card ${meal.is_skipped ? 'skipped' : ''}`} style={style}>
       <Link to={`/meals/${meal.id}`} style={{ display: 'contents' }}>
         <div className="meal-slot">{meal.slot_name}</div>
 
@@ -38,6 +42,10 @@ export default function MealCard({
               fat={recipe.fat_g}
             />
           </>
+        ) : off ? (
+          // Il giorno è passato senza spesa: non è una casella da riempire, è una
+          // casella che non tornerà. La ricetta che c'era è slittata più avanti.
+          <div className="meal-empty">Giorno saltato</div>
         ) : meal.self_managed ? (
           // Non è una casella vuota da riempire: è un pasto che l'utente ha già
           // risolto per conto suo, e i suoi macro contano nel totale del giorno.
@@ -51,8 +59,12 @@ export default function MealCard({
         )}
       </Link>
 
-      {(meal.is_recurring || meal.self_managed || meal.source === 'user_custom') && (
+      {(meal.is_skipped ||
+        meal.is_recurring ||
+        meal.self_managed ||
+        meal.source === 'user_custom') && (
         <div className="meal-flags">
+          {meal.is_skipped && <span className="meal-flag skipped">Saltato</span>}
           {meal.self_managed && <span className="meal-flag custom">Tuo pasto</span>}
           {meal.is_recurring && <span className="meal-flag fixed">Fisso</span>}
           {!meal.self_managed && meal.source === 'user_custom' && (
@@ -67,11 +79,15 @@ export default function MealCard({
           title={
             meal.self_managed
               ? 'Questo pasto lo gestisci tu (cambia in Impostazioni → La mia dieta)'
-              : locked
-                ? 'Piano bloccato'
-                : 'Rigenera'
+              : meal.is_skipped
+                ? 'Pasto saltato: la ricetta è stata rimandata più avanti'
+                : skipped
+                  ? 'Giorno saltato: è passato senza la spesa'
+                  : locked
+                    ? 'Piano bloccato'
+                    : 'Rigenera'
           }
-          disabled={locked || busy || meal.self_managed}
+          disabled={locked || off || busy || meal.self_managed}
           onClick={() => onRegenerate(meal)}
         >
           <RefreshCw className={busy ? 'spinning' : ''} />

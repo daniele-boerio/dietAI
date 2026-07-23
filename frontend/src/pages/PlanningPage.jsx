@@ -1,10 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Lock, RefreshCw, Sparkles, Unlock } from 'lucide-react';
+import { CalendarOff, Lock, RefreshCw, Sparkles, Unlock } from 'lucide-react';
 import { api, formatDate } from '../api';
 import { useApp } from '../App';
 import ConfirmDialog from '../components/ConfirmDialog';
 import WeekGrid from '../components/WeekGrid';
+
+const todayIso = () => new Date().toISOString().slice(0, 10);
+
+// "Lunedì e martedì", con le maiuscole al posto giusto per stare in mezzo a una frase.
+function elencaGiorni(nomi) {
+  const [primo, ...resto] = nomi.map((n, i) => (i === 0 ? n : n.toLowerCase()));
+  if (!resto.length) return primo;
+  return [primo, ...resto.slice(0, -1)].join(', ') + ' e ' + resto[resto.length - 1];
+}
 
 // Una sola pagina per le due settimane: cambia solo quale endpoint si chiama.
 // La settimana prossima è sempre modificabile, anche quando quella corrente è bloccata.
@@ -15,6 +24,7 @@ export default function PlanningPage({ nextWeek = false }) {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [busyMealId, setBusyMealId] = useState(null);
+  const [busyDayId, setBusyDayId] = useState(null);
   const [confirmUnlock, setConfirmUnlock] = useState(false);
   const [confirmRegenerate, setConfirmRegenerate] = useState(false);
   // Serve a distinguere "non sta generando" da "ha appena finito", per il messaggio.
@@ -103,6 +113,22 @@ export default function PlanningPage({ nextWeek = false }) {
     }
   };
 
+  const toggleDaySkip = async (day) => {
+    setBusyDayId(day.id);
+    try {
+      setWeek(await api.setDaySkipped(day.id, !day.is_skipped));
+      addToast(
+        day.is_skipped
+          ? `${day.day_name} torna in programma ✓`
+          : `${day.day_name} saltato: le ricette si sono accodate ai giorni dopo ✓`
+      );
+    } catch (e) {
+      addToast(e.message, 'error');
+    } finally {
+      setBusyDayId(null);
+    }
+  };
+
   const unlock = async () => {
     try {
       const data = await api.unlockWeek(week.id);
@@ -118,6 +144,10 @@ export default function PlanningPage({ nextWeek = false }) {
   if (!week) return null;
 
   const emptySlots = week.meals_total - week.meals_filled;
+  // Solo i giorni saltati perché la spesa non è arrivata in tempo, cioè quelli già
+  // passati: le giornate saltate a mano sono da oggi in avanti e non c'entrano con
+  // questo avviso, che parla di spesa.
+  const skipped = week.days.filter((d) => d.is_skipped && d.date < todayIso());
   // `generating` è la richiesta partita da qui; `is_generating` è quella che il
   // server sa essere in corso — comprese quelle avviate prima di ricaricare.
   const busy = generating || week.is_generating;
@@ -190,6 +220,25 @@ export default function PlanningPage({ nextWeek = false }) {
         </span>
       </div>
 
+      {/* Il piano segue la spesa, non il calendario: i giorni passati senza spesa
+          sono già stati saltati e le loro ricette scalate in avanti. Va detto, o
+          l'utente si ritrova la settimana rimescolata senza sapere perché. */}
+      {!week.is_locked && skipped.length > 0 && (
+        <div className="notice notice-skip">
+          <CalendarOff />
+          <div>
+            <strong>
+              {elencaGiorni(skipped.map((d) => d.day_name))}{' '}
+              {skipped.length === 1 ? 'saltato' : 'saltati'}: la spesa non risulta fatta.
+            </strong>{' '}
+            Le ricette sono slittate in avanti — quelle che non ci stavano più sono
+            passate alla <Link to="/plan/next">settimana prossima</Link> — e quei giorni
+            non entrano nella lista della spesa. Quando vai a fare la spesa segnalalo
+            dalla <Link to="/shopping">lista</Link>: da lì il piano si blocca com'è.
+          </div>
+        </div>
+      )}
+
       {week.is_locked && (
         <div className="notice notice-lock">
           <Lock />
@@ -215,8 +264,10 @@ export default function PlanningPage({ nextWeek = false }) {
         <WeekGrid
           week={week}
           busyMealId={busyMealId}
+          busyDayId={busyDayId}
           onRegenerate={regenerate}
           onToggleRecurring={toggleRecurring}
+          onToggleDaySkip={toggleDaySkip}
         />
       )}
 

@@ -67,12 +67,22 @@ def get_or_create_list(db: Session, week: WeekPlan) -> ShoppingList:
 
 
 def _aggregate_week_ingredients(db: Session, week: WeekPlan) -> dict[tuple[int, str], float]:
-    """Somma le quantità di tutte le ricette della settimana, per (ingrediente, unità base)."""
+    """Somma le quantità di tutte le ricette della settimana, per (ingrediente, unità base).
+
+    Giorni e pasti saltati restano fuori: i primi sono passati senza che si facesse la
+    spesa (comprare oggi gli ingredienti di lunedì è esattamente lo spreco da
+    evitare), i secondi hanno già la loro ricetta accodata su un altro giorno, e
+    contarli qui vorrebbe dire comprare due volte lo stesso piatto.
+    """
     rows = (
         db.query(RecipeIngredient)
         .join(PlannedMeal, PlannedMeal.recipe_id == RecipeIngredient.recipe_id)
         .join(DayPlan, DayPlan.id == PlannedMeal.day_plan_id)
-        .filter(DayPlan.week_plan_id == week.id)
+        .filter(
+            DayPlan.week_plan_id == week.id,
+            DayPlan.is_skipped.is_(False),
+            PlannedMeal.is_skipped.is_(False),
+        )
         .all()
     )
 
@@ -188,6 +198,21 @@ def serialize_shopping_list(db: Session, week: WeekPlan, lst: ShoppingList) -> d
     total_items = sum(len(c["items"]) for c in categories)
     checked_items = sum(1 for c in categories for i in c["items"] if i["is_checked"])
 
+    # L'avviso "la lista è più corta" parla di spesa mancata, quindi conta solo i
+    # giorni saltati perché ormai passati: una giornata saltata a mano più avanti
+    # (weekend fuori) accorcia la lista pure lei, ma è una scelta esplicita e non ha
+    # bisogno di essere spiegata come un ammanco.
+    from .planner import today
+
+    days = (
+        db.query(DayPlan)
+        .filter(DayPlan.week_plan_id == week.id)
+        .order_by(DayPlan.day_of_week)
+        .all()
+    )
+    covered = [d for d in days if not d.is_skipped]
+    past_skipped = [d for d in days if d.is_skipped and d.date < today()]
+
     return {
         "id": lst.id,
         "week_plan_id": week.id,
@@ -196,6 +221,8 @@ def serialize_shopping_list(db: Session, week: WeekPlan, lst: ShoppingList) -> d
         "completed_at": lst.completed_at.isoformat() if lst.completed_at else None,
         "estimated_cost": lst.estimated_cost,
         "is_locked": week.is_locked,
+        "days_skipped": len(past_skipped),
+        "covers_from": covered[0].date.isoformat() if covered else None,
         "total_items": total_items,
         "checked_items": checked_items,
         "categories": categories,

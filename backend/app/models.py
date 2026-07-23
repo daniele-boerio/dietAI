@@ -266,6 +266,10 @@ class DayPlan(Base):
     )
     date = Column(Date, nullable=False)
     day_of_week = Column(Integer, nullable=False)  # 0 = lunedì, 6 = domenica
+    # Giorno passato senza che la spesa fosse fatta: quello che c'era in piano non è
+    # stato cucinato. Le sue ricette slittano in avanti e il giorno esce dalla lista
+    # della spesa, dalla generazione e dal tracking.
+    is_skipped = Column(Boolean, nullable=False, default=False, server_default="false")
 
     __table_args__ = (
         UniqueConstraint("week_plan_id", "date", name="uq_day_plan_date"),
@@ -301,6 +305,15 @@ class PlannedMeal(Base):
     recurring_rule = Column(JSONType)  # {"type":"daily"} | {"type":"weekly","day":5}
     is_followed = Column(Boolean)  # NULL = non ancora tracciato
     deviation_notes = Column(Text)
+    # "Ho mangiato altro": il piatto non è stato cucinato e la sua ricetta è finita in
+    # fondo alla coda, su un giorno più avanti. La casella conserva `recipe_id` come
+    # memoria di cosa c'era in programma, ma non conta più da nessuna parte — spesa,
+    # totali del giorno, tracking e generazione la saltano tutti.
+    is_skipped = Column(Boolean, nullable=False, default=False, server_default="false")
+    # Ricetta arrivata qui traboccando dalla settimana precedente, che slittava. Se lo
+    # slittamento si ripete il giorno dopo, va rimessa in coda insieme alle altre:
+    # senza questo flag la ricetta di sabato le passerebbe davanti.
+    is_shifted = Column(Boolean, nullable=False, default=False, server_default="false")
 
     __table_args__ = (
         UniqueConstraint("day_plan_id", "meal_slot_id", name="uq_planned_meal"),

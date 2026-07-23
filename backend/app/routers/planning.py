@@ -10,10 +10,11 @@ from ..auth import get_current_user, get_current_user_id
 from ..database import get_db
 from ..models import DayPlan, MealSlot, PlannedMeal, Recipe, User, WeekPlan
 from ..rate_limit import AI_LIMIT, limiter
-from ..schemas import AssignMealRequest, FollowedRequest, RecurringRequest
+from ..schemas import AssignMealRequest, FollowedRequest, RecurringRequest, SkipDayRequest
 from ..services.planner import (
     LOCK_DAYS,
     current_week_start,
+    ensure_not_skipped,
     ensure_unlocked,
     generate_week,
     get_or_create_week,
@@ -22,6 +23,9 @@ from ..services.planner import (
     regenerate_meal,
     serialize_meal,
     serialize_week,
+    skip_day,
+    skip_meal,
+    unskip_meal,
 )
 from ..services.recipes import create_recipe
 from ..services.shopping import complete_shopping, get_or_create_list, rebuild_shopping_list
@@ -192,6 +196,7 @@ def assign_meal(
     """Assegna al pasto una ricetta del ricettario o una scritta al momento."""
     meal, day, week = _get_meal(db, user.id, meal_id)
     ensure_unlocked(week)
+    ensure_not_skipped(day, meal)
 
     if body.recipe_id:
         recipe = (
@@ -276,12 +281,58 @@ def set_followed(
     user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-    """Traccia se il pasto è stato davvero seguito. Funziona anche a piano bloccato:
-    non modifica il piano, racconta com'è andata."""
+    """Traccia com'è andata — e con "ho mangiato altro" rimanda il piatto più avanti.
+
+    Funziona anche a piano bloccato, anzi soprattutto: a spesa fatta gli ingredienti
+    sono in frigo, quindi un piatto non cucinato non è perso, si accoda alla prima
+    casella libera di quel pasto. Dire invece "l'ho seguito" annulla il rinvio e la
+    ricetta torna al suo posto.
+    """
     meal, day, week = _get_meal(db, user_id, meal_id)
     meal.is_followed = body.is_followed
     meal.deviation_notes = body.deviation_notes
+
+    if body.is_followed:
+        unskip_meal(db, user_id, meal, week)
+        moved = {"moved_to": None}
+    else:
+        moved = skip_meal(db, user_id, meal, day, week)
+    db.commit()
+
+    rebuild_shopping_list(db, user_id, week)
     db.commit()
 
     slot = db.get(MealSlot, meal.meal_slot_id)
-    return serialize_meal(db, day, meal, slot, full=True)
+    data = serialize_meal(db, day, meal, slot, full=True)
+    data["moved_to"] = moved["moved_to"]
+    return data
+
+
+@router.put("/days/{day_id}/skip")
+def set_day_skipped(
+    day_id: int,
+    body: SkipDayRequest,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    """Salta l'intera giornata: weekend fuori, pranzo dai suoceri.
+
+    Tutte le ricette del giorno si accodano ai giorni successivi, una per pasto. Vale
+    solo da oggi in avanti: i giorni passati senza spesa li salta già il piano da sé.
+    """
+    row = (
+        db.query(DayPlan, WeekPlan)
+        .join(WeekPlan, WeekPlan.id == DayPlan.week_plan_id)
+        .filter(DayPlan.id == day_id, WeekPlan.user_id == user_id)
+        .first()
+    )
+    if not row:
+        raise HTTPException(404, "Giorno non trovato")
+    day, week = row
+
+    skip_day(db, user_id, day, week, body.is_skipped)
+    db.commit()
+
+    rebuild_shopping_list(db, user_id, week)
+    db.commit()
+    return serialize_week(db, week)

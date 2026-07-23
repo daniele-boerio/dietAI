@@ -1,3 +1,4 @@
+import { CalendarOff, Undo2 } from 'lucide-react';
 import MealCard from './MealCard';
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -9,7 +10,14 @@ const todayIso = () => new Date().toISOString().slice(0, 10);
 //
 // Sotto i 1100px le colonne diventerebbero troppo strette: lì il CSS rimette ogni
 // giorno come blocco a sé, dove l'allineamento fra giorni non serve più.
-export default function WeekGrid({ week, busyMealId, onRegenerate, onToggleRecurring }) {
+export default function WeekGrid({
+  week,
+  busyMealId,
+  busyDayId,
+  onRegenerate,
+  onToggleRecurring,
+  onToggleDaySkip,
+}) {
   const today = todayIso();
 
   return (
@@ -17,17 +25,43 @@ export default function WeekGrid({ week, busyMealId, onRegenerate, onToggleRecur
       {week.days.map((day, dayIndex) => {
         const column = dayIndex + 1;
         const isToday = day.date === today;
+        // I giorni passati li salta il piano da sé quando manca la spesa, e lì le
+        // ricette slittano invece di accodarsi: a mano si tocca solo da oggi in poi.
+        // A piano bloccato resta possibile: il cibo è comprato, ma se sei fuori a
+        // cena quel piatto lo cucini un altro giorno.
+        const canSkip = onToggleDaySkip && day.date >= today;
 
         return (
-          <div key={day.id} className={`day-column ${isToday ? 'today' : ''}`}>
+          <div
+            key={day.id}
+            className={`day-column ${isToday ? 'today' : ''} ${
+              day.is_skipped ? 'skipped' : ''
+            }`}
+          >
             <div className="day-head" style={{ gridColumn: column, gridRow: 1 }}>
               <div className="day-name">{day.day_name}</div>
               <div className="day-date">
-                {new Date(day.date).toLocaleDateString('it-IT', {
-                  day: 'numeric',
-                  month: 'short',
-                })}
+                {day.is_skipped
+                  ? 'Saltato'
+                  : new Date(day.date).toLocaleDateString('it-IT', {
+                      day: 'numeric',
+                      month: 'short',
+                    })}
               </div>
+              {canSkip && (
+                <button
+                  className="day-skip"
+                  title={
+                    day.is_skipped
+                      ? 'Rimetti in programma questa giornata'
+                      : 'Salta la giornata: le ricette si accodano ai giorni dopo'
+                  }
+                  disabled={busyDayId === day.id}
+                  onClick={() => onToggleDaySkip(day)}
+                >
+                  {day.is_skipped ? <Undo2 /> : <CalendarOff />}
+                </button>
+              )}
             </div>
 
             {day.meals.map((meal, mealIndex) => (
@@ -35,6 +69,7 @@ export default function WeekGrid({ week, busyMealId, onRegenerate, onToggleRecur
                 key={meal.id}
                 meal={meal}
                 locked={week.is_locked}
+                skipped={day.is_skipped}
                 busy={busyMealId === meal.id}
                 onRegenerate={onRegenerate}
                 onToggleRecurring={onToggleRecurring}
@@ -46,7 +81,9 @@ export default function WeekGrid({ week, busyMealId, onRegenerate, onToggleRecur
               className="day-total"
               style={{ gridColumn: column, gridRow: day.meals.length + 2 }}
             >
-              {day.totals.calories} / {day.totals.target_calories} kcal
+              {day.is_skipped
+                ? '—'
+                : `${day.totals.calories} / ${day.totals.target_calories} kcal`}
             </div>
           </div>
         );

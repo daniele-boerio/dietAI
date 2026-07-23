@@ -109,7 +109,11 @@ export default function TrackingPage() {
               </div>
             </div>
             <div className="stat-tile">
-              <div className="stat-value">{summary.days_followed}/7</div>
+              {/* I giorni saltati non finiscono al denominatore: non c'era niente
+                  da seguire, la spesa non era ancora stata fatta. */}
+              <div className="stat-value">
+                {summary.days_followed}/{7 - (summary.days_skipped || 0)}
+              </div>
               <div className="stat-label">Giorni seguiti davvero</div>
             </div>
           </div>
@@ -118,7 +122,10 @@ export default function TrackingPage() {
             <div className="card-title">Calorie: pianificate vs prescritte</div>
             <div className="tracking-chart">
               {data.days.map((day) => (
-                <div key={day.date} className="tracking-day">
+                <div
+                  key={day.date}
+                  className={`tracking-day ${day.is_skipped ? 'skipped' : ''}`}
+                >
                   <div className="tracking-bars">
                     <div
                       className="tracking-bar target"
@@ -163,27 +170,41 @@ export default function TrackingPage() {
 
           <div className="card">
             <div className="card-title">Giorno per giorno</div>
-            {data.days.map((day) => (
-              <div key={day.date} className="day-compliance">
-                <span className={`compliance-dot ${day.totals.color}`} />
-                <strong style={{ minWidth: 92 }}>{day.day_name}</strong>
-                <span style={{ color: 'var(--text-secondary)' }}>
-                  {day.totals.planned_calories} / {day.totals.target_calories} kcal
-                </span>
-                <span
-                  style={{
-                    marginLeft: 'auto',
-                    color:
-                      day.totals.delta > 0 ? 'var(--terracotta)' : 'var(--text-secondary)',
-                    fontVariantNumeric: 'tabular-nums',
-                  }}
-                >
-                  {day.totals.delta > 0 ? '+' : ''}
-                  {day.totals.delta} kcal
-                </span>
-                {day.is_followed && <span className="badge badge-accent">Seguito</span>}
-              </div>
-            ))}
+            {data.days.map((day) =>
+              // Un giorno saltato non ha uno scarto da mostrare: non è andato male,
+              // non c'è proprio stato.
+              day.is_skipped || day.meals.every((m) => m.is_skipped) ? (
+                <div key={day.date} className="day-compliance">
+                  <span className="compliance-dot grey" />
+                  <strong style={{ minWidth: 92, color: 'var(--text-muted)' }}>
+                    {day.day_name}
+                  </strong>
+                  <span style={{ color: 'var(--text-muted)' }}>
+                    Giornata saltata: non entra nelle medie
+                  </span>
+                </div>
+              ) : (
+                <div key={day.date} className="day-compliance">
+                  <span className={`compliance-dot ${day.totals.color}`} />
+                  <strong style={{ minWidth: 92 }}>{day.day_name}</strong>
+                  <span style={{ color: 'var(--text-secondary)' }}>
+                    {day.totals.planned_calories} / {day.totals.target_calories} kcal
+                  </span>
+                  <span
+                    style={{
+                      marginLeft: 'auto',
+                      color:
+                        day.totals.delta > 0 ? 'var(--terracotta)' : 'var(--text-secondary)',
+                      fontVariantNumeric: 'tabular-nums',
+                    }}
+                  >
+                    {day.totals.delta > 0 ? '+' : ''}
+                    {day.totals.delta} kcal
+                  </span>
+                  {day.is_followed && <span className="badge badge-accent">Seguito</span>}
+                </div>
+              )
+            )}
           </div>
         </>
       )}

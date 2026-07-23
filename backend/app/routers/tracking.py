@@ -104,6 +104,9 @@ def dashboard(
                 "slot_order": slot.order_index,
                 "target_calories": slot.target_calories,
                 "is_followed": meal.is_followed,
+                # "Ho mangiato altro": la ricetta è scritta ma è stata rimandata. La
+                # home la mostra spenta, non tra i piatti di oggi da preparare.
+                "is_skipped": meal.is_skipped,
                 "recipe": (
                     {
                         "id": recipe.id,

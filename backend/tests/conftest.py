@@ -7,6 +7,7 @@ database vero e senza chiamare Claude.
 """
 
 import os
+from datetime import date
 
 import pytest
 from cryptography.fernet import Fernet
@@ -25,6 +26,7 @@ from app.database import Base, get_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import User  # noqa: E402
 from app.rate_limit import limiter  # noqa: E402
+from app.services import planner  # noqa: E402
 
 # Ogni test fa login da "testclient": con il limite reale (10 al minuto) dall'undicesimo
 # test in poi arriverebbe un 429 che non c'entra niente con quello che si sta provando.
@@ -32,6 +34,18 @@ limiter.enabled = False
 
 TEST_EMAIL = "test@dietai.local"
 TEST_PASSWORD = "password-di-test"
+
+
+@pytest.fixture(autouse=True)
+def oggi_e_lunedi(monkeypatch):
+    """La suite gira come se fosse sempre lunedì.
+
+    Da martedì in poi i giorni già passati vengono saltati e le ricette slittano: la
+    settimana non avrebbe più sette giorni pieni e gli stessi test darebbero risultati
+    diversi a seconda del giorno in cui li lanci. Chi lo slittamento lo prova davvero
+    (`test_giorni_saltati.py`) sposta questa data per conto suo.
+    """
+    monkeypatch.setattr(planner, "today", lambda: planner.monday_of(date.today()))
 
 
 @pytest.fixture()

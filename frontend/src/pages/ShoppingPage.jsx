@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Check, ChevronDown, ChevronRight, Copy, Lock, ShoppingCart } from 'lucide-react';
+import {
+  CalendarOff,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  Lock,
+  ShoppingCart,
+} from 'lucide-react';
 import { api, formatDate, formatMoney } from '../api';
 import { useApp } from '../App';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -120,6 +128,25 @@ export default function ShoppingPage() {
             <strong>Spesa già fatta</strong>
             {list.completed_at ? ` il ${formatDate(list.completed_at)}` : ''}. Gli articoli
             spuntati sono finiti in dispensa e il piano della settimana è bloccato.
+          </div>
+        </div>
+      )}
+
+      {/* La lista è più corta di una settimana perché dei giorni sono passati senza
+          spesa: dirlo evita che il totale basso sembri un errore di conto. */}
+      {!list.is_completed && list.days_skipped > 0 && (
+        <div className="notice notice-skip">
+          <CalendarOff />
+          <div>
+            <strong>
+              {list.days_skipped === 1
+                ? 'Un giorno è già passato'
+                : `${list.days_skipped} giorni sono già passati`}{' '}
+              senza spesa.
+            </strong>{' '}
+            La lista copre i {7 - list.days_skipped} giorni che restano, da{' '}
+            {formatDate(list.covers_from)}: gli ingredienti dei giorni saltati non servono
+            più, e le loro ricette sono slittate in avanti.
           </div>
         </div>
       )}

@@ -92,6 +92,38 @@ dispensa. Da lì: lettura sì, `regenerate`/`assign`/`generate` → **409**; vot
 e tracking restano permessi; la chat diventa informativa (non aggiorna la ricetta).
 `refresh_week_statuses` archivia le settimane scadute a ogni lettura, senza scheduler.
 
+**Il piano segue la spesa, non il calendario.** Finché la spesa non risulta fatta,
+ogni giorno che passa viene marcato `DayPlan.is_skipped` e le ricette scalano tutte in
+avanti di un posto: quello che era di lunedì si mangia mercoledì, e ciò che non entra
+più in settimana trabocca su quella dopo (`PlannedMeal.is_shifted`, che serve a
+rimetterlo in fila se lo slittamento si ripete il giorno dopo, invece di far passare
+avanti la ricetta di oggi). Un giorno saltato esce dalla lista della spesa, dalla
+generazione e dalle medie del tracking — comprare mercoledì gli ingredienti di lunedì
+è esattamente lo spreco che l'app esiste per evitare, e contare quel giorno come
+"andato male" sarebbe falso: non c'è proprio stato. Succede da solo dentro
+`get_or_create_week`, cioè a ogni lettura del piano, senza pulsanti. Non slittano i
+pasti fissi (la pizza del sabato è del sabato) né i giorni già tracciati, e non slitta
+niente se la spesa è fatta — nemmeno dopo uno sblocco d'emergenza, perché il cibo
+resta comprato. Vedi `shift_past_days` e `_reflow_recipes`.
+
+**"Ho mangiato altro" accoda il piatto, non lo perde.** È il caso simmetrico e vale
+soprattutto a spesa fatta: `is_followed = False` su un pasto (dalla home, dal dettaglio
+o dalla chat) mette `PlannedMeal.is_skipped` e sposta la sua ricetta sulla prima casella
+libera di quello stesso pasto — più avanti in settimana, o sulla prossima se la
+settimana è piena (`skip_meal`). Nessuno slittamento a catena: gli altri giorni non si
+muovono. La casella saltata **conserva la `recipe_id` come memoria** di cosa c'era in
+programma, ma smette di contare ovunque — spesa, totali del giorno (cala anche il
+target, non è un buco da colmare), tracking e generazione la filtrano tutti su
+`is_skipped`. `is_followed = True` annulla il rinvio (`unskip_meal`): la ricetta torna e
+la casella dove si era accodata si svuota. `skip_day` fa lo stesso per l'intera giornata
+(weekend fuori), un pasto alla volta, e solo da oggi in avanti — i giorni passati sono
+competenza di `shift_past_days`, che è un'altra cosa. **Attenzione a non confondere i
+tre flag:** `DayPlan.is_skipped` (giorno intero, per mancata spesa o salto a mano),
+`PlannedMeal.is_skipped` (singolo pasto accodato) e `PlannedMeal.is_shifted` (ricetta
+traboccata sulla settimana dopo dallo slittamento). `_eaten` guarda solo `is_followed is
+True`, così un "ho mangiato altro" non impedisce a `shift_past_days` di dare il giorno
+per saltato.
+
 **"Lo faccio io" è un flag della dieta, non della settimana.** `MealSlot.auto_generate`
 a False significa che l'utente quel pasto lo prepara da sé: l'AI non lo genera mai e i
 suoi ingredienti non entrano in lista della spesa, **ma i suoi macro contano lo stesso**
@@ -215,7 +247,7 @@ cd backend && py -3.12 -m venv .venv
 # Frontend (altro terminale)
 cd frontend && npm install && npm run dev               # http://localhost:3000
 
-# Test (SQLite in memoria, nessuna chiamata al modello)
+# Test (SQLite in memoria, nessuna chiamata al modello, "oggi" fissato a lunedì)
 cd backend && .venv/Scripts/python.exe -m pytest tests -q
 ```
 

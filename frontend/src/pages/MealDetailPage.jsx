@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
+  CalendarOff,
   Check,
   Heart,
   Lock,
@@ -87,7 +88,18 @@ export default function MealDetailPage() {
 
   const setFollowed = async (value) => {
     try {
-      setMeal(await api.setFollowed(mealId, value));
+      const updated = await api.setFollowed(mealId, value);
+      setMeal(updated);
+      // "Ho mangiato altro" non è solo un appunto: il piatto si sposta, e dove è
+      // finito va detto subito o l'utente lo cerca dov'era.
+      if (updated.moved_to) {
+        addToast(
+          `Ricetta rimandata a ${updated.moved_to.day_name.toLowerCase()}` +
+            (updated.moved_to.next_week ? ' della settimana prossima' : '')
+        );
+      } else if (value) {
+        addToast('Rimessa al suo posto ✓');
+      }
     } catch (e) {
       addToast(e.message, 'error');
     }
@@ -120,6 +132,10 @@ export default function MealDetailPage() {
   if (!meal) return null;
 
   const locked = meal.week.is_locked;
+  // Un giorno saltato è in sola lettura come un piano bloccato, ma per il motivo
+  // opposto: lì il cibo è già comprato, qui non lo è mai stato.
+  const skipped = meal.day_is_skipped;
+  const frozen = locked || skipped || meal.is_skipped;
 
   return (
     <>
@@ -156,7 +172,7 @@ export default function MealDetailPage() {
               <button
                 className="btn btn-secondary"
                 onClick={toggleRecurring}
-                disabled={locked}
+                disabled={frozen}
                 title="Ripeti questo pasto ogni settimana"
               >
                 <Pin size={16} color={meal.is_recurring ? 'var(--accent)' : 'currentColor'} />
@@ -164,7 +180,7 @@ export default function MealDetailPage() {
               </button>
             </>
           )}
-          <button className="btn btn-primary" onClick={regenerate} disabled={busy || locked}>
+          <button className="btn btn-primary" onClick={regenerate} disabled={busy || frozen}>
             {busy ? <span className="spinner-inline" /> : <RefreshCw size={16} />}
             Rigenera
           </button>
@@ -181,6 +197,29 @@ export default function MealDetailPage() {
         </div>
       )}
 
+      {skipped && !locked && (
+        <div className="notice notice-skip">
+          <CalendarOff />
+          <div>
+            <strong>Giorno saltato.</strong> È passato senza che la spesa fosse fatta:
+            quello che c'era in piano è slittato ai giorni successivi, e qui non c'è più
+            niente da cambiare.
+          </div>
+        </div>
+      )}
+
+      {meal.is_skipped && !skipped && (
+        <div className="notice notice-skip">
+          <CalendarOff />
+          <div>
+            <strong>Pasto saltato.</strong> Hai segnato di aver mangiato altro: la ricetta
+            qui sotto resta per memoria, ma è stata rimandata alla prima casella libera di
+            questo pasto. Se invece l'hai cucinata, premi "L'ho seguito" e torna al suo
+            posto.
+          </div>
+        </div>
+      )}
+
       <div className="detail-layout">
         <div>
           {meal.recipe ? (
@@ -188,7 +227,7 @@ export default function MealDetailPage() {
               <RecipeView
                 recipe={meal.recipe}
                 target={meal.target}
-                onSubstitute={locked ? null : substitute}
+                onSubstitute={frozen ? null : substitute}
                 substituting={substituting}
               />
 
@@ -219,7 +258,7 @@ export default function MealDetailPage() {
                   </div>
                 </div>
 
-                {!locked && (
+                {!frozen && (
                   <button
                     className="btn btn-ghost btn-sm"
                     style={{ marginTop: 12 }}
@@ -237,7 +276,7 @@ export default function MealDetailPage() {
               text={`Target: ${meal.target.calories} kcal, proteine ${meal.target.protein_g}g, carboidrati ${meal.target.carbs_g}g, grassi ${meal.target.fat_g}g.`}
               action={
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
-                  <button className="btn btn-primary" onClick={regenerate} disabled={busy || locked}>
+                  <button className="btn btn-primary" onClick={regenerate} disabled={busy || frozen}>
                     {busy && <span className="spinner-inline" />}
                     Generala con l'AI
                   </button>
@@ -252,7 +291,7 @@ export default function MealDetailPage() {
 
         <MealChat
           mealId={meal.id}
-          locked={locked}
+          locked={frozen}
           onRecipeUpdated={(recipe) => setMeal((m) => ({ ...m, recipe }))}
         />
       </div>

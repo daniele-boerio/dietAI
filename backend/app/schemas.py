@@ -149,6 +149,10 @@ class FollowedRequest(BaseModel):
     deviation_notes: str | None = Field(default=None, max_length=500)
 
 
+class SkipDayRequest(BaseModel):
+    is_skipped: bool
+
+
 # ── Chat ───────────────────────────────────────────────────────────────────────
 
 

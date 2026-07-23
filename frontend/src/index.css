@@ -544,6 +544,21 @@ textarea {
   color: var(--terracotta);
 }
 
+/* Giorni saltati: il piano ha slittato perché la spesa non è ancora stata fatta.
+   Tono neutro e non allarmato — è il funzionamento normale, non un errore. */
+.notice-skip {
+  background: var(--bg-surface);
+  border-color: var(--border-light);
+}
+
+.notice-skip svg {
+  color: var(--warning);
+}
+
+.notice-skip strong {
+  color: var(--text-primary);
+}
+
 /* ── Barre macro ───────────────────────────────────────────────── */
 
 .macro-bar {
@@ -664,8 +679,50 @@ textarea {
 }
 
 .day-head {
+  position: relative;
   padding: 2px 2px 6px;
   border-bottom: 1px solid var(--border);
+}
+
+/* Salta la giornata. Sta in punta al giorno e resta quasi invisibile finché non ci
+   passi sopra: è un comando raro, non deve competere con i piatti. */
+.day-skip {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  padding: 3px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--transition), color var(--transition);
+}
+
+.day-skip svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* `.day-column` sui monitor larghi è `display: contents` e non ha un box suo: il
+   bersaglio affidabile dell'hover è l'intestazione, che il pulsante ce l'ha dentro. */
+.day-head:hover .day-skip,
+.day-column:hover .day-skip,
+.day-column.skipped .day-skip,
+.day-skip:focus-visible {
+  opacity: 1;
+}
+
+.day-skip:hover {
+  color: var(--terracotta);
+  background: var(--bg-surface);
+}
+
+.day-skip:disabled {
+  cursor: default;
+  opacity: 0.4;
 }
 
 .day-name {
@@ -684,6 +741,34 @@ textarea {
 
 .day-column.today .day-head {
   border-bottom-color: var(--accent);
+}
+
+/* Giorno saltato: resta al suo posto ma si legge come spento. Toglierlo dalla
+   griglia farebbe scorrere le colonne e la settimana non si riconoscerebbe più. */
+.day-column.skipped .day-head {
+  border-bottom-style: dashed;
+}
+
+.day-column.skipped .day-name {
+  color: var(--text-muted);
+}
+
+.day-column.skipped .day-date {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.day-column.skipped .meal-card {
+  background: var(--bg-surface);
+  border-style: dashed;
+  opacity: 0.6;
+}
+
+.day-column.skipped .meal-card:hover {
+  border-color: var(--border);
+  box-shadow: none;
 }
 
 .day-total {
@@ -789,6 +874,45 @@ textarea {
 .meal-flag.fixed {
   background: var(--accent-soft);
   color: var(--accent);
+}
+
+/* Pasto saltato: la ricetta resta scritta per memoria, ma non conta più. Spenta e
+   barrata nel titolo, così si distingue a colpo d'occhio da un piatto in programma. */
+.meal-flag.skipped {
+  background: var(--bg-surface);
+  color: var(--text-muted);
+  border: 1px dashed var(--border-light);
+}
+
+.meal-card.skipped {
+  background: var(--bg-surface);
+  border-style: dashed;
+}
+
+.meal-card.skipped .meal-title {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.meal-card.skipped .meal-meta,
+.meal-card.skipped .macro-bar {
+  opacity: 0.45;
+}
+
+/* Stesso trattamento per la card "oggi" della home. */
+.card.skipped .recipe-card-title {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.card.skipped .meal-meta,
+.card.skipped .macro-bar {
+  opacity: 0.45;
+}
+
+.meal-slot .meal-flag {
+  margin-left: 8px;
+  vertical-align: middle;
 }
 
 .meal-actions {
@@ -1275,6 +1399,12 @@ textarea {
 }
 .tracking-bar.planned.grey {
   background: var(--border-light);
+}
+
+/* Giorno saltato: la barra resta al suo posto per non far ballare il grafico,
+   ma spenta — quel giorno non è mai stato in tavola. */
+.tracking-day.skipped {
+  opacity: 0.3;
 }
 
 .tracking-day-label {

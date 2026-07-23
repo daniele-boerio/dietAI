@@ -33,7 +33,14 @@ export default function DashboardPage() {
 
   const markFollowed = async (mealId, followed) => {
     try {
-      await api.setFollowed(mealId, followed);
+      const updated = await api.setFollowed(mealId, followed);
+      // "Saltato" qui rimanda davvero il piatto: va detto dov'è finito.
+      if (updated.moved_to) {
+        addToast(
+          `Ricetta rimandata a ${updated.moved_to.day_name.toLowerCase()}` +
+            (updated.moved_to.next_week ? ' della settimana prossima' : '')
+        );
+      }
       load();
     } catch (e) {
       addToast(e.message, 'error');
@@ -150,8 +157,11 @@ export default function DashboardPage() {
       ) : (
         <div className="recipe-grid">
           {today.meals.map((meal) => (
-            <div key={meal.meal_id} className="card">
-              <div className="meal-slot">{meal.slot_name}</div>
+            <div key={meal.meal_id} className={`card ${meal.is_skipped ? 'skipped' : ''}`}>
+              <div className="meal-slot">
+                {meal.slot_name}
+                {meal.is_skipped && <span className="meal-flag skipped">Saltato</span>}
+              </div>
 
               {meal.recipe ? (
                 <>

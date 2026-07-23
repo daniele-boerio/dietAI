@@ -47,7 +47,12 @@ def weekly_tracking(db: Session, week: WeekPlan) -> dict:
         recipe = db.get(Recipe, meal.recipe_id) if meal.recipe_id else None
         self_managed = not slot.auto_generate
 
-        if recipe:
+        if meal.is_skipped:
+            # "Ho mangiato altro": il piatto resta scritto per memoria, ma non è stato
+            # cucinato. Contarlo a zero contro il suo target trasformerebbe una scelta
+            # dichiarata in un buco di 600 kcal e in un pasto fuori bersaglio.
+            planned = _macros(None)
+        elif recipe:
             planned = _macros(recipe)
         elif self_managed:
             # L'utente ha detto di avere già il suo pasto con quei macro: darlo per
@@ -69,6 +74,7 @@ def weekly_tracking(db: Session, week: WeekPlan) -> dict:
                 "date": day.date.isoformat(),
                 "day_of_week": day.day_of_week,
                 "day_name": DAY_NAMES[day.day_of_week],
+                "is_skipped": day.is_skipped,
                 "meals": [],
                 "totals": {
                     "planned_calories": 0,
@@ -96,13 +102,18 @@ def weekly_tracking(db: Session, week: WeekPlan) -> dict:
                 },
                 "planned": planned,
                 "color": compliance_color(planned["calories"], slot.target_calories)
-                if (recipe or self_managed)
+                if (recipe or self_managed) and not meal.is_skipped
                 else "grey",
                 "self_managed": self_managed,
+                "is_skipped": meal.is_skipped,
                 "is_followed": meal.is_followed,
                 "deviation_notes": meal.deviation_notes,
             }
         )
+
+        if meal.is_skipped:
+            # Fuori anche dal target del giorno: quel pasto non era più in programma.
+            continue
 
         totals = entry["totals"]
         totals["planned_calories"] += planned["calories"]
@@ -130,14 +141,21 @@ def weekly_tracking(db: Session, week: WeekPlan) -> dict:
             followed_days += 1
 
     ordered = [days[k] for k in sorted(days)]
-    days_with_food = [d for d in ordered if d["totals"]["planned_calories"] > 0]
+    # I giorni saltati non sono giorni andati male: sono giorni che non ci sono
+    # stati, perché la spesa non era ancora fatta. Contarli abbasserebbe la media e
+    # l'aderenza per un piano che non è mai stato messo in tavola.
+    counted = [d for d in ordered if not d["is_skipped"]]
+    days_with_food = [d for d in counted if d["totals"]["planned_calories"] > 0]
     n = len(days_with_food) or 1
 
     avg_planned = sum(d["totals"]["planned_calories"] for d in days_with_food) / n
-    avg_target = sum(d["totals"]["target_calories"] for d in ordered) / (len(ordered) or 1)
+    avg_target = sum(d["totals"]["target_calories"] for d in counted) / (len(counted) or 1)
 
     all_meals = [
-        m for d in ordered for m in d["meals"] if m["recipe_title"] or m["self_managed"]
+        m
+        for d in counted
+        for m in d["meals"]
+        if (m["recipe_title"] or m["self_managed"]) and not m["is_skipped"]
     ]
     in_range = sum(1 for m in all_meals if m["color"] == "green")
 
@@ -153,6 +171,7 @@ def weekly_tracking(db: Session, week: WeekPlan) -> dict:
             "meals_planned": len(all_meals),
             "meals_in_range": in_range,
             "days_followed": followed_days,
+            "days_skipped": len(ordered) - len(counted),
             "macro_averages": {
                 "protein_g": round(
                     sum(d["totals"]["planned_protein_g"] for d in days_with_food) / n, 1
@@ -164,13 +183,13 @@ def weekly_tracking(db: Session, week: WeekPlan) -> dict:
             },
             "macro_targets": {
                 "protein_g": round(
-                    sum(d["totals"]["target_protein_g"] for d in ordered) / (len(ordered) or 1), 1
+                    sum(d["totals"]["target_protein_g"] for d in counted) / (len(counted) or 1), 1
                 ),
                 "carbs_g": round(
-                    sum(d["totals"]["target_carbs_g"] for d in ordered) / (len(ordered) or 1), 1
+                    sum(d["totals"]["target_carbs_g"] for d in counted) / (len(counted) or 1), 1
                 ),
                 "fat_g": round(
-                    sum(d["totals"]["target_fat_g"] for d in ordered) / (len(ordered) or 1), 1
+                    sum(d["totals"]["target_fat_g"] for d in counted) / (len(counted) or 1), 1
                 ),
             },
         },

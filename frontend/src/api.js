@@ -183,6 +183,13 @@ export const api = {
       body: JSON.stringify({ is_followed, deviation_notes }),
     }),
 
+  // Salta l'intera giornata: le ricette si accodano ai giorni successivi.
+  setDaySkipped: (dayId, is_skipped) =>
+    request(`/planning/days/${dayId}/skip`, {
+      method: 'PUT',
+      body: JSON.stringify({ is_skipped }),
+    }),
+
   // ── Ricette ──
   getRecipes: (params = {}) => {
     const qs = new URLSearchParams(

@@ -1255,7 +1255,7 @@ const routes = [
       { path: 'recipes', element: <RecipesPage /> },
       { path: 'recipes/:recipeId', element: <RecipeDetailPage /> },
       { path: 'tracking', element: <TrackingPage /> },
-      { path: 'settings/diet', element: <SettingsDietPage /> },
+      { path: 'diet', element: <DietPage /> },   // pagina a sé: non è una preferenza
       { path: 'settings/base', element: <SettingsBasePage /> },
       { path: 'settings/excluded', element: <SettingsExcludedPage /> },
       { path: 'settings/pantry', element: <SettingsPantryPage /> },

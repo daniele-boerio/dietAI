@@ -55,7 +55,7 @@ export default function DashboardPage() {
         title="Nessuna dieta attiva"
         text="Carica il PDF del nutrizionista per iniziare a generare i piani."
         action={
-          <Link className="btn btn-primary" to="/settings/diet">
+          <Link className="btn btn-primary" to="/diet">
             Vai alla dieta
           </Link>
         }

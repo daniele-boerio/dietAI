@@ -76,7 +76,7 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
     ├── lib/macros.js           # ripartizione calorie/macro tra i pasti (+ test)
     ├── components/             # WeekGrid, MealCard, MealChat, RecipeView, MacroBar...
     └── pages/                  # Dashboard, Planning, MealDetail, Shopping, Recipes,
-                                # Tracking, Settings, Onboarding, Login
+                                # Tracking, Diet, Settings, Onboarding, Login
 ```
 
 ## Concetti da avere in testa
@@ -323,6 +323,12 @@ threadpool. La regola non ha eccezioni e `tests/test_concurrency.py` la fa rispe
   Non affidarsi al posizionamento automatico: il cursore di CSS Grid non torna
   indietro fra colonne e manderebbe l'intestazione del secondo giorno in fondo.
 - **Testo UI in italiano.** Codice, commenti e nomi in inglese solo dove è già così.
+- **Una voce di menu, un posto.** La dieta ha una pagina sua (`/diet`) e non è una
+  scheda delle impostazioni: non è una preferenza, è l'ingresso da cui passa tutto il
+  resto. Prima le due voci "La mia dieta" e "Impostazioni" aprivano la stessa pagina su
+  schede diverse, e si accendevano a vicenda a seconda della scheda aperta. `/settings`
+  rimanda alla prima scheda (`/settings/preferences`) così quella aperta è sempre
+  nell'indirizzo; `/settings/diet` rimanda a `/diet` per i collegamenti già in giro.
 - I prompt stanno tutti in `services/prompts.py`: i vincoli devono essere identici tra
   generazione, rigenerazione e chat, altrimenti l'AI si contraddice da una schermata all'altra.
 - **I segnaposto dei prompt si riempiono con `prompts.render()`, mai con `str.format()`**:

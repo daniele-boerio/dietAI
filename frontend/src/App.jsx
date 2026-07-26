@@ -21,6 +21,7 @@ import ShoppingPage from './pages/ShoppingPage';
 import RecipesPage from './pages/RecipesPage';
 import RecipeDetailPage from './pages/RecipeDetailPage';
 import TrackingPage from './pages/TrackingPage';
+import DietPage from './pages/DietPage';
 import SettingsPage from './pages/SettingsPage';
 import LoginPage from './pages/LoginPage';
 import OnboardingPage from './pages/OnboardingPage';
@@ -140,14 +141,17 @@ function AuthenticatedApp() {
 
             <div className="sidebar-section">Configurazione</div>
             <NavLink
-              to="/settings/diet"
+              to="/diet"
               className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
             >
               <Salad />
               <span>La mia dieta</span>
             </NavLink>
+            {/* Le impostazioni sono più di una scheda: la voce punta alla pagina, non
+                a una scheda in particolare, o le due voci del menu si accenderebbero
+                a vicenda a seconda di dove sei dentro. */}
             <NavLink
-              to="/settings/preferences"
+              to="/settings"
               className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
             >
               <Settings />
@@ -178,7 +182,13 @@ function AuthenticatedApp() {
             <Route path="/recipes" element={<RecipesPage />} />
             <Route path="/recipes/:recipeId" element={<RecipeDetailPage />} />
             <Route path="/tracking" element={<TrackingPage />} />
-            <Route path="/settings" element={<Navigate to="/settings/diet" replace />} />
+            <Route path="/diet" element={<DietPage />} />
+            {/* La dieta stava fra le impostazioni: il vecchio indirizzo resta valido
+                per i collegamenti già in giro (e per chi l'aveva nei preferiti). */}
+            <Route path="/settings/diet" element={<Navigate to="/diet" replace />} />
+            {/* Sempre con la scheda nell'indirizzo: così quella aperta risulta anche
+                accesa nell'elenco a fianco, e il link si può mandare a qualcuno. */}
+            <Route path="/settings" element={<Navigate to="/settings/preferences" replace />} />
             <Route path="/settings/:tab" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

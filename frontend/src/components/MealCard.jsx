@@ -78,7 +78,7 @@ export default function MealCard({
           className="meal-action"
           title={
             meal.self_managed
-              ? 'Questo pasto lo gestisci tu (cambia in Impostazioni → La mia dieta)'
+              ? 'Questo pasto lo gestisci tu (cambia da "La mia dieta")'
               : meal.is_skipped
                 ? 'Pasto saltato: la ricetta è stata rimandata più avanti'
                 : skipped

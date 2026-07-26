@@ -1,25 +1,25 @@
 import { useEffect, useState } from 'react';
-import { NavLink, useParams } from 'react-router-dom';
-import { FileUp, KeyRound, MessageSquare, Save, Sparkles, Trash2, User, X } from 'lucide-react';
+import { Link, NavLink, useParams } from 'react-router-dom';
+import { KeyRound, Trash2, X } from 'lucide-react';
 import { api } from '../api';
 import { useApp } from '../App';
 import { useAuth } from '../AuthContext';
 import IngredientInput from '../components/IngredientInput';
 import ModelPicker from '../components/ModelPicker';
-import { addMeal, dailyTotals, removeMeal } from '../lib/macros';
 
+// La dieta non è qui: ha una pagina sua (`/diet`). Queste sono le cose che si
+// regolano intorno alla dieta, non la dieta.
 const TABS = [
-  { key: 'diet', label: 'La mia dieta' },
+  { key: 'preferences', label: 'Preferenze' },
   { key: 'base', label: 'Ingredienti di base' },
   { key: 'excluded', label: 'Alimenti esclusi' },
   { key: 'pantry', label: 'Dispensa' },
-  { key: 'preferences', label: 'Preferenze' },
   { key: 'models', label: 'Modelli AI' },
   { key: 'account', label: 'Account e API key' },
 ];
 
 export default function SettingsPage() {
-  const { tab = 'diet' } = useParams();
+  const { tab = 'preferences' } = useParams();
 
   return (
     <>
@@ -28,7 +28,8 @@ export default function SettingsPage() {
           <h1 className="page-title">Impostazioni</h1>
           <p className="page-subtitle">
             Sono i vincoli che passo al modello a ogni generazione: cambiarli cambia le
-            ricette della prossima settimana.
+            ricette della prossima settimana. I pasti e i macro stanno in{' '}
+            <Link to="/diet">La mia dieta</Link>.
           </p>
         </div>
       </div>
@@ -47,11 +48,10 @@ export default function SettingsPage() {
         </nav>
 
         <div>
-          {tab === 'diet' && <DietTab />}
+          {tab === 'preferences' && <PreferencesTab />}
           {tab === 'base' && <BaseTab />}
           {tab === 'excluded' && <ExcludedTab />}
           {tab === 'pantry' && <PantryTab />}
-          {tab === 'preferences' && <PreferencesTab />}
           {tab === 'models' && <ModelsTab />}
           {tab === 'account' && <AccountTab />}
         </div>
@@ -60,343 +60,6 @@ export default function SettingsPage() {
   );
 }
 
-// ── La mia dieta ───────────────────────────────────────────────────────────────
-
-function DietTab() {
-  const { addToast } = useApp();
-  const [diet, setDiet] = useState(null);
-  const [meals, setMeals] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [file, setFile] = useState(null);
-
-  const load = () =>
-    api
-      .getDiet()
-      .then((d) => {
-        setDiet(d);
-        setMeals(d.meals);
-      })
-      .catch(() => setDiet(null))
-      .finally(() => setLoading(false));
-
-  useEffect(() => {
-    load();
-  }, []);
-
-  const updateMeal = (index, field, value) =>
-    setMeals((prev) =>
-      prev.map((m, i) =>
-        i === index ? { ...m, [field]: field === 'name' ? value : Number(value) } : m
-      )
-    );
-
-  const save = async () => {
-    setBusy(true);
-    try {
-      const payload = meals.map((m, i) => ({
-        name: m.name,
-        order: i,
-        calories: Number(m.calories) || 0,
-        protein_g: Number(m.protein_g) || 0,
-        carbs_g: Number(m.carbs_g) || 0,
-        fat_g: Number(m.fat_g) || 0,
-        notes: m.notes || null,
-        auto_generate: m.auto_generate !== false,
-      }));
-      const updated = await api.updateDietMeals(diet.id, payload);
-      setDiet(updated);
-      setMeals(updated.meals);
-      // Le ricette già assegnate restano quelle di prima: se i target sono cambiati
-      // non sono più in bersaglio, e conviene dirlo subito invece di farlo scoprire
-      // dalla percentuale di aderenza in Andamento.
-      addToast('Dieta aggiornata ✓ — rigenera la settimana per adeguare le ricette');
-    } catch (e) {
-      addToast(e.message, 'error');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const upload = async () => {
-    if (!file) return;
-    setBusy(true);
-    try {
-      const updated = await api.uploadDiet(file);
-      setDiet(updated);
-      setMeals(updated.meals);
-      setFile(null);
-      addToast(`Nuova dieta caricata: ${updated.meals.length} pasti ✓`);
-    } catch (e) {
-      addToast(e.message, 'error');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  // Togliere o aggiungere un pasto non cambia quanto si mangia in un giorno: cambia
-  // come lo si divide. Le calorie e i macro del pasto rimosso si ridistribuiscono
-  // sugli altri, in proporzione a quanto pesavano già.
-  const dropMeal = (index) => {
-    if (meals.length <= 1) {
-      addToast('La dieta deve avere almeno un pasto', 'error');
-      return;
-    }
-    const removed = meals[index];
-    setMeals(removeMeal(meals, index));
-    addToast(
-      `${removed.name || 'Pasto'} rimosso: le sue ${Math.round(removed.calories) || 0} kcal ` +
-        'sono andate sugli altri pasti'
-    );
-  };
-
-  const appendMeal = () => {
-    setMeals(addMeal(meals, 'Nuovo pasto'));
-    addToast('Pasto aggiunto: la giornata è stata ridivisa fra tutti');
-  };
-
-  // "Lo faccio io": DietAI smette di generarlo, ma i macro restano nel conto della
-  // giornata — l'utente quel pasto lo mangia comunque, centrando i target.
-  const toggleWho = (index) => {
-    const mine = meals[index].auto_generate === false;
-    setMeals((prev) =>
-      prev.map((m, i) => (i === index ? { ...m, auto_generate: mine } : m))
-    );
-    addToast(
-      mine
-        ? `${meals[index].name || 'Pasto'}: torna a generarlo DietAI`
-        : `${meals[index].name || 'Pasto'}: non verrà più generato, lo prepari tu`
-    );
-  };
-
-  if (loading) return <div className="spinner" />;
-
-  const totals = dailyTotals(meals);
-
-  return (
-    <>
-      <div className="card settings-section">
-        <div className="card-title">Pasti e macro</div>
-        <p className="field-hint" style={{ marginBottom: 14 }}>
-          Questi numeri sono il vincolo più duro di tutta l'app: ogni ricetta deve starci
-          dentro con una tolleranza del 10%. Se il PDF è stato letto male, correggilo qui.
-        </p>
-
-        <div className="meal-editor-row meal-editor-head">
-          <span>Pasto</span>
-          <span>kcal</span>
-          <span>Prot.</span>
-          <span>Carb.</span>
-          <span>Grassi</span>
-          <span>Chi lo prepara</span>
-          <span />
-        </div>
-
-        {meals.map((meal, i) => (
-          <div
-            key={i}
-            className={`meal-editor-row ${meal.auto_generate === false ? 'self-managed' : ''}`}
-          >
-            <input value={meal.name} onChange={(e) => updateMeal(i, 'name', e.target.value)} />
-            <input
-              type="number"
-              value={meal.calories}
-              onChange={(e) => updateMeal(i, 'calories', e.target.value)}
-            />
-            <input
-              type="number"
-              value={meal.protein_g}
-              onChange={(e) => updateMeal(i, 'protein_g', e.target.value)}
-            />
-            <input
-              type="number"
-              value={meal.carbs_g}
-              onChange={(e) => updateMeal(i, 'carbs_g', e.target.value)}
-            />
-            <input
-              type="number"
-              value={meal.fat_g}
-              onChange={(e) => updateMeal(i, 'fat_g', e.target.value)}
-            />
-            <button
-              className={`who-toggle ${meal.auto_generate === false ? 'mine' : 'ai'}`}
-              onClick={() => toggleWho(i)}
-              title={
-                meal.auto_generate === false
-                  ? 'Lo prepari tu: non verrà generato, ma i suoi macro contano nella giornata'
-                  : 'Lo genera DietAI a ogni piano settimanale'
-              }
-            >
-              {meal.auto_generate === false ? (
-                <>
-                  <User /> Lo faccio io
-                </>
-              ) : (
-                <>
-                  <Sparkles /> DietAI
-                </>
-              )}
-            </button>
-
-            <button
-              className="icon-button danger"
-              onClick={() => dropMeal(i)}
-              title="Rimuovi il pasto (le sue calorie vanno sugli altri)"
-            >
-              <X size={15} />
-            </button>
-          </div>
-        ))}
-
-        <div
-          className="meal-editor-row"
-          style={{ borderTop: '1px solid var(--border)', paddingTop: 10, marginTop: 6 }}
-        >
-          <strong>Totale giornaliero</strong>
-          <strong>{totals.calories}</strong>
-          <strong>{totals.protein_g}</strong>
-          <strong>{totals.carbs_g}</strong>
-          <strong>{totals.fat_g}</strong>
-          <span />
-        </div>
-
-        <p className="field-hint" style={{ marginTop: 10 }}>
-          Aggiungendo o togliendo un pasto il totale giornaliero non cambia: calorie e
-          macro vengono ridistribuiti sugli altri pasti in proporzione a quanto già
-          pesavano. Se invece è cambiata la dieta e i totali sono diversi, correggi i
-          valori riga per riga.
-        </p>
-
-        <p className="field-hint">
-          <strong>Lo faccio io:</strong> per i pasti che hai già risolto — la colazione
-          di sempre, il pranzo in mensa. DietAI non li genera e non compra i loro
-          ingredienti, ma i macro restano nel conto della giornata: tu quel pasto lo
-          mangi, e centra i suoi target.
-        </p>
-
-        <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
-          <button className="btn btn-secondary btn-sm" onClick={appendMeal}>
-            Aggiungi pasto
-          </button>
-          <button className="btn btn-primary btn-sm" onClick={save} disabled={busy}>
-            {busy ? <span className="spinner-inline" /> : <Save size={14} />}
-            Salva
-          </button>
-        </div>
-      </div>
-
-      <DietRulesCard />
-
-      <div className="card settings-section">
-        <div className="card-title">Carica un nuovo PDF</div>
-        <p className="field-hint" style={{ marginBottom: 12 }}>
-          Il nutrizionista ti ha dato una dieta nuova? Caricala: quella attuale finisce in
-          archivio e i pasti vengono riletti da capo.
-        </p>
-        <label className="dropzone">
-          <FileUp />
-          {file ? <strong>{file.name}</strong> : 'Scegli il PDF della dieta'}
-          <input
-            type="file"
-            accept="application/pdf"
-            hidden
-            onChange={(e) => setFile(e.target.files?.[0] || null)}
-          />
-        </label>
-        <button
-          className="btn btn-primary btn-sm"
-          style={{ marginTop: 12 }}
-          onClick={upload}
-          disabled={!file || busy}
-        >
-          {busy && <span className="spinner-inline" />}
-          Leggi e sostituisci
-        </button>
-      </div>
-    </>
-  );
-}
-
-// ── Regole in linguaggio naturale ──────────────────────────────────────────────
-
-const ESEMPI_REGOLE = `Niente insaccati.
-Carne rossa al massimo due volte a settimana.
-Il pesce mi piace ma non più di tre volte.
-La sera preferisco piatti unici, veloci da preparare.
-Non ripetere lo stesso primo due giorni di fila.`;
-
-function DietRulesCard() {
-  const { addToast } = useApp();
-  const [prefs, setPrefs] = useState(null);
-  const [draft, setDraft] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    api
-      .getPreferences()
-      .then((p) => {
-        setPrefs(p);
-        setDraft(p.notes || '');
-      })
-      .catch(() => {});
-  }, []);
-
-  const save = async () => {
-    setBusy(true);
-    try {
-      // Le preferenze si salvano intere: il backend vuole anche gli interruttori.
-      const updated = await api.updatePreferences({ ...prefs, notes: draft });
-      setPrefs(updated);
-      addToast('Regole salvate — valgono dalla prossima generazione ✓');
-    } catch (e) {
-      addToast(e.message, 'error');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  if (!prefs) return null;
-
-  const dirty = (prefs.notes || '') !== draft;
-
-  return (
-    <div className="card settings-section">
-      <div className="card-title">
-        <MessageSquare /> Regole e note per DietAI
-      </div>
-      <p className="field-hint" style={{ marginBottom: 12 }}>
-        Scrivile come le diresti a voce: qui non servono caselle, dall'altra parte c'è
-        un modello che legge l'italiano. È il posto per tutto ciò che non è un singolo
-        ingrediente da escludere — quante volte a settimana vuoi un alimento, cosa
-        preferisci la sera, abitudini che si ripetono.
-      </p>
-
-      <textarea
-        rows={7}
-        value={draft}
-        placeholder={ESEMPI_REGOLE}
-        onChange={(e) => setDraft(e.target.value)}
-      />
-
-      <p className="field-hint">
-        Le regole a cadenza settimanale ("carne due volte") funzionano perché il piano
-        viene generato tutto in una volta: il modello vede l'intera settimana mentre la
-        costruisce. Valgono anche quando rigeneri un singolo pasto e quando chiedi una
-        modifica in chat.
-      </p>
-
-      <button
-        className="btn btn-primary btn-sm"
-        style={{ marginTop: 12 }}
-        onClick={save}
-        disabled={busy || !dirty}
-      >
-        {busy ? <span className="spinner-inline" /> : <Save size={14} />}
-        Salva le regole
-      </button>
-    </div>
-  );
-}
 
 // ── Liste di ingredienti ───────────────────────────────────────────────────────
 

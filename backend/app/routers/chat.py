@@ -176,6 +176,14 @@ def send_message(
             except ValueError:
                 logger.warning("Chat: [RECIPE_UPDATE] senza JSON valido (pasto %s)", meal_id)
                 visible += "\n\n(Non sono riuscito ad applicare la modifica, riprova.)"
+            except Exception:
+                # Come sopra: la ricetta resta com'era, ma la conversazione si salva.
+                logger.exception("Chat: ricetta non applicabile (pasto %s)", meal_id)
+                db.rollback()
+                db.add(
+                    MealChatMessage(planned_meal_id=meal_id, role="user", content=body.content)
+                )
+                visible += "\n\n(Non sono riuscito ad applicare la modifica, riprova.)"
 
     db.add(MealChatMessage(planned_meal_id=meal_id, role="assistant", content=visible))
     db.commit()
@@ -358,6 +366,16 @@ def send_shopping_message(
                     changed = _apply_recipes_update(db, user, meals, data)
             except ValueError:
                 logger.warning("Chat spesa: [RECIPES_UPDATE] senza JSON valido (settimana %s)", week_id)
+                visible += "\n\n(Non sono riuscito ad applicare le modifiche, riprova.)"
+            except Exception:
+                # Un JSON sintatticamente valido ma fatto in un modo imprevisto non deve
+                # costare la risposta: si annulla la modifica a metà, si tiene la
+                # conversazione (la chiamata è già stata pagata) e lo si dice all'utente.
+                logger.exception("Chat spesa: ricette non applicabili (settimana %s)", week_id)
+                db.rollback()
+                db.add(
+                    ShoppingChatMessage(week_plan_id=week_id, role="user", content=body.content)
+                )
                 visible += "\n\n(Non sono riuscito ad applicare le modifiche, riprova.)"
             if not changed and RECIPES_UPDATE_MARKER in answer and "non sono riuscito" not in visible.lower():
                 visible += "\n\n(Nessuna ricetta corrispondeva: non ho cambiato niente.)"

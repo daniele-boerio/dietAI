@@ -157,6 +157,79 @@ def test_un_json_rotto_non_rompe_la_conversazione(client, week, monkeypatch):
     assert "Non sono riuscito ad applicare" in res["content"]
 
 
+def test_il_procedimento_a_lista_non_fa_500(client, week, monkeypatch):
+    """Il caso che andava in 500: `instructions` come lista di passi invece che testo.
+
+    Il prompt lo chiede come stringa, ma il modello ogni tanto manda l'array — e la
+    risposta, già pagata, andava persa insieme alla conversazione.
+    """
+    mid = pranzo_id(week)
+    ricetta = _senza_zucchine()
+    ricetta["instructions"] = ["Lessa la pasta.", "Salta le melanzane.", "Manteca."]
+    data = {"meals": [{"meal_id": mid, "recipe": ricetta}]}
+    use_chat(monkeypatch, f"Fatto.\n[RECIPES_UPDATE]\n{json.dumps(data, ensure_ascii=False)}")
+
+    res = client.post(
+        f"/api/chat/shopping/{week['id']}/messages", json={"content": "Metti le melanzane"}
+    )
+
+    assert res.status_code == 200, res.text
+    assert res.json()["changed_meals"] == ["Lunedì / Pranzo"]
+
+    # I passi diventano un procedimento numerato, uno per riga.
+    ricetta_salvata = client.get(f"/api/planning/meals/{mid}").json()["recipe"]
+    assert ricetta_salvata["instructions"] == (
+        "1. Lessa la pasta.\n2. Salta le melanzane.\n3. Manteca."
+    )
+
+
+def test_una_lista_di_ingredienti_illeggibile_non_svuota_la_ricetta(client, week, monkeypatch):
+    """Ingredienti in un formato imprevisto: meglio tenere quelli di prima che nessuno.
+
+    Una ricetta rimasta senza ingredienti uscirebbe dalla lista della spesa senza che
+    si veda: si finisce al supermercato senza metà del carrello.
+    """
+    mid = pranzo_id(week)
+    ricetta = _senza_zucchine()
+    ricetta["ingredients"] = ["pasta", "melanzane"]  # stringhe, non oggetti
+    data = {"meals": [{"meal_id": mid, "recipe": ricetta}]}
+    use_chat(monkeypatch, f"Fatto.\n[RECIPES_UPDATE]\n{json.dumps(data, ensure_ascii=False)}")
+
+    res = client.post(
+        f"/api/chat/shopping/{week['id']}/messages", json={"content": "Cambia"}
+    )
+
+    assert res.status_code == 200, res.text
+    assert client.get(f"/api/planning/meals/{mid}").json()["recipe"]["ingredients"]
+
+
+def test_una_modifica_che_esplode_non_costa_la_conversazione(client, week, monkeypatch):
+    """Backstop: qualunque errore nell'applicare la modifica non fa perdere la risposta.
+
+    La chiamata al modello è già stata pagata quando si arriva qui: un 500 butterebbe
+    via risposta e domanda insieme.
+    """
+    mid = pranzo_id(week)
+
+    def esplode(*args, **kwargs):
+        raise RuntimeError("qualcosa di imprevisto nel JSON")
+
+    monkeypatch.setattr(chat_router, "update_recipe_from_ai", esplode)
+    use_chat(monkeypatch, _update_reply([mid]))
+
+    res = client.post(
+        f"/api/chat/shopping/{week['id']}/messages", json={"content": "Cambia le zucchine"}
+    )
+
+    assert res.status_code == 200, res.text
+    assert res.json()["list_updated"] is False
+    assert "Non sono riuscito ad applicare" in res.json()["content"]
+    # La ricetta resta quella di prima e la conversazione è salva.
+    assert client.get(f"/api/planning/meals/{mid}").json()["recipe"]["title"] == "Pranzo 0"
+    storico = client.get(f"/api/chat/shopping/{week['id']}/messages").json()
+    assert [m["role"] for m in storico] == ["user", "assistant"]
+
+
 # ── A spesa fatta ──────────────────────────────────────────────────────────────
 
 

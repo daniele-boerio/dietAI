@@ -12,8 +12,45 @@ from .ingredients import get_or_create_ingredient
 _DIFFICULTIES = {"easy", "medium", "hard"}
 
 
-def _clamp_difficulty(value: str | None) -> str:
-    v = (value or "").strip().lower()
+def _text(value) -> str:
+    """Riduce a stringa quello che manda il modello.
+
+    I prompt chiedono stringhe, ma un modello ogni tanto risponde con una lista o un
+    numero: senza questa conversione il primo `.strip()` faceva 500 e la risposta —
+    già pagata — andava persa.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, dict):
+        value = list(value.values())
+    if isinstance(value, (list, tuple)):
+        return "\n".join(t for t in (_text(v) for v in value) if t)
+    return str(value).strip()
+
+
+def _instructions(value) -> str:
+    """Il procedimento, che il prompt chiede numerato e un passo per riga.
+
+    Quando arriva come lista di passi la si numera qui, così il risultato è lo stesso
+    di quando arriva già come testo.
+    """
+    if isinstance(value, (list, tuple)):
+        steps = [s for s in (_text(v) for v in value) if s]
+        if not any(s[:1].isdigit() or s[:1] in "-•*" for s in steps):
+            steps = [f"{i}. {s}" for i, s in enumerate(steps, 1)]
+        return "\n".join(steps)
+    return _text(value)
+
+
+def _dict(value) -> dict:
+    """Un sotto-oggetto del JSON dell'AI, o `{}` se il modello ha mandato altro."""
+    return value if isinstance(value, dict) else {}
+
+
+def _clamp_difficulty(value) -> str:
+    v = _text(value).lower()
     return v if v in _DIFFICULTIES else "medium"
 
 
@@ -22,6 +59,39 @@ def _num(value, default=0.0) -> float:
         return max(0.0, float(value))
     except (TypeError, ValueError):
         return default
+
+
+def _clean_ingredients(items) -> list[dict]:
+    """Normalizza gli ingredienti del JSON, scartando quelli senza un nome."""
+    out = []
+    for item in items if isinstance(items, (list, tuple)) else []:
+        item = _dict(item)
+        name = _text(item.get("name"))
+        if not name:
+            continue
+        out.append(
+            {
+                "name": name,
+                "quantity": _num(item.get("quantity")),
+                "unit": _text(item.get("unit"))[:20] or "g",
+                "notes": _text(item.get("notes")) or None,
+            }
+        )
+    return out
+
+
+def _add_ingredients(db: Session, recipe: Recipe, items: list[dict]) -> None:
+    for item in items:
+        ingredient = get_or_create_ingredient(db, item["name"])
+        db.add(
+            RecipeIngredient(
+                recipe_id=recipe.id,
+                ingredient_id=ingredient.id,
+                quantity=item["quantity"],
+                unit=item["unit"],
+                notes=item["notes"],
+            )
+        )
 
 
 def create_recipe(
@@ -38,16 +108,16 @@ def create_recipe(
     (AI) o al primo livello (form utente), quindi si accettano entrambi invece di
     obbligare il router a rimappare.
     """
-    nutrition = data.get("nutrition") or {}
+    nutrition = _dict(data.get("nutrition"))
 
     recipe = Recipe(
         user_id=user_id,
-        title=(data.get("title") or "Ricetta senza nome").strip()[:200],
-        description=(data.get("description") or None),
+        title=_text(data.get("title"))[:200] or "Ricetta senza nome",
+        description=_text(data.get("description")) or None,
         prep_time_min=int(_num(data.get("prep_time_min"))),
         cook_time_min=int(_num(data.get("cook_time_min"))),
         difficulty=_clamp_difficulty(data.get("difficulty")),
-        instructions=(data.get("instructions") or "").strip() or "Nessun procedimento.",
+        instructions=_instructions(data.get("instructions")) or "Nessun procedimento.",
         calories=int(_num(nutrition.get("calories", data.get("calories")))),
         protein_g=_num(nutrition.get("protein_g", data.get("protein_g"))),
         carbs_g=_num(nutrition.get("carbs_g", data.get("carbs_g"))),
@@ -59,42 +129,23 @@ def create_recipe(
     db.add(recipe)
     db.flush()
 
-    for item in data.get("ingredients") or []:
-        name = (item.get("name") or "").strip()
-        if not name:
-            continue
-        ingredient = get_or_create_ingredient(db, name)
-        db.add(
-            RecipeIngredient(
-                recipe_id=recipe.id,
-                ingredient_id=ingredient.id,
-                quantity=_num(item.get("quantity")),
-                unit=(item.get("unit") or "g").strip()[:20],
-                notes=(item.get("notes") or None),
-            )
-        )
+    _add_ingredients(db, recipe, _clean_ingredients(data.get("ingredients")))
 
     db.flush()
     return recipe
 
 
 def replace_ingredients(db: Session, recipe: Recipe, items: list[dict]) -> None:
-    """Sostituisce in blocco gli ingredienti di una ricetta (modifica via chat)."""
+    """Sostituisce in blocco gli ingredienti di una ricetta (modifica via chat).
+
+    Se dal JSON non si salva un solo ingrediente valido non si cancella niente: una
+    ricetta rimasta senza ingredienti uscirebbe dalla lista della spesa in silenzio.
+    """
+    cleaned = _clean_ingredients(items)
+    if not cleaned:
+        return
     db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == recipe.id).delete()
-    for item in items or []:
-        name = (item.get("name") or "").strip()
-        if not name:
-            continue
-        ingredient = get_or_create_ingredient(db, name)
-        db.add(
-            RecipeIngredient(
-                recipe_id=recipe.id,
-                ingredient_id=ingredient.id,
-                quantity=_num(item.get("quantity")),
-                unit=(item.get("unit") or "g").strip()[:20],
-                notes=(item.get("notes") or None),
-            )
-        )
+    _add_ingredients(db, recipe, cleaned)
 
 
 def update_recipe_from_ai(db: Session, recipe: Recipe, data: dict) -> None:
@@ -103,14 +154,14 @@ def update_recipe_from_ai(db: Session, recipe: Recipe, data: dict) -> None:
     Aggiorna solo i campi presenti: se il modello rimanda solo titolo e ingredienti,
     il procedimento precedente non deve sparire.
     """
-    nutrition = data.get("nutrition") or {}
+    nutrition = _dict(data.get("nutrition"))
 
     if data.get("title"):
-        recipe.title = data["title"].strip()[:200]
+        recipe.title = _text(data["title"])[:200] or recipe.title
     if data.get("description") is not None:
-        recipe.description = data["description"] or None
+        recipe.description = _text(data["description"]) or None
     if data.get("instructions"):
-        recipe.instructions = data["instructions"].strip()
+        recipe.instructions = _instructions(data["instructions"]) or recipe.instructions
     if data.get("prep_time_min") is not None:
         recipe.prep_time_min = int(_num(data["prep_time_min"]))
     if data.get("cook_time_min") is not None:

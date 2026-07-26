@@ -1367,6 +1367,10 @@ textarea {
   font-size: inherit;
 }
 
+.shopping-item.checked .shopping-qty:not(.bought) {
+  color: var(--text-muted);
+}
+
 .shopping-move {
   flex-shrink: 0;
   margin-right: 8px;
@@ -1404,10 +1408,64 @@ textarea {
   flex: 1;
 }
 
+/* La quantità è un pulsante: si tocca per dire quanto se n'è preso davvero. Il bordo
+   tratteggiato lo dice senza far sembrare la riga piena di comandi. */
 .shopping-qty {
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
   font-size: 0.85rem;
+  text-align: right;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px dashed transparent;
+  flex-shrink: 0;
+}
+
+.shopping-qty:hover:not(:disabled) {
+  border-color: var(--border-light);
+}
+
+.shopping-qty:disabled {
+  cursor: default;
+}
+
+/* Preso diverso da quanto ne serviva: il numero che conta è quello nuovo, ma l'altro
+   resta sotto — serve a capire quanto ne avanzerà. */
+.shopping-qty.bought {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.shopping-qty small {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.shopping-qty-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.shopping-qty-edit input {
+  width: 84px;
+  padding: 5px 7px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  background: var(--bg-surface);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+}
+
+.shopping-qty-edit em {
+  font-style: normal;
+  font-size: 0.78rem;
+  color: var(--text-muted);
 }
 
 .shopping-price {
@@ -2716,6 +2774,10 @@ textarea:focus {
 
   .shopping-tick {
     padding: 13px 4px 13px 15px;
+  }
+
+  .shopping-qty {
+    padding: 10px 8px;
   }
 
   .category-option {

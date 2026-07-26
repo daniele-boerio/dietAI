@@ -30,9 +30,11 @@ from ..services.planner import (
 from ..services.recipes import create_recipe
 from ..services.shopping import (
     complete_shopping,
+    consume_from_pantry,
     get_or_create_list,
     lock_bought_week,
     rebuild_lists_for,
+    restore_to_pantry,
 )
 
 logger = logging.getLogger(__name__)
@@ -230,6 +232,9 @@ def assign_meal(
         raise HTTPException(400, "Serve recipe_id oppure una ricetta completa.")
 
     meal.is_followed = None
+    # Il piatto è un altro: quello che era stato scalato dalla dispensa resta scalato
+    # (mangiato è mangiato), ma non ha più senso rimetterlo se domani si corregge.
+    meal.pantry_used = None
     db.commit()
 
     rebuild_lists_for(db, user.id, week)
@@ -252,6 +257,7 @@ def clear_meal(
     meal.is_recurring = False
     meal.recurring_rule = None
     meal.is_followed = None
+    meal.pantry_used = None
     db.commit()
 
     rebuild_lists_for(db, user_id, week)
@@ -301,16 +307,26 @@ def set_followed(
     sono in frigo, quindi un piatto non cucinato non è perso, si accoda alla prima
     casella libera di quel pasto. Dire invece "l'ho seguito" annulla il rinvio e la
     ricetta torna al suo posto.
+
+    "L'ho seguito" è anche il momento in cui gli ingredienti finiscono davvero: la
+    dispensa si scala qui, una volta sola per pasto (`pantry_used` è la memoria di
+    cosa è stato tolto), e si rimette identica se il pasto viene corretto.
     """
     meal, day, week = _get_meal(db, user_id, meal_id)
     meal.is_followed = body.is_followed
     meal.deviation_notes = body.deviation_notes
 
+    pantry_used: list[dict] = []
     if body.is_followed:
         unskip_meal(db, user_id, meal, week)
         moved = {"moved_to": None}
+        if meal.pantry_used is None:
+            pantry_used = consume_from_pantry(db, user_id, meal.recipe_id)
+            meal.pantry_used = pantry_used
     else:
         moved = skip_meal(db, user_id, meal, day, week)
+        restore_to_pantry(db, user_id, meal.pantry_used)
+        meal.pantry_used = None
     db.commit()
 
     rebuild_lists_for(db, user_id, week)
@@ -319,6 +335,9 @@ def set_followed(
     slot = db.get(MealSlot, meal.meal_slot_id)
     data = serialize_meal(db, day, meal, slot, full=True)
     data["moved_to"] = moved["moved_to"]
+    # Quello che è appena uscito dalla dispensa: la pagina lo dice, altrimenti la
+    # scorta cala di nascosto e nessuno si fida più del numero.
+    data["pantry_used"] = pantry_used
     return data
 
 

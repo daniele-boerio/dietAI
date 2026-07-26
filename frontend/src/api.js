@@ -245,6 +245,14 @@ export const api = {
       body: JSON.stringify({ is_checked }),
     }),
 
+  // Quanto se n'è preso davvero (le confezioni non si tagliano a misura): null
+  // rimette la quantità della lista. Torna la lista intera, totale compreso.
+  setBoughtQuantity: (itemId, quantity) =>
+    request(`/shopping/items/${itemId}/quantity`, {
+      method: 'PUT',
+      body: JSON.stringify({ quantity }),
+    }),
+
   completeShopping: () => request('/shopping/current/complete', { method: 'POST' }),
 
   exportShoppingList: () => text('/shopping/export'),

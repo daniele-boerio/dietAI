@@ -162,6 +162,20 @@ traboccata sulla settimana dopo dallo slittamento). `_eaten` guarda solo `is_fol
 True`, così un "ho mangiato altro" non impedisce a `shift_past_days` di dare il giorno
 per saltato.
 
+**La dispensa si riempie con la spesa e si svuota mangiando.** La prima metà la fa
+`complete_shopping` (gli articoli spuntati diventano scorta, nella quantità presa
+davvero: `ShoppingListItem.bought_quantity`, NULL = quella della lista — le confezioni
+non si tagliano a misura, e per 140 g di tacchino si porta a casa il pacco da 400);
+la seconda `is_followed = True`, che scala dalla dispensa gli ingredienti della ricetta — ma solo quelli che
+in dispensa ci sono davvero. Sale e olio restano fuori da soli, senza un elenco di
+eccezioni: non sono scorte, sono ingredienti di base. Senza questa metà, a fine
+settimana la dispensa direbbe che è ancora tutto in casa e la spesa successiva
+salterebbe mezzo carrello. `PlannedMeal.pantry_used` ricorda **cosa** è stato tolto
+(non cosa pesa la ricetta): serve a non scalare due volte se si ripreme il pulsante e
+a rimettere l'esatta quantità se il pasto viene corretto in "ho mangiato altro" —
+c'erano 40 g e la ricetta ne voleva 100, tornano 40, altrimenti l'app inventerebbe
+del cibo. Le scorte senza quantità ("ce l'ho ma non so quanto") non si toccano.
+
 **L'aderenza dell'anno è un calendario a colpo d'occhio.** `GET /api/tracking/year`
 (`year_adherence`) classifica ogni giorno da `PlannedMeal.is_followed`: tutti "sì" →
 `full`, tutti "no" → `missed`, misto → `partial`; un giorno senza nessun pasto tracciato

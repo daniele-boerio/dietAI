@@ -18,6 +18,7 @@ import EmptyState from '../components/EmptyState';
 import MealChat from '../components/MealChat';
 import RecipeView from '../components/RecipeView';
 import StarRating from '../components/StarRating';
+import { scalatiDallaDispensa } from '../lib/pantry';
 
 export default function MealDetailPage() {
   const { mealId } = useParams();
@@ -100,6 +101,7 @@ export default function MealDetailPage() {
       } else if (value) {
         addToast('Rimessa al suo posto ✓');
       }
+      if (updated.pantry_used?.length) addToast(scalatiDallaDispensa(updated.pantry_used), 'info');
     } catch (e) {
       addToast(e.message, 'error');
     }

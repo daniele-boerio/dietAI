@@ -13,6 +13,7 @@ import { api, formatDate, formatMoney } from '../api';
 import { useApp } from '../App';
 import EmptyState from '../components/EmptyState';
 import MacroBar from '../components/MacroBar';
+import { scalatiDallaDispensa } from '../lib/pantry';
 
 export default function DashboardPage() {
   const { addToast } = useApp();
@@ -41,6 +42,7 @@ export default function DashboardPage() {
             (updated.moved_to.next_week ? ' della settimana prossima' : '')
         );
       }
+      if (updated.pantry_used?.length) addToast(scalatiDallaDispensa(updated.pantry_used), 'info');
       load();
     } catch (e) {
       addToast(e.message, 'error');

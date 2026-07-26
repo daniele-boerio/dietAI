@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   CalendarCheck,
   CalendarOff,
@@ -17,6 +17,50 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
 import ShoppingChat from '../components/ShoppingChat';
 
+/**
+ * Il campo per dire quanto se n'è preso davvero.
+ *
+ * Vive dentro la riga, al posto della quantità, e si conferma uscendo o con Invio:
+ * al supermercato si scrive un numero e si passa oltre, non si cercano pulsanti.
+ * Vuoto significa "ho preso quello che c'era scritto", che è il caso normale.
+ */
+function QuantityInput({ item, onDone, onCancel }) {
+  const [value, setValue] = useState(item.bought_quantity ?? '');
+  const annullato = useRef(false);
+
+  const conferma = () => {
+    if (annullato.current) return;
+    const numero = value === '' ? null : Number(value);
+    onDone(Number.isFinite(numero) && numero > 0 ? numero : null);
+  };
+
+  return (
+    <span className="shopping-qty-edit">
+      <input
+        type="number"
+        inputMode="decimal"
+        autoFocus
+        value={value}
+        placeholder={String(item.quantity)}
+        onFocus={(e) => e.target.select()}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={conferma}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            e.target.blur();
+          } else if (e.key === 'Escape') {
+            e.preventDefault();
+            annullato.current = true;
+            onCancel();
+          }
+        }}
+      />
+      <em>{item.unit}</em>
+    </span>
+  );
+}
+
 export default function ShoppingPage() {
   const { addToast } = useApp();
   const [list, setList] = useState(null);
@@ -27,6 +71,8 @@ export default function ShoppingPage() {
   const [chatOpen, setChatOpen] = useState(false);
   // L'articolo che si sta spostando di reparto (null = nessun dialogo aperto).
   const [moving, setMoving] = useState(null);
+  // L'articolo di cui si sta scrivendo la quantità presa.
+  const [quantityOf, setQuantityOf] = useState(null);
 
   const load = useCallback(
     async ({ silent = false } = {}) => {
@@ -55,7 +101,17 @@ export default function ShoppingPage() {
       checked_items: prev.checked_items + (next ? 1 : -1),
       categories: prev.categories.map((c) => ({
         ...c,
-        items: c.items.map((i) => (i.id === item.id ? { ...i, is_checked: next } : i)),
+        items: c.items.map((i) =>
+          i.id === item.id
+            ? {
+                ...i,
+                is_checked: next,
+                // "Non l'ho preso" cancella anche quanto ne avevo segnato: il server
+                // fa lo stesso, qui si tiene solo il passo.
+                ...(next ? {} : { bought_quantity: null, bought_label: null }),
+              }
+            : i
+        ),
       })),
     }));
     try {
@@ -63,6 +119,20 @@ export default function ShoppingPage() {
     } catch (e) {
       addToast(e.message, 'error');
       load();
+    }
+  };
+
+  // Le confezioni non si tagliano a misura: per 140 g di tacchino si porta a casa il
+  // pacco da 400. Segnarlo qui, davanti allo scaffale, evita di correggere la dispensa
+  // a casa — ed è la dispensa a decidere cosa comprerà la lista successiva.
+  const saveQuantity = async (item, quantity) => {
+    setQuantityOf(null);
+    if (quantity === item.bought_quantity) return;
+    try {
+      setList(await api.setBoughtQuantity(item.id, quantity));
+    } catch (e) {
+      addToast(e.message, 'error');
+      load({ silent: true });
     }
   };
 
@@ -238,13 +308,32 @@ export default function ShoppingPage() {
                           <Check size={13} strokeWidth={3} />
                         </span>
                         <span className="shopping-name">{item.name}</span>
-                        <span className="shopping-qty">{item.label}</span>
-                        <span className="shopping-price">
-                          {item.estimated_price != null
-                            ? formatMoney(item.estimated_price)
-                            : ''}
-                        </span>
                       </button>
+
+                      {/* La quantità è un pulsante a sé: al supermercato si tocca per
+                          dire quanto se n'è preso davvero, e non deve far spuntare o
+                          despuntare la riga per sbaglio. */}
+                      {quantityOf === item.id ? (
+                        <QuantityInput
+                          item={item}
+                          onDone={(quantity) => saveQuantity(item, quantity)}
+                          onCancel={() => setQuantityOf(null)}
+                        />
+                      ) : (
+                        <button
+                          className={`shopping-qty ${item.bought_quantity ? 'bought' : ''}`}
+                          onClick={() => setQuantityOf(item.id)}
+                          disabled={list.is_completed}
+                          title="Quanto ne hai preso?"
+                        >
+                          {item.bought_label || item.label}
+                          {item.bought_quantity && <small>ne servono {item.label}</small>}
+                        </button>
+                      )}
+
+                      <span className="shopping-price">
+                        {item.estimated_price != null ? formatMoney(item.estimated_price) : ''}
+                      </span>
                       <button
                         className="icon-button shopping-move"
                         onClick={() => setMoving({ ...item, from: cat.label })}

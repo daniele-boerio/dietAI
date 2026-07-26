@@ -148,3 +148,227 @@ def test_correggere_la_dispensa_cambia_quello_che_si_compra(client, diet, monkey
     # Ricontata la scorta: erano 500 g, non 200.
     client.put(f"/api/config/pantry/{riga['id']}", json={"quantity": 500, "unit": "g"})
     assert pasta() == pytest.approx(200)
+
+
+# ── Cucinare consuma la dispensa ───────────────────────────────────────────────
+
+
+@pytest.fixture()
+def settimana(client, diet, monkeypatch):
+    """Una settimana generata: ogni pranzo usa 100 g di pasta e 150 g di zucchine."""
+    from app.services import planner
+    from tests.test_flow import FakeModel
+
+    monkeypatch.setattr(planner, "get_client", lambda db, user, role: FakeModel(user))
+    client.put("/api/auth/api-key", json={"api_key": "sk-or-chiave-finta-per-i-test"})
+    week = client.get("/api/planning/weeks/current").json()
+    res = client.post(f"/api/planning/weeks/{week['id']}/generate")
+    assert res.status_code == 200, res.text
+    return res.json()
+
+
+def pranzo(settimana, dow=0) -> dict:
+    return next(m for m in settimana["days"][dow]["meals"] if m["slot_name"] == "Pranzo")
+
+
+def scorta(client, nome: str):
+    return next((p for p in client.get("/api/config/pantry").json() if p["name"] == nome), None)
+
+
+def test_seguire_una_ricetta_scala_quello_che_ha_usato(client, settimana):
+    client.post("/api/config/pantry", json={"ingredient_name": "pasta", "quantity": 500, "unit": "g"})
+
+    res = client.put(
+        f"/api/planning/meals/{pranzo(settimana)['id']}/followed", json={"is_followed": True}
+    )
+
+    assert res.status_code == 200, res.text
+    assert res.json()["pantry_used"] == [
+        {"ingredient_id": scorta(client, "pasta")["ingredient_id"], "name": "pasta",
+         "quantity": 100, "unit": "g", "label": "100 g"}
+    ]
+    assert scorta(client, "pasta")["quantity"] == 400
+
+
+def test_quello_che_non_c_e_in_dispensa_non_si_scala(client, settimana):
+    """Il sale e l'olio non sono in dispensa e restano fuori da soli: nessuna
+    eccezione da mantenere, basta la regola "solo quello che c'è"."""
+    res = client.put(
+        f"/api/planning/meals/{pranzo(settimana)['id']}/followed", json={"is_followed": True}
+    )
+
+    assert res.json()["pantry_used"] == []
+    assert client.get("/api/config/pantry").json() == []
+
+
+def test_una_scorta_senza_quantita_resta_com_e(client, settimana):
+    """"Ce l'ho ma non so quanto": sottrarre da un valore ignoto darebbe un numero finto."""
+    client.post("/api/config/pantry", json={"ingredient_name": "pasta"})
+
+    client.put(f"/api/planning/meals/{pranzo(settimana)['id']}/followed", json={"is_followed": True})
+
+    assert scorta(client, "pasta")["quantity"] is None
+
+
+def test_la_scorta_finita_sparisce_dalla_dispensa(client, settimana):
+    client.post("/api/config/pantry", json={"ingredient_name": "pasta", "quantity": 100, "unit": "g"})
+
+    client.put(f"/api/planning/meals/{pranzo(settimana)['id']}/followed", json={"is_followed": True})
+
+    assert scorta(client, "pasta") is None
+
+
+def test_non_si_scala_piu_di_quello_che_c_era(client, settimana):
+    """La ricetta ne vuole 100, in dispensa ce n'erano 40: si toglie 40."""
+    client.post("/api/config/pantry", json={"ingredient_name": "pasta", "quantity": 40, "unit": "g"})
+
+    res = client.put(
+        f"/api/planning/meals/{pranzo(settimana)['id']}/followed", json={"is_followed": True}
+    )
+
+    assert res.json()["pantry_used"][0]["quantity"] == 40
+    assert scorta(client, "pasta") is None
+
+
+def test_ripremere_il_pulsante_non_scala_due_volte(client, settimana):
+    client.post("/api/config/pantry", json={"ingredient_name": "pasta", "quantity": 500, "unit": "g"})
+    mid = pranzo(settimana)["id"]
+
+    client.put(f"/api/planning/meals/{mid}/followed", json={"is_followed": True})
+    res = client.put(f"/api/planning/meals/{mid}/followed", json={"is_followed": True})
+
+    assert res.json()["pantry_used"] == []  # niente di nuovo: era già scalato
+    assert scorta(client, "pasta")["quantity"] == 400
+
+
+def test_correggersi_rimette_in_dispensa_quello_che_era_stato_tolto(client, settimana):
+    client.post("/api/config/pantry", json={"ingredient_name": "pasta", "quantity": 500, "unit": "g"})
+    mid = pranzo(settimana)["id"]
+
+    client.put(f"/api/planning/meals/{mid}/followed", json={"is_followed": True})
+    client.put(f"/api/planning/meals/{mid}/followed", json={"is_followed": False})
+
+    assert scorta(client, "pasta")["quantity"] == 500
+
+
+def test_si_rimette_quello_tolto_non_quello_che_pesa_la_ricetta(client, settimana):
+    """La differenza fra correggere un errore e inventare del cibo: c'erano 40 g,
+    la ricetta ne voleva 100, tornano 40."""
+    client.post("/api/config/pantry", json={"ingredient_name": "pasta", "quantity": 40, "unit": "g"})
+    mid = pranzo(settimana)["id"]
+
+    client.put(f"/api/planning/meals/{mid}/followed", json={"is_followed": True})
+    client.put(f"/api/planning/meals/{mid}/followed", json={"is_followed": False})
+
+    assert scorta(client, "pasta")["quantity"] == 40
+
+
+def test_a_fine_settimana_la_dispensa_racconta_quello_che_resta(client, settimana):
+    """Il caso per cui la cosa esiste: senza, alla spesa dopo la dispensa direbbe
+    che è ancora tutto in casa e mezzo carrello non verrebbe comprato."""
+    client.post("/api/config/pantry", json={"ingredient_name": "pasta", "quantity": 500, "unit": "g"})
+
+    for dow in range(3):
+        client.put(
+            f"/api/planning/meals/{pranzo(settimana, dow)['id']}/followed",
+            json={"is_followed": True},
+        )
+
+    assert scorta(client, "pasta")["quantity"] == 200
+
+
+# ── Quanto se n'è preso davvero ────────────────────────────────────────────────
+
+
+def voce(client, nome: str) -> dict:
+    lst = client.get("/api/shopping/current").json()
+    return next(i for c in lst["categories"] for i in c["items"] if i["name"] == nome)
+
+
+def test_di_default_in_dispensa_va_quello_che_serviva(client, settimana):
+    """Nessuna modifica = ho rispettato la grammatura: è il caso normale."""
+    pasta = voce(client, "pasta")
+    client.put(f"/api/shopping/items/{pasta['id']}/check", json={"is_checked": True})
+
+    client.post("/api/shopping/current/complete")
+
+    assert scorta(client, "pasta")["quantity"] == pytest.approx(700)
+
+
+def test_la_confezione_intera_finisce_in_dispensa(client, settimana):
+    """Il caso per cui esiste: la ricetta ne vuole 700 g, il pacco è da 1 kg."""
+    pasta = voce(client, "pasta")
+
+    res = client.put(f"/api/shopping/items/{pasta['id']}/quantity", json={"quantity": 1000})
+
+    assert res.status_code == 200, res.text
+    aggiornata = next(
+        i for c in res.json()["categories"] for i in c["items"] if i["name"] == "pasta"
+    )
+    # Segnare quanto se n'è preso vuol dire averlo preso: la riga si spunta da sé.
+    assert aggiornata["is_checked"] is True
+    assert aggiornata["bought_quantity"] == 1000
+    assert aggiornata["bought_label"] == "1 kg"
+    # E la quantità che serve resta lì: è quella che dice quanto ne avanzerà.
+    assert aggiornata["quantity"] == pytest.approx(700)
+
+    client.post("/api/shopping/current/complete")
+    assert scorta(client, "pasta")["quantity"] == pytest.approx(1000)
+
+
+def test_il_totale_stimato_segue_quello_che_si_porta_a_casa(client, settimana):
+    prima = client.get("/api/shopping/current").json()["estimated_cost"]
+    pasta = voce(client, "pasta")
+
+    dopo = client.put(
+        f"/api/shopping/items/{pasta['id']}/quantity", json={"quantity": 2000}
+    ).json()["estimated_cost"]
+
+    assert dopo > prima
+
+
+def test_togliere_la_spunta_cancella_la_quantita(client, settimana):
+    """"Non l'ho preso" non può lasciarsi dietro un "ne ho preso 1 kg"."""
+    pasta = voce(client, "pasta")
+    client.put(f"/api/shopping/items/{pasta['id']}/quantity", json={"quantity": 1000})
+
+    client.put(f"/api/shopping/items/{pasta['id']}/check", json={"is_checked": False})
+
+    assert voce(client, "pasta")["bought_quantity"] is None
+
+
+def test_la_quantita_presa_sopravvive_a_un_ricalcolo_della_lista(client, settimana):
+    """Il piano può cambiare mentre si è al supermercato (una rigenerazione, un pasto
+    saltato): quello che si è già messo nel carrello non si cancella."""
+    pasta = voce(client, "pasta")
+    client.put(f"/api/shopping/items/{pasta['id']}/quantity", json={"quantity": 1000})
+
+    cena = next(m for m in settimana["days"][6]["meals"] if m["slot_name"] == "Cena")
+    client.put(f"/api/planning/meals/{cena['id']}/followed", json={"is_followed": False})
+
+    aggiornata = voce(client, "pasta")
+    assert aggiornata["bought_quantity"] == 1000
+    assert aggiornata["is_checked"] is True
+
+
+def test_a_spesa_fatta_non_si_cambia_piu(client, settimana):
+    pasta = voce(client, "pasta")
+    client.put(f"/api/shopping/items/{pasta['id']}/check", json={"is_checked": True})
+    client.post("/api/shopping/current/complete")
+
+    res = client.put(f"/api/shopping/items/{pasta['id']}/quantity", json={"quantity": 1000})
+    assert res.status_code == 409
+
+
+def test_la_quantita_di_un_altro_utente_non_si_tocca(client, settimana, db):
+    """La proprietà si verifica risalendo articolo → lista → settimana → utente."""
+    from app.models import ShoppingListItem, WeekPlan
+
+    pasta = voce(client, "pasta")  # la lista nasce da questa lettura
+    db.query(WeekPlan).update({WeekPlan.user_id: 999})
+    db.commit()
+
+    res = client.put(f"/api/shopping/items/{pasta['id']}/quantity", json={"quantity": 500})
+
+    assert res.status_code == 404
+    assert db.get(ShoppingListItem, pasta["id"]).bought_quantity is None

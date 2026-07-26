@@ -193,13 +193,15 @@ def rebuild_shopping_list(db: Session, user_id: int, week: WeekPlan) -> Shopping
             quantity, unit = to_base(item.quantity_available, item.unit or "unità")
             pantry[(item.ingredient_id, unit)] = pantry.get((item.ingredient_id, unit), 0) + quantity
 
-    # Le spunte già messe si conservano tra un ricalcolo e l'altro: rigenerare una
-    # ricetta non deve far ripartire da capo chi sta già girando per il supermercato.
-    checked = {
-        (i.ingredient_id, i.unit)
+    # Le spunte già messe e le quantità prese si conservano tra un ricalcolo e l'altro:
+    # rigenerare una ricetta non deve far ripartire da capo chi sta già girando per il
+    # supermercato, né cancellargli il pacco da 400 g che ha appena segnato.
+    previous = {
+        (i.ingredient_id, i.unit): i
         for i in db.query(ShoppingListItem).filter(ShoppingListItem.shopping_list_id == lst.id)
-        if i.is_checked
     }
+    checked = {key for key, i in previous.items() if i.is_checked}
+    bought = {key: i.bought_quantity for key, i in previous.items() if i.bought_quantity}
     db.query(ShoppingListItem).filter(ShoppingListItem.shopping_list_id == lst.id).delete()
 
     estimated_total = 0.0
@@ -211,7 +213,10 @@ def rebuild_shopping_list(db: Session, user_id: int, week: WeekPlan) -> Shopping
             continue  # la dispensa copre tutto
 
         ingredient = db.get(Ingredient, ingredient_id)
-        price = price_for(net, unit, ingredient.avg_price_per_unit, ingredient.price_unit)
+        # Il costo segue quello che si porta a casa: se il pacco è più grande della
+        # quantità che serve, il conto alla cassa è quello del pacco.
+        taken = bought.get((ingredient_id, unit)) or round(net, 2)
+        price = price_for(taken, unit, ingredient.avg_price_per_unit, ingredient.price_unit)
         if price:
             estimated_total += price
 
@@ -222,6 +227,7 @@ def rebuild_shopping_list(db: Session, user_id: int, week: WeekPlan) -> Shopping
                 total_quantity=round(net, 2),
                 unit=unit,
                 is_checked=(ingredient_id, unit) in checked,
+                bought_quantity=bought.get((ingredient_id, unit)),
                 estimated_price=price,
             )
         )
@@ -280,6 +286,14 @@ def serialize_shopping_list(db: Session, week: WeekPlan, lst: ShoppingList) -> d
                 "unit": item.unit,
                 "label": format_quantity(item.total_quantity, item.unit),
                 "is_checked": item.is_checked,
+                # Quanto se n'è preso davvero, se diverso da quanto ne serviva: è
+                # questo che finirà in dispensa.
+                "bought_quantity": item.bought_quantity,
+                "bought_label": (
+                    format_quantity(item.bought_quantity, item.unit)
+                    if item.bought_quantity
+                    else None
+                ),
                 "estimated_price": item.estimated_price,
             }
         )
@@ -366,6 +380,113 @@ def shopping_list_summary(db: Session, lst: ShoppingList) -> str:
     return ", ".join(sorted(names)) if names else "(lista vuota)"
 
 
+# ── Dispensa ───────────────────────────────────────────────────────────────────
+#
+# Si riempie con la spesa (`complete_shopping`) e si svuota mangiando: senza la seconda
+# metà, a fine settimana la dispensa direbbe che è ancora tutto in casa e la spesa
+# successiva salterebbe metà carrello.
+
+
+def _pantry_of(db: Session, user_id: int, ingredient_id: int) -> PantryItem | None:
+    return (
+        db.query(PantryItem)
+        .filter(PantryItem.user_id == user_id, PantryItem.ingredient_id == ingredient_id)
+        .first()
+    )
+
+
+def consume_from_pantry(db: Session, user_id: int, recipe_id: int | None) -> list[dict]:
+    """Toglie dalla dispensa quello che la ricetta ha consumato.
+
+    Si tocca solo quello che in dispensa c'è davvero: il sale e l'olio non ci sono
+    quasi mai (sono ingredienti di base, non si comprano) e restano fuori da soli,
+    senza bisogno di un elenco di eccezioni. Restano fuori anche le righe senza
+    quantità — "ce l'ho ma non so quanto" — perché sottrarre da un valore ignoto
+    darebbe un numero inventato, e le unità che non si parlano (una scorta contata a
+    unità, una ricetta in grammi): è la stessa regola con cui la lista della spesa
+    scomputa la dispensa.
+
+    Restituisce quello che ha scalato, sia per mostrarlo (una conferma che non si vede
+    non convince) sia per poterlo rimettere identico se il pasto viene corretto.
+    """
+    if not recipe_id:
+        return []
+
+    used: list[dict] = []
+    rows = (
+        db.query(RecipeIngredient, Ingredient)
+        .join(Ingredient, Ingredient.id == RecipeIngredient.ingredient_id)
+        .filter(RecipeIngredient.recipe_id == recipe_id)
+        .all()
+    )
+
+    for ri, ingredient in rows:
+        pantry = _pantry_of(db, user_id, ingredient.id)
+        if not pantry or not pantry.quantity_available:
+            continue
+
+        needed, unit = to_base(ri.quantity or 0, ri.unit)
+        available, pantry_unit = to_base(pantry.quantity_available, pantry.unit or "unità")
+        if needed <= 0 or unit != pantry_unit:
+            continue
+
+        # Se la scorta non basta si toglie quello che c'era, non di più: il resto
+        # l'utente l'ha comprato apposta o ce l'aveva senza averlo segnato.
+        taken = min(needed, available)
+        remaining = available - taken
+        if remaining <= 0.01:
+            db.delete(pantry)
+        else:
+            pantry.quantity_available = round(remaining, 2)
+            pantry.unit = pantry_unit
+
+        used.append(
+            {
+                "ingredient_id": ingredient.id,
+                "name": ingredient.name,
+                "quantity": round(taken, 2),
+                "unit": unit,
+                "label": format_quantity(taken, unit),
+            }
+        )
+
+    db.flush()
+    return used
+
+
+def restore_to_pantry(db: Session, user_id: int, used: list[dict]) -> None:
+    """Rimette in dispensa quello che era stato tolto, non quello che la ricetta pesa.
+
+    È la differenza fra correggere un errore e inventare del cibo: se in dispensa
+    c'erano 100 g di pesce spada e la ricetta ne voleva 200, tolti ne erano 100 — e
+    100 devono tornare.
+    """
+    for entry in used or []:
+        ingredient_id = entry.get("ingredient_id")
+        quantity, unit = to_base(entry.get("quantity") or 0, entry.get("unit") or "unità")
+        if not ingredient_id or quantity <= 0:
+            continue
+
+        pantry = _pantry_of(db, user_id, ingredient_id)
+        if not pantry:
+            db.add(
+                PantryItem(
+                    user_id=user_id,
+                    ingredient_id=ingredient_id,
+                    quantity_available=round(quantity, 2),
+                    unit=unit,
+                )
+            )
+            continue
+
+        available, pantry_unit = to_base(pantry.quantity_available or 0, pantry.unit or unit)
+        if pantry.quantity_available and pantry_unit != unit:
+            continue  # unità incompatibili: meglio non toccare niente
+        pantry.quantity_available = round(available + quantity, 2)
+        pantry.unit = unit
+    db.flush()
+
+
 def lock_bought_week(week: WeekPlan, now: datetime) -> None:
     """Blocca una settimana perché il suo cibo è stato comprato.
 
@@ -400,26 +521,29 @@ def complete_shopping(db: Session, user_id: int, week: WeekPlan, lst: ShoppingLi
     for covered_week in covered:
         lock_bought_week(covered_week, now)
 
-    # Quello che è stato spuntato è finito nel carrello, quindi ora è in dispensa.
+    # Quello che è stato spuntato è finito nel carrello, quindi ora è in dispensa —
+    # nella quantità che si è presa davvero, non in quella che serviva: è la
+    # differenza fra una dispensa che descrive il frigo e una che descrive il piano.
     for item in db.query(ShoppingListItem).filter(
         ShoppingListItem.shopping_list_id == lst.id, ShoppingListItem.is_checked.is_(True)
     ):
+        taken = item.bought_quantity or item.total_quantity
         pantry = (
             db.query(PantryItem)
             .filter(PantryItem.user_id == user_id, PantryItem.ingredient_id == item.ingredient_id)
             .first()
         )
         if pantry and pantry.unit == item.unit and pantry.quantity_available:
-            pantry.quantity_available += item.total_quantity
+            pantry.quantity_available += taken
         elif pantry:
-            pantry.quantity_available = item.total_quantity
+            pantry.quantity_available = taken
             pantry.unit = item.unit
         else:
             db.add(
                 PantryItem(
                     user_id=user_id,
                     ingredient_id=item.ingredient_id,
-                    quantity_available=item.total_quantity,
+                    quantity_available=taken,
                     unit=item.unit,
                 )
             )

@@ -174,3 +174,9 @@ class ChatMessageRequest(BaseModel):
 
 class CheckItemRequest(BaseModel):
     is_checked: bool
+
+
+class BoughtQuantityRequest(BaseModel):
+    """Quanto se n'è preso davvero, nell'unità della riga. None = quanto ne serviva."""
+
+    quantity: float | None = Field(default=None, gt=0)

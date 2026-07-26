@@ -311,6 +311,12 @@ class PlannedMeal(Base):
         String, nullable=False, default="ai_generated", server_default="ai_generated"
     )
     # Un pasto ricorrente non viene rigenerato: viene ricopiato ogni settimana.
+    # Cosa è stato tolto dalla dispensa quando il pasto è stato segnato come seguito:
+    # [{ingredient_id, name, quantity, unit, label}]. NULL = mai scalato. Serve a due
+    # cose: non scalare due volte se si ripreme il pulsante, e rimettere ESATTAMENTE
+    # quello che si era tolto se il pasto viene poi corretto in "ho mangiato altro"
+    # (la dispensa poteva averne meno di quanto la ricetta ne chiedeva).
+    pantry_used = Column(JSONType)
     is_recurring = Column(Boolean, nullable=False, default=False, server_default="false")
     recurring_rule = Column(JSONType)  # {"type":"daily"} | {"type":"weekly","day":5}
     is_followed = Column(Boolean)  # NULL = non ancora tracciato
@@ -509,6 +515,10 @@ class ShoppingListItem(Base):
     total_quantity = Column(Float, nullable=False)
     unit = Column(String, nullable=False)
     is_checked = Column(Boolean, nullable=False, default=False, server_default="false")
+    # Quanto se n'è preso davvero, nella stessa unità: le confezioni non si tagliano a
+    # misura, e per 140 g di tacchino si porta a casa il pacco da 400. NULL = ho preso
+    # quello che c'era scritto. È questo che finisce in dispensa a spesa fatta.
+    bought_quantity = Column(Float)
     estimated_price = Column(Float)
 
     __table_args__ = (

@@ -183,15 +183,7 @@ def get_meal(
 ):
     meal, day, week = _get_meal(db, user_id, meal_id)
     slot = db.get(MealSlot, meal.meal_slot_id)
-    data = serialize_meal(db, day, meal, slot, full=True)
-    data["week"] = {
-        "id": week.id,
-        "week_start_date": week.week_start_date.isoformat(),
-        "is_locked": week.is_locked,
-        "status": week.status,
-        "is_current": week.week_start_date == current_week_start(),
-    }
-    return data
+    return serialize_meal(db, day, meal, slot, full=True)
 
 
 @router.post("/meals/{meal_id}/regenerate")

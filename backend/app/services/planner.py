@@ -827,7 +827,7 @@ def serialize_meal(
     db: Session, day: DayPlan, meal: PlannedMeal, slot: MealSlot, *, full: bool = False
 ) -> dict:
     recipe = db.get(Recipe, meal.recipe_id) if meal.recipe_id else None
-    return {
+    data = {
         "id": meal.id,
         "day_of_week": day.day_of_week,
         "day_name": DAY_NAMES[day.day_of_week],
@@ -857,6 +857,23 @@ def serialize_meal(
         "deviation_notes": meal.deviation_notes,
         "recipe": serialize_recipe(db, recipe, full=full),
     }
+
+    # Un pasto mostrato da solo (la pagina di dettaglio) ha bisogno di sapere in che
+    # stato è la sua settimana: senza, non può nemmeno dire se è modificabile. Sta
+    # qui e non nel router perché la pagina si ridisegna con la risposta del pulsante
+    # appena premuto, non solo con la lettura iniziale: quando `week` c'era solo nella
+    # GET, il primo clic su "L'ho seguito" restituiva un pasto senza settimana e la
+    # schermata si spegneva con un TypeError.
+    if full:
+        week = db.get(WeekPlan, day.week_plan_id)
+        data["week"] = {
+            "id": week.id,
+            "week_start_date": week.week_start_date.isoformat(),
+            "is_locked": week.is_locked,
+            "status": week.status,
+            "is_current": week.week_start_date == current_week_start(),
+        }
+    return data
 
 
 def serialize_week(db: Session, week: WeekPlan) -> dict:

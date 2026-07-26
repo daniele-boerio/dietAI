@@ -302,6 +302,12 @@ threadpool. La regola non ha eccezioni e `tests/test_concurrency.py` la fa rispe
 - Le risposte dell'API sono **dict costruiti a mano** nei router/servizi: le entità sono
   aggregate (pasto + ricetta + ingredienti + target) e dieci schemi annidati sarebbero
   meno leggibili. Pydantic valida gli input.
+- **Chi restituisce un'entità la restituisce sempre intera**, anche dalle rotte di
+  modifica: il frontend ridisegna la pagina con la risposta del pulsante appena
+  premuto, non ricarica. Una risposta più povera della GET rompe la schermata — è
+  successo con `week`, che stava nel router invece che in `serialize_meal(full=True)`,
+  e il primo clic su "L'ho seguito" spegneva il dettaglio del pasto. Guardia in
+  `tests/test_dettaglio_pasto.py`.
 - Tutte le chiamate del frontend passano da `api.js` — mai `fetch` nei componenti.
 - Un solo file CSS (`index.css`) con custom properties. Niente CSS modules, niente Tailwind.
 - La griglia settimanale (≥1100px) allinea le righe sciogliendo `.day-column` con

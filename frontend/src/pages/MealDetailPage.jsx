@@ -131,7 +131,9 @@ export default function MealDetailPage() {
   if (loading) return <div className="spinner" />;
   if (!meal) return null;
 
-  const locked = meal.week.is_locked;
+  // Il `?.` non è pignoleria: questa pagina si ridisegna con la risposta dell'ultimo
+  // pulsante premuto, e una risposta senza `week` non deve poter spegnere la schermata.
+  const locked = meal.week?.is_locked;
   // Un giorno saltato è in sola lettura come un piano bloccato, ma per il motivo
   // opposto: lì il cibo è già comprato, qui non lo è mai stato.
   const skipped = meal.day_is_skipped;

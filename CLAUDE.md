@@ -97,6 +97,27 @@ piano deve chiamare `rebuild_lists_for` (tutte le liste aperte che comprendono q
 settimana) e non `rebuild_shopping_list` su una sola: generare la prossima cambia la
 spesa di questa, e la dashboard legge la lista senza ricostruirla.
 
+**Di lista aperta ce n'è una sola.** Se una lista comprende già tutte le settimane
+non comprate, "la spesa della settimana prossima" non esiste più come cosa a sé: o è
+dentro questa, o è quella che si farà dopo aver comprato questa. Perciò niente schede
+current/next in pagina e un solo endpoint (`GET /api/shopping/current`, dove
+"corrente" vuol dire *aperta*): `active_shopping_week` la ancora alla prima settimana
+che ha qualcosa da comprare — cioè `weeks_covered[0]` — così a spesa fatta la lista si
+sposta da sola sulla prossima, appena la generi. Se non c'è più niente da comprare si
+mostra la settimana corrente, la cui lista è la spesa appena fatta (`starts_ahead`
+dice alla UI che la lista parte più in là perché questa settimana è già in frigo). Una
+settimana solo aperta e mai generata non fa da àncora: mostrerebbe una lista vuota al
+posto della conferma della spesa.
+
+**Il reparto di un ingrediente lo decide chi fa la spesa.** `Ingredient.category`
+serve a girare il supermercato una volta sola, e il catalogo non può sapere che gli
+spaghetti stanno con pane e cereali (`guess_category` non li riconosce e finiscono in
+"altro"). `PUT /api/config/ingredients/{id}/category` li sposta per tutte le liste,
+presenti e future, e alza `category_by_user`: senza quel flag il seed — che gira **a
+ogni avvio del container** e riallinea l'anagrafica al catalogo — se la riprenderebbe
+al primo deploy. Il raggruppamento avviene alla lettura (`serialize_shopping_list`),
+quindi non serve ricostruire niente.
+
 **Il blocco è la regola di business centrale.** `POST /api/shopping/current/complete`
 sposta gli articoli spuntati in dispensa e blocca **tutte** le settimane che la lista
 copriva, non solo la prima: se la spesa comprendeva anche la prossima, anche quelle

@@ -232,7 +232,9 @@ export const api = {
   clearChat: (mealId) => request(`/chat/meals/${mealId}/messages`, { method: 'DELETE' }),
 
   // ── Spesa ──
-  getShoppingList: (which = 'current') => request(`/shopping/${which}`),
+  // Di lista aperta ce n'è una sola: comprende tutte le settimane generate e non
+  // ancora comprate, e quando la spesa è fatta parte da sé da quella dopo.
+  getShoppingList: () => request('/shopping/current'),
 
   checkShoppingItem: (itemId, is_checked) =>
     request(`/shopping/items/${itemId}/check`, {
@@ -240,10 +242,16 @@ export const api = {
       body: JSON.stringify({ is_checked }),
     }),
 
-  completeShopping: (which = 'current') =>
-    request(`/shopping/${which}/complete`, { method: 'POST' }),
+  completeShopping: () => request('/shopping/current/complete', { method: 'POST' }),
 
-  exportShoppingList: (which = 'current') => text(`/shopping/export?which=${which}`),
+  exportShoppingList: () => text('/shopping/export'),
+
+  // Sposta l'ingrediente in un altro reparto: vale per tutte le liste, da qui in poi.
+  moveIngredient: (ingredientId, category) =>
+    request(`/config/ingredients/${ingredientId}/category`, {
+      method: 'PUT',
+      body: JSON.stringify({ category }),
+    }),
 
   // Chat della spesa: legata alla settimana (week_plan_id della lista mostrata).
   getShoppingChat: (weekId) => request(`/chat/shopping/${weekId}/messages`),

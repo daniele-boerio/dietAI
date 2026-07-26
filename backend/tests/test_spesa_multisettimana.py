@@ -136,24 +136,49 @@ def test_il_blocco_della_prossima_arriva_fino_alla_sua_fine(client, prossima):
 
 
 def test_quello_che_è_già_comprato_non_torna_in_lista(client, prossima):
-    """La settimana prossima è pagata con la spesa di questa: la sua lista è vuota,
-    altrimenti si comprerebbe due volte lo stesso cibo."""
+    """Comprate due settimane non c'è una nuova spesa da fare: resta quella fatta.
+
+    La settimana prossima è pagata con questa spesa, quindi non deve ricomparire come
+    lista da comprare — sarebbe lo stesso cibo due volte.
+    """
     client.post("/api/shopping/current/complete")
 
-    lst = client.get("/api/shopping/next").json()
-    assert lst["total_items"] == 0
-    assert lst["weeks_covered"] == []
+    lst = client.get("/api/shopping/current").json()
+    assert lst["is_completed"] is True
+    assert lst["week_start_date"] == planner.current_week_start().isoformat()
+    assert client.post("/api/shopping/current/complete").status_code == 409
 
 
 def test_dopo_la_spesa_si_riparte_dalla_settimana_ancora_da_comprare(client, questa):
-    """Comprata solo questa, la prossima si genera dopo: la sua spesa è tutta lì."""
+    """Comprata questa, la spesa si sposta da sola sulla prossima appena la generi.
+
+    Di liste aperte ce n'è una sola: non c'è una scheda da cambiare, la lista mostra
+    sempre la prima settimana che ha ancora qualcosa da comprare.
+    """
     client.post("/api/shopping/current/complete")
 
     w = client.get("/api/planning/weeks/next").json()
     assert client.post(f"/api/planning/weeks/{w['id']}/generate").status_code == 200
 
-    lst = client.get("/api/shopping/next").json()
+    lst = client.get("/api/shopping/current").json()
+    assert lst["is_completed"] is False
+    assert lst["week_start_date"] == planner.next_week_start().isoformat()
+    assert lst["starts_ahead"] is True
     assert quantita(lst, "pasta") == pytest.approx(7 * 100)
+
+
+def test_finche_non_c_è_niente_da_comprare_la_lista_resta_questa(client, questa):
+    """La settimana prossima esiste ma è vuota: non ha senso mostrarla come spesa.
+
+    Se bastasse esistere, subito dopo aver comprato ci si ritroverebbe davanti una
+    lista vuota della settimana prossima al posto della conferma della spesa fatta.
+    """
+    client.post("/api/shopping/current/complete")
+    client.get("/api/planning/weeks/next")  # aperta, non generata
+
+    lst = client.get("/api/shopping/current").json()
+    assert lst["is_completed"] is True
+    assert lst["week_start_date"] == planner.current_week_start().isoformat()
 
 
 # ── Il piano cambia in una settimana, la lista è dell'altra ────────────────────

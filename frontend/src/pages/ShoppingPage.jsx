@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronRight,
   Copy,
+  FolderInput,
   Lock,
   MessageSquare,
   ShoppingCart,
@@ -18,24 +19,28 @@ import ShoppingChat from '../components/ShoppingChat';
 
 export default function ShoppingPage() {
   const { addToast } = useApp();
-  const [which, setWhich] = useState('current');
   const [list, setList] = useState(null);
   const [loading, setLoading] = useState(true);
   const [collapsed, setCollapsed] = useState({});
   const [confirmDone, setConfirmDone] = useState(false);
   const [busy, setBusy] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  // L'articolo che si sta spostando di reparto (null = nessun dialogo aperto).
+  const [moving, setMoving] = useState(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      setList(await api.getShoppingList(which));
-    } catch (e) {
-      addToast(e.message, 'error');
-    } finally {
-      setLoading(false);
-    }
-  }, [which, addToast]);
+  const load = useCallback(
+    async ({ silent = false } = {}) => {
+      if (!silent) setLoading(true);
+      try {
+        setList(await api.getShoppingList());
+      } catch (e) {
+        addToast(e.message, 'error');
+      } finally {
+        if (!silent) setLoading(false);
+      }
+    },
+    [addToast]
+  );
 
   useEffect(() => {
     load();
@@ -61,10 +66,24 @@ export default function ShoppingPage() {
     }
   };
 
+  // Il reparto giusto lo sa chi gira per il negozio, non il catalogo: la scelta resta
+  // sull'ingrediente e vale per tutte le liste da qui in avanti.
+  const moveTo = async (category) => {
+    const item = moving;
+    setMoving(null);
+    try {
+      const res = await api.moveIngredient(item.ingredient_id, category);
+      await load({ silent: true });
+      addToast(`${res.name} ora è in ${res.label} ✓`);
+    } catch (e) {
+      addToast(e.message, 'error');
+    }
+  };
+
   const complete = async () => {
     setBusy(true);
     try {
-      const res = await api.completeShopping(which);
+      const res = await api.completeShopping();
       setConfirmDone(false);
       addToast(`${res.detail} ✓`);
       await load();
@@ -80,7 +99,7 @@ export default function ShoppingPage() {
 
   const copyList = async () => {
     try {
-      const text = await api.exportShoppingList(which);
+      const text = await api.exportShoppingList();
       await navigator.clipboard.writeText(text);
       addToast('Lista copiata negli appunti ✓');
     } catch {
@@ -118,41 +137,25 @@ export default function ShoppingPage() {
         </div>
       </div>
 
-      <div className="week-toolbar">
-        <div className="week-tabs">
-          <button
-            className={`week-tab ${which === 'current' ? 'active' : ''}`}
-            onClick={() => setWhich('current')}
-          >
-            Da questa settimana
-          </button>
-          <button
-            className={`week-tab ${which === 'next' ? 'active' : ''}`}
-            onClick={() => setWhich('next')}
-          >
-            Dalla prossima
-          </button>
-        </div>
-      </div>
-
       {list.is_completed && (
         <div className="notice notice-lock">
           <Lock />
           <div>
             <strong>Spesa già fatta</strong>
             {list.completed_at ? ` il ${formatDate(list.completed_at)}` : ''}. Gli articoli
-            spuntati sono finiti in dispensa e il piano che copriva è bloccato.
+            spuntati sono finiti in dispensa e il piano che copriva è bloccato. La
+            prossima lista comparirà qui appena generi una settimana ancora da comprare.
           </div>
         </div>
       )}
 
-      {/* Bloccata ma senza una spesa sua: è stata comprata insieme a quella prima. */}
-      {!list.is_completed && list.is_locked && (
-        <div className="notice notice-lock">
-          <Lock />
+      {/* La lista è saltata avanti perché questa settimana è già in frigo. */}
+      {!list.is_completed && list.starts_ahead && (
+        <div className="notice notice-skip">
+          <CalendarCheck />
           <div>
-            <strong>Già comprata</strong>: questa settimana era compresa nella spesa
-            precedente, quindi non c'è niente da ricomprare e il piano resta bloccato.
+            <strong>Questa settimana è già comprata</strong>: la spesa riparte dal{' '}
+            {formatDate(list.week_start_date)}, con le ricette che hai generato dopo.
           </div>
         </div>
       )}
@@ -222,21 +225,35 @@ export default function ShoppingPage() {
 
                 {!isCollapsed &&
                   cat.items.map((item) => (
-                    <button
+                    <div
                       key={item.id}
                       className={`shopping-item ${item.is_checked ? 'checked' : ''}`}
-                      onClick={() => toggleItem(item)}
-                      disabled={list.is_completed}
                     >
-                      <span className="shopping-check">
-                        <Check size={13} strokeWidth={3} />
-                      </span>
-                      <span className="shopping-name">{item.name}</span>
-                      <span className="shopping-qty">{item.label}</span>
-                      <span className="shopping-price">
-                        {item.estimated_price != null ? formatMoney(item.estimated_price) : ''}
-                      </span>
-                    </button>
+                      <button
+                        className="shopping-tick"
+                        onClick={() => toggleItem(item)}
+                        disabled={list.is_completed}
+                      >
+                        <span className="shopping-check">
+                          <Check size={13} strokeWidth={3} />
+                        </span>
+                        <span className="shopping-name">{item.name}</span>
+                        <span className="shopping-qty">{item.label}</span>
+                        <span className="shopping-price">
+                          {item.estimated_price != null
+                            ? formatMoney(item.estimated_price)
+                            : ''}
+                        </span>
+                      </button>
+                      <button
+                        className="icon-button shopping-move"
+                        onClick={() => setMoving({ ...item, from: cat.label })}
+                        title="Sposta di reparto"
+                        aria-label={`Sposta ${item.name} in un altro reparto`}
+                      >
+                        <FolderInput size={15} />
+                      </button>
+                    </div>
                   ))}
               </div>
             );
@@ -258,6 +275,35 @@ export default function ShoppingPage() {
             )}
           </div>
         </>
+      )}
+
+      {moving && (
+        <div className="modal-overlay" onClick={() => setMoving(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2 className="modal-title">Dove tieni «{moving.name}»?</h2>
+            <p className="modal-text">
+              Ora è in {moving.from}. Il reparto serve a farti girare il supermercato una
+              volta sola: quello che scegli vale anche per tutte le liste che verranno.
+            </p>
+            <div className="category-picker">
+              {list.all_categories.map((cat) => (
+                <button
+                  key={cat.key}
+                  className={`category-option ${cat.key === moving.category ? 'active' : ''}`}
+                  onClick={() => moveTo(cat.key)}
+                  disabled={cat.key === moving.category}
+                >
+                  {cat.label}
+                </button>
+              ))}
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-secondary" onClick={() => setMoving(null)}>
+                Annulla
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {confirmDone && (

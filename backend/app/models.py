@@ -151,6 +151,12 @@ class Ingredient(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String, unique=True, nullable=False, index=True)
     category = Column(String, nullable=False, default="altro", server_default="altro")
+    # La categoria decide in che reparto finisce l'ingrediente nella lista della spesa.
+    # Quando la sposta l'utente il flag protegge la scelta dal seed, che a ogni avvio
+    # riallinea l'anagrafica al catalogo e altrimenti se la rimangerebbe.
+    category_by_user = Column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
     # Mesi di stagionalità: [6,7,8] = giugno-agosto. NULL = disponibile tutto l'anno.
     season_months = Column(JSONType)
     avg_price_per_unit = Column(Float)

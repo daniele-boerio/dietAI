@@ -1302,17 +1302,36 @@ textarea {
 .shopping-item {
   display: flex;
   align-items: center;
-  gap: 11px;
-  padding: 9px 15px;
   border-top: 1px solid var(--border);
-  width: 100%;
-  text-align: left;
   font-size: 0.9rem;
   transition: background var(--transition);
 }
 
 .shopping-item:hover {
   background: var(--bg-card-hover);
+}
+
+/* Spuntare è il gesto che si fa col carrello in mano: il bersaglio è tutta la riga
+   tranne l'icona per cambiare reparto, che sta in disparte sulla destra. */
+.shopping-tick {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  flex: 1;
+  min-width: 0;
+  padding: 9px 4px 9px 15px;
+  text-align: left;
+  font-size: inherit;
+}
+
+.shopping-move {
+  flex-shrink: 0;
+  margin-right: 8px;
+  opacity: 0.5;
+}
+
+.shopping-move:hover {
+  opacity: 1;
 }
 
 .shopping-item.checked .shopping-name {
@@ -1383,6 +1402,34 @@ textarea {
   font-size: 0.75rem;
   font-weight: 400;
   color: var(--text-secondary);
+}
+
+/* I reparti fra cui spostare un ingrediente: pochi e tutti visibili insieme, perché
+   la scelta è "dove lo tengono al mio supermercato" e si fa a colpo d'occhio. */
+.category-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.category-option {
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  transition: border-color var(--transition), background var(--transition);
+}
+
+.category-option:hover {
+  border-color: var(--accent);
+  background: var(--bg-card-hover);
+}
+
+.category-option.active {
+  border-color: var(--accent);
+  color: var(--text-muted);
+  cursor: default;
 }
 
 /* ── Tracking ──────────────────────────────────────────────────── */

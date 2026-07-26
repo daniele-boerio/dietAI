@@ -56,6 +56,12 @@ class IngredientNameRequest(BaseModel):
     ingredient_name: str = Field(min_length=1, max_length=120)
 
 
+class IngredientCategoryUpdate(BaseModel):
+    """Il reparto in cui spostare l'ingrediente. I valori validi li controlla il router."""
+
+    category: str = Field(min_length=1, max_length=20)
+
+
 class ExcludedCreate(BaseModel):
     ingredient_name: str = Field(min_length=1, max_length=120)
     reason: str | None = Field(default=None, max_length=100)

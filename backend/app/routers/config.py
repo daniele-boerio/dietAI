@@ -27,6 +27,7 @@ from ..config import (
 from ..schemas import (
     AiModelsUpdate,
     ExcludedCreate,
+    IngredientCategoryUpdate,
     IngredientNameRequest,
     PantryCreate,
     PantryUpdate,
@@ -34,6 +35,7 @@ from ..schemas import (
 )
 from ..services.catalog import list_models
 from ..services.ingredients import get_or_create_ingredient, normalize_name
+from ..services.shopping import CATEGORY_LABELS
 from ..utils.pricing import DEFAULT_BASE_INGREDIENTS
 from ..utils.units import format_quantity, normalize_unit
 
@@ -480,3 +482,36 @@ def search_ingredients(
         .all()
     )
     return [{"id": i.id, "name": i.name, "category": i.category} for i in rows]
+
+
+@router.put("/ingredients/{ingredient_id}/category")
+def move_ingredient(
+    ingredient_id: int,
+    body: IngredientCategoryUpdate,
+    _user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    """Sposta un ingrediente in un altro reparto della lista della spesa.
+
+    Il reparto serve a chi gira per il supermercato, quindi la parola giusta la sa
+    l'utente e non il catalogo: gli spaghetti finiti in "altro" vanno in "pane e
+    cereali" perché è lì che stanno nel suo negozio. La scelta vale da subito su tutte
+    le liste (la lista si raggruppa alla lettura) e resta per sempre — anche dopo il
+    seed, che a ogni avvio riallinea l'anagrafica al catalogo.
+    """
+    if body.category not in CATEGORY_LABELS:
+        raise HTTPException(400, "Reparto non valido")
+
+    ingredient = db.get(Ingredient, ingredient_id)
+    if not ingredient:
+        raise HTTPException(404, "Ingrediente non trovato")
+
+    ingredient.category = body.category
+    ingredient.category_by_user = True
+    db.commit()
+    return {
+        "id": ingredient.id,
+        "name": ingredient.name,
+        "category": ingredient.category,
+        "label": CATEGORY_LABELS[ingredient.category],
+    }

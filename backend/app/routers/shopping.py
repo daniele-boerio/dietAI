@@ -1,6 +1,6 @@
 """Lista della spesa: lettura, spunte, completamento ed esportazione."""
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
@@ -8,13 +8,9 @@ from ..auth import get_current_user_id
 from ..database import get_db
 from ..models import ShoppingList, ShoppingListItem, WeekPlan
 from ..schemas import CheckItemRequest
-from ..services.planner import (
-    current_week_start,
-    get_or_create_week,
-    next_week_start,
-    refresh_week_statuses,
-)
+from ..services.planner import refresh_week_statuses
 from ..services.shopping import (
+    active_shopping_week,
     complete_shopping,
     export_text,
     get_or_create_list,
@@ -25,10 +21,10 @@ from ..services.shopping import (
 router = APIRouter(prefix="/api/shopping", tags=["Spesa"])
 
 
-def _week_and_list(db: Session, user_id: int, which: str) -> tuple[WeekPlan, ShoppingList]:
+def _open_list(db: Session, user_id: int) -> tuple[WeekPlan, ShoppingList]:
+    """La spesa aperta: una sola, sulla prima settimana che ha ancora qualcosa da comprare."""
     refresh_week_statuses(db, user_id)
-    start = current_week_start() if which == "current" else next_week_start()
-    week = get_or_create_week(db, user_id, start)
+    week = active_shopping_week(db, user_id)
     lst = rebuild_shopping_list(db, user_id, week)
     db.commit()
     return week, lst
@@ -38,16 +34,13 @@ def _week_and_list(db: Session, user_id: int, which: str) -> tuple[WeekPlan, Sho
 def get_current_list(
     user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
 ):
-    week, lst = _week_and_list(db, user_id, "current")
-    return serialize_shopping_list(db, week, lst)
+    """La spesa da fare — "corrente" nel senso di aperta, non di questa settimana.
 
-
-@router.get("/next")
-def get_next_list(
-    user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
-):
-    """Anteprima della spesa della settimana prossima, sempre modificabile."""
-    week, lst = _week_and_list(db, user_id, "next")
+    Una lista comprende tutte le settimane generate e non ancora comprate, quindi ce
+    n'è sempre e solo una: quando la spesa è fatta, la successiva parte da sé dalla
+    prima settimana rimasta scoperta.
+    """
+    week, lst = _open_list(db, user_id)
     return serialize_shopping_list(db, week, lst)
 
 
@@ -75,29 +68,23 @@ def check_item(
     return {"id": row.id, "is_checked": row.is_checked}
 
 
-@router.post("/{which}/complete")
+@router.post("/current/complete")
 def complete(
-    which: str,
     user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-    """"Ho fatto la spesa": blocca il piano per 7 giorni e aggiorna la dispensa."""
-    if which not in ("current", "next"):
-        raise HTTPException(404, "Lista non trovata")
-
+    """"Ho fatto la spesa": blocca le settimane comprate e aggiorna la dispensa."""
     refresh_week_statuses(db, user_id)
-    start = current_week_start() if which == "current" else next_week_start()
-    week = get_or_create_week(db, user_id, start)
+    week = active_shopping_week(db, user_id)
     lst = get_or_create_list(db, week)
     return complete_shopping(db, user_id, week, lst)
 
 
 @router.get("/export", response_class=PlainTextResponse)
 def export(
-    which: str = Query("current", pattern="^(current|next)$"),
     user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
     """Lista in testo semplice, da copiare o condividere."""
-    week, lst = _week_and_list(db, user_id, which)
+    week, lst = _open_list(db, user_id)
     return export_text(db, week, lst)

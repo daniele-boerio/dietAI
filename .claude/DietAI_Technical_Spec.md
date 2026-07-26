@@ -799,23 +799,28 @@ GET /api/shopping/current
   Response 200: ShoppingListResponse {
     id, is_completed, estimated_cost,
     items: ShoppingListItemResponse[] (raggruppati per categoria),
-    categories_summary: { "verdura": float, "carne": float, ... }
+    categories_summary: { "verdura": float, "carne": float, ... },
+    weeks_covered, covers_to, starts_ahead, all_categories
   }
-
-GET /api/shopping/next
-  Response 200: ShoppingListResponse (anteprima settimana successiva)
+  Note: "corrente" = aperta, non "di questa settimana". La lista comprende tutte le
+        settimane generate e non ancora comprate, quindi ce n'è sempre una sola e
+        parte dalla prima settimana rimasta scoperta (active_shopping_week).
 
 PUT /api/shopping/items/{item_id}/check
   Body: { "is_checked": bool }
   Response 200: ShoppingListItemResponse
 
 POST /api/shopping/current/complete
-  Response 200: { "detail": "Spesa completata", "week_locked_until": datetime }
-  Note: segna la spesa come fatta → blocca il WeekPlan corrente per 7 giorni.
+  Response 200: { "detail": ..., "weeks_locked": int, "week_locked_until": datetime }
+  Note: segna la spesa come fatta → blocca tutti i WeekPlan che la lista copriva.
         Aggiorna la dispensa virtuale con gli ingredienti acquistati.
 
+PUT /api/config/ingredients/{ingredient_id}/category
+  Body: { "category": "cereali" }
+  Response 200: { id, name, category, label }
+  Note: sposta l'ingrediente di reparto per tutte le liste, seed compreso.
+
 GET /api/shopping/export
-  Query: ?format=text|json
   Response 200: testo formattato della lista (per copia/condivisione)
 ```
 

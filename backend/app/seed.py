@@ -27,7 +27,11 @@ def seed_ingredients(db) -> tuple[int, int]:
     for name, (category, price, price_unit) in INGREDIENT_CATALOG.items():
         ingredient = db.query(Ingredient).filter(Ingredient.name == name).first()
         if ingredient:
-            ingredient.category = category
+            # Il reparto spostato a mano dalla lista della spesa vince sul catalogo:
+            # il seed gira a ogni avvio del container, e senza questo controllo gli
+            # spaghetti tornerebbero in "altro" al primo deploy.
+            if not ingredient.category_by_user:
+                ingredient.category = category
             ingredient.avg_price_per_unit = price
             ingredient.price_unit = price_unit
             ingredient.season_months = season_months_for(name)

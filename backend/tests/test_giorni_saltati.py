@@ -150,15 +150,13 @@ def test_la_lista_segue_le_ricette_slittate(client, settimana_generata, oggi):
     lst = client.get("/api/shopping/current").json()
     items = {i["name"]: i for cat in lst["categories"] for i in cat["items"]}
 
-    # Sette pranzi generati, sette da cucinare: cinque qui, due nella settimana dopo.
+    # Sette pranzi generati, sette da cucinare: cinque qui, due nella settimana dopo —
+    # e la lista è una sola, che comprende entrambe le settimane.
     assert items["zucchine"]["quantity"] == pytest.approx(7 * 250)
     assert len(lst["weeks_covered"]) == 2
 
-    prossima = client.get("/api/shopping/next").json()
-    zucchine_prossima = next(
-        i["quantity"] for c in prossima["categories"] for i in c["items"] if i["name"] == "zucchine"
-    )
-    assert zucchine_prossima == pytest.approx(2 * 250)
+    nxt = client.get("/api/planning/weeks/next").json()
+    assert titoli(nxt)[:2] == ["Pranzo 5", "Pranzo 6"]
 
     # La lista dice comunque da quando si comincia a cucinare.
     assert lst["days_skipped"] == 2

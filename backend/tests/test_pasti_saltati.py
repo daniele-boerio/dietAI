@@ -158,8 +158,11 @@ def test_il_pasto_saltato_si_compra_dove_si_è_accodato(client, settimana_genera
     client.put(f"/api/planning/meals/{cena['id']}/followed", json={"is_followed": False})
 
     assert _pollo(client.get("/api/shopping/current").json()) == pytest.approx(prima)
-    # 150 g di quel pollo ora sono da comprare per la settimana prossima.
-    assert _pollo(client.get("/api/shopping/next").json()) == pytest.approx(150)
+    # Quei 150 g di pollo si comprano per il lunedì dopo, dove la cena si è accodata:
+    # è la settimana prossima, che la stessa lista comprende.
+    nxt = client.get("/api/planning/weeks/next").json()
+    assert pasto(nxt, 0, "Cena")["recipe"]["title"] == "Cena 0"
+    assert len(client.get("/api/shopping/current").json()["weeks_covered"]) == 2
 
 
 def test_i_totali_del_giorno_scendono_col_pasto_saltato(client, settimana_generata):

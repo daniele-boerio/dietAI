@@ -117,6 +117,28 @@ def weeks_covered(db: Session, user_id: int, week: WeekPlan) -> list[WeekPlan]:
     return [w for w in candidate if w.id in with_recipes]
 
 
+def active_shopping_week(db: Session, user_id: int) -> WeekPlan:
+    """La settimana da cui parte la spesa da fare.
+
+    Di liste aperte ce n'è una sola. Una lista comprende già tutte le settimane
+    generate e non ancora comprate, quindi "la spesa della settimana prossima" non è
+    più una cosa a sé: o è dentro questa, o è quella che si farà dopo aver comprato
+    questa. Il punto di partenza è perciò la prima settimana che ha qualcosa da
+    comprare — che a spesa fatta diventa la prossima, senza che nessuno cambi scheda.
+
+    Se non c'è più niente da comprare si torna alla settimana corrente: la sua lista è
+    la spesa appena fatta, ed è quella giusta da mostrare. Una lista vuota al suo
+    posto sembrerebbe un errore.
+    """
+    from .planner import current_week_start, get_or_create_week
+
+    # Come ogni lettura del piano, aprire la spesa fa scattare lo slittamento dei
+    # giorni passati senza spesa: la lista deve seguire le ricette dove sono finite.
+    current = get_or_create_week(db, user_id, current_week_start())
+    covered = weeks_covered(db, user_id, current)
+    return covered[0] if covered else current
+
+
 def _aggregate_ingredients(db: Session, weeks: list[WeekPlan]) -> dict[tuple[int, str], float]:
     """Somma le quantità di tutte le ricette delle settimane, per (ingrediente, unità base).
 
@@ -282,7 +304,7 @@ def serialize_shopping_list(db: Session, week: WeekPlan, lst: ShoppingList) -> d
     # giorni saltati perché ormai passati: una giornata saltata a mano più avanti
     # (weekend fuori) accorcia la lista pure lei, ma è una scelta esplicita e non ha
     # bisogno di essere spiegata come un ammanco.
-    from .planner import today
+    from .planner import current_week_start, today
 
     days = (
         db.query(DayPlan)
@@ -309,6 +331,9 @@ def serialize_shopping_list(db: Session, week: WeekPlan, lst: ShoppingList) -> d
         "is_locked": week.is_locked,
         "days_skipped": len(past_skipped),
         "covers_from": covered[0].date.isoformat() if covered else None,
+        # La spesa parte da una settimana futura: questa è già comprata. Va detto, o
+        # sembra che la lista si sia dimenticata i prossimi giorni.
+        "starts_ahead": week.week_start_date > current_week_start(),
         # Fin dove arriva la spesa: la domenica dell'ultima settimana coperta.
         "covers_to": (last_day + timedelta(days=6)).isoformat(),
         "weeks_covered": [
@@ -318,6 +343,11 @@ def serialize_shopping_list(db: Session, week: WeekPlan, lst: ShoppingList) -> d
         "checked_items": checked_items,
         "categories": categories,
         "categories_summary": summary,
+        # Tutti i reparti, non solo quelli con qualcosa dentro: servono a spostarci un
+        # ingrediente finito nel posto sbagliato (gli spaghetti in "altro").
+        "all_categories": [
+            {"key": key, "label": CATEGORY_LABELS[key]} for key in CATEGORY_ORDER
+        ],
     }
 
 

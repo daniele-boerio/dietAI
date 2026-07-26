@@ -109,7 +109,12 @@ body {
   background: var(--bg-primary);
   color: var(--text-primary);
   line-height: 1.6;
+  /* `dvh` è l'altezza che resta davvero visibile: su iOS `vh` conta anche lo spazio
+     coperto dalla barra degli indirizzi, e tutto quello che si misura in vh finisce
+     più in basso del bordo dello schermo. La riga in vh resta come ripiego per i
+     browser che dvh non ce l'hanno. */
   min-height: 100vh;
+  min-height: 100dvh;
   -webkit-font-smoothing: antialiased;
   /* Toglie lo zoom da doppio tocco (e i 300 ms di attesa che ne derivano): in una
      app che si usa a colpi di spunte sulla lista della spesa, due tocchi rapidi
@@ -160,13 +165,16 @@ textarea {
 .app-layout {
   display: flex;
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .sidebar {
   width: 236px;
   background: var(--bg-secondary);
   border-right: 1px solid var(--border);
-  padding: 26px 0 16px;
+  /* In orizzontale la tacca sta sul fianco sinistro, cioè esattamente sopra il menu. */
+  padding: calc(26px + env(safe-area-inset-top)) 0 calc(16px + env(safe-area-inset-bottom))
+    env(safe-area-inset-left);
   position: fixed;
   top: 0;
   left: 0;
@@ -290,11 +298,14 @@ textarea {
   top: 0;
   left: 0;
   right: 0;
-  height: 54px;
+  /* Alta 54px di contenuto, più la fascia della tacca: senza, il pulsante del menu
+     finisce sotto l'orologio dell'iPhone e non si riesce a premerlo. */
+  height: calc(54px + env(safe-area-inset-top));
+  padding: env(safe-area-inset-top) calc(14px + env(safe-area-inset-right)) 0
+    calc(14px + env(safe-area-inset-left));
   z-index: 40;
   align-items: center;
   gap: 12px;
-  padding: 0 14px;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border);
 }
@@ -1078,6 +1089,7 @@ textarea {
   display: flex;
   flex-direction: column;
   height: calc(100vh - 140px);
+  height: calc(100dvh - 140px);
   position: sticky;
   top: 24px;
   overflow: hidden;
@@ -1102,6 +1114,9 @@ textarea {
 .chat-body {
   flex: 1;
   overflow-y: auto;
+  /* Arrivato in fondo alla conversazione, il dito non deve trascinarsi dietro anche
+     la pagina: sul telefono è il modo più facile di perdere il punto in cui si era. */
+  overscroll-behavior: contain;
   padding: 15px;
   display: flex;
   flex-direction: column;
@@ -1243,6 +1258,8 @@ textarea {
   bottom: 0;
   width: min(420px, 92vw);
   box-shadow: var(--shadow-popup);
+  /* Telefono in orizzontale: da questo lato ci sono la tacca o il bordo curvo. */
+  padding-right: env(safe-area-inset-right);
 }
 
 @media (max-width: 640px) {
@@ -1253,8 +1270,15 @@ textarea {
     right: 0;
     width: auto;
     height: 82vh;
+    height: 82dvh;
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   }
+}
+
+/* Il foglio è incollato al bordo inferiore: l'ultima riga di tasti non deve finire
+   sopra la barra di scorrimento dell'iPhone. */
+.shopping-chat .chat-input {
+  padding-bottom: calc(11px + env(safe-area-inset-bottom));
 }
 
 .typing {
@@ -1400,7 +1424,9 @@ textarea {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 14px 18px;
+  /* Il totale e "Ho fatto la spesa" restano incollati in fondo: sotto c'è la barra
+     di scorrimento dell'iPhone, e il pulsante ci finirebbe sotto. */
+  padding: 14px 18px calc(14px + env(safe-area-inset-bottom));
   margin-top: 18px;
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -2444,7 +2470,8 @@ textarea:focus {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  padding: calc(20px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right))
+    calc(20px + env(safe-area-inset-bottom)) calc(20px + env(safe-area-inset-left));
 }
 
 .modal {
@@ -2455,7 +2482,9 @@ textarea:focus {
   width: 100%;
   padding: 24px;
   max-height: 88vh;
+  max-height: 88dvh;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .modal-title {
@@ -2476,6 +2505,9 @@ textarea:focus {
   display: flex;
   gap: 9px;
   justify-content: flex-end;
+  /* Su uno schermo stretto due pulsanti in fila non ci stanno: meglio a capo che
+     mezzi fuori dal bordo. */
+  flex-wrap: wrap;
 }
 
 .modal-lg {
@@ -2486,8 +2518,8 @@ textarea:focus {
 
 .toast-container {
   position: fixed;
-  bottom: 22px;
-  right: 22px;
+  bottom: calc(22px + env(safe-area-inset-bottom));
+  right: calc(22px + env(safe-area-inset-right));
   z-index: 1000;
   display: flex;
   flex-direction: column;
@@ -2539,7 +2571,10 @@ textarea:focus {
   }
   .chat-panel {
     position: static;
+    /* Sotto la ricetta, non di fianco: fissa a 480px riempirebbe tutto lo schermo di
+       un telefono e la conversazione sembrerebbe l'unica cosa in pagina. */
     height: 480px;
+    height: min(480px, 70dvh);
   }
 }
 
@@ -2570,16 +2605,29 @@ textarea:focus {
     transition: transform var(--transition);
     z-index: 50;
     box-shadow: var(--shadow-popup);
+    overscroll-behavior: contain;
   }
   .sidebar.open {
     transform: translateX(0);
   }
   .main-content {
     margin-left: 0;
-    padding: 70px 14px 40px;
+    /* In cima ci va la topbar (54px) più la fascia della tacca; ai lati e in fondo
+       quel che serve a non finire sotto i bordi curvi e la barra di scorrimento. */
+    padding: calc(70px + env(safe-area-inset-top)) calc(14px + env(safe-area-inset-right))
+      calc(40px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left));
   }
   .page-title {
     font-size: 1.5rem;
+  }
+  /* Sul telefono il titolo e i pulsanti sono uno sotto l'altro: allineare i pulsanti
+     a destra li lascerebbe a mezz'aria, lontani dal pollice. */
+  .page-header {
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .detail-layout {
+    gap: 14px;
   }
   .week-grid {
     grid-template-columns: minmax(0, 1fr);
@@ -2601,9 +2649,9 @@ textarea:focus {
     width: 100%;
   }
   .toast-container {
-    left: 14px;
-    right: 14px;
-    bottom: 14px;
+    left: calc(14px + env(safe-area-inset-left));
+    right: calc(14px + env(safe-area-inset-right));
+    bottom: calc(14px + env(safe-area-inset-bottom));
   }
   .toast {
     max-width: none;
@@ -2613,5 +2661,121 @@ textarea:focus {
 @media (min-width: 769px) {
   .sidebar-backdrop {
     display: none;
+  }
+}
+
+/* ── Touch ─────────────────────────────────────────────────────── */
+
+/* Cosa cambia quando si punta col dito invece che col mouse. Sta in fondo al foglio
+   apposta: sono correzioni ai valori scritti sopra e devono vincere loro. Due regole
+   reggono tutto il blocco:
+   · un bersaglio da toccare non scende sotto i ~44px, che è quanto è largo un dito —
+     sotto, si sbaglia pulsante e si torna indietro imprecando;
+   · quello che si vede solo al passaggio del mouse, col dito non si vede mai. */
+@media (pointer: coarse) {
+  .icon-button {
+    width: 40px;
+    height: 40px;
+  }
+
+  .btn {
+    min-height: 44px;
+  }
+
+  .btn-sm {
+    min-height: 38px;
+    padding: 8px 13px;
+  }
+
+  /* "Indietro" è il modo con cui si esce dal dettaglio di un pasto: da scritta
+     smorta diventa un pulsante vero, con un bordo che dice dove si tocca. */
+  .btn-ghost {
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+  }
+
+  .chat-send {
+    width: 44px;
+    height: 44px;
+  }
+
+  .chat-suggestion {
+    padding: 9px 14px;
+    font-size: 0.82rem;
+  }
+
+  .week-tab {
+    padding: 10px 16px;
+    font-size: 0.86rem;
+  }
+
+  .meal-action {
+    padding: 10px 4px;
+  }
+
+  .shopping-tick {
+    padding: 13px 4px 13px 15px;
+  }
+
+  .category-option {
+    padding: 10px 14px;
+  }
+
+  .settings-nav a {
+    padding: 12px 13px;
+  }
+
+  .star-rating button {
+    padding: 5px;
+  }
+
+  /* Le due icone che sopra compaiono col mouse: qui non comparirebbero mai. */
+  .day-skip {
+    opacity: 1;
+    padding: 8px;
+  }
+
+  .shopping-move {
+    opacity: 1;
+  }
+
+  /* iOS colora di grigio qualunque cosa si tocchi, e lo fa in ritardo: sembra che
+     l'app si sia impuntata. Meglio spegnerlo e dare un ritorno immediato noi. */
+  a,
+  button {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .btn:active:not(:disabled),
+  .icon-button:active,
+  .meal-action:active,
+  .chat-send:active:not(:disabled),
+  .chat-suggestion:active {
+    opacity: 0.6;
+  }
+
+  .meal-card:active,
+  .shopping-tick:active,
+  .sidebar-link:active,
+  .category-option:active {
+    background: var(--bg-card-hover);
+  }
+}
+
+/* Sul telefono (schermo stretto E dito) le scritte più piccole del foglio diventano
+   illeggibili: 0,65rem sono undici pixel, letti a braccio teso in un supermercato.
+   Il limite di larghezza serve a non toccare i tablet, dove la griglia della
+   settimana ha ancora sette colonne da far stare in riga. */
+@media (pointer: coarse) and (max-width: 768px) {
+  .meal-flag,
+  .meal-slot,
+  .day-total {
+    font-size: 0.74rem;
+  }
+
+  .meal-meta,
+  .chat-hint {
+    font-size: 0.82rem;
   }
 }

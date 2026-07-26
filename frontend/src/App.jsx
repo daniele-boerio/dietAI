@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import {
   CalendarDays,
@@ -67,6 +67,17 @@ function AuthenticatedApp() {
     setToasts((prev) => [...prev, { id, message, type }]);
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3600);
   }, []);
+
+  // Col menu aperto la pagina dietro non deve scorrere: sul telefono il dito prende
+  // quasi sempre la pagina invece del cassetto, e si finisce altrove senza capire perché.
+  useEffect(() => {
+    if (!navOpen) return undefined;
+    const precedente = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = precedente;
+    };
+  }, [navOpen]);
 
   const ctx = { addToast };
 

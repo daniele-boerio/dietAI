@@ -310,6 +310,14 @@ threadpool. La regola non ha eccezioni e `tests/test_concurrency.py` la fa rispe
   `tests/test_dettaglio_pasto.py`.
 - Tutte le chiamate del frontend passano da `api.js` — mai `fetch` nei componenti.
 - Un solo file CSS (`index.css`) con custom properties. Niente CSS modules, niente Tailwind.
+- **Il telefono è il caso normale** (lista della spesa al supermercato, "l'ho seguito"
+  dopo cena): tre regole che si dimenticano scrivendo su un monitor. Le altezze a
+  schermo pieno vanno in `dvh` — `100vh` su iOS comprende la barra degli indirizzi e
+  manda l'ultima riga (di solito il campo della chat) sotto il bordo. Tutto ciò che è
+  `fixed` o incollato a un bordo somma `env(safe-area-inset-*)`, perché
+  `viewport-fit=cover` lascia passare la pagina sotto la tacca. E ciò che compare solo
+  `:hover` col dito non compare mai: le correzioni per il touch stanno nel blocco
+  `@media (pointer: coarse)` in fondo al foglio, bersagli da 44px compresi.
 - La griglia settimanale (≥1100px) allinea le righe sciogliendo `.day-column` con
   `display: contents`, e **ogni cella dichiara riga e colonna** (inline, da `WeekGrid`).
   Non affidarsi al posizionamento automatico: il cursore di CSS Grid non torna

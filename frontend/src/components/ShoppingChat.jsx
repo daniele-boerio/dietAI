@@ -10,6 +10,35 @@ const SUGGESTIONS = [
   'Sostituisci il petto di pollo con il tacchino',
 ];
 
+/**
+ * Quanto spazio si è mangiato la tastiera del telefono, in pixel.
+ *
+ * Serve al foglio della chat, che è `position: fixed` in fondo allo schermo: iOS,
+ * quando apre la tastiera, non sposta gli elementi fissi: li lascia dov'erano, cioè
+ * dietro ai tasti. Si finisce a scrivere alla cieca in un campo che non si vede.
+ * La `visualViewport` è l'unica a sapere quanta parte di schermo resta visibile.
+ */
+function useKeyboardInset() {
+  const [inset, setInset] = useState(0);
+
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return undefined;
+
+    const aggiorna = () =>
+      setInset(Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)));
+    aggiorna();
+    vv.addEventListener('resize', aggiorna);
+    vv.addEventListener('scroll', aggiorna);
+    return () => {
+      vv.removeEventListener('resize', aggiorna);
+      vv.removeEventListener('scroll', aggiorna);
+    };
+  }, []);
+
+  return inset;
+}
+
 // Chat "da supermercato": lavora sulla settimana intera, non su un pasto. Quando il
 // backend cambia delle ricette (`list_updated`) avvisa il genitore, che ricarica la
 // lista della spesa perché rifletta i nuovi ingredienti.
@@ -19,6 +48,7 @@ export default function ShoppingChat({ weekId, locked, onClose, onListUpdated })
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const bodyRef = useRef(null);
+  const keyboard = useKeyboardInset();
 
   useEffect(() => {
     if (weekId) api.getShoppingChat(weekId).then(setMessages).catch(() => {});
@@ -65,7 +95,16 @@ export default function ShoppingChat({ weekId, locked, onClose, onListUpdated })
   };
 
   return (
-    <div className="shopping-chat">
+    <div
+      className="shopping-chat"
+      // Col foglio alzato sopra la tastiera va accorciato anche, o la sua testata
+      // (dove sta la X per chiudere) esce dallo schermo dalla parte opposta.
+      style={
+        keyboard
+          ? { bottom: keyboard, maxHeight: `calc(100dvh - ${keyboard}px - 12px)` }
+          : undefined
+      }
+    >
       <div className="chat-head">
         <ShoppingCart />
         Assistente spesa

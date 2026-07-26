@@ -2,7 +2,15 @@
 <html lang="it">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover: la pagina arriva fino ai bordi anche sugli schermi col
+         notch, e in cambio `env(safe-area-inset-*)` smette di valere zero. Tutto ciò
+         che è fixed o incollato a un bordo (topbar, cassetto, footer della spesa,
+         toast) quei margini se li deve aggiungere, o finisce sotto la tacca o sotto
+         la barra di scorrimento del telefono. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
     <title>DietAI</title>
     <meta name="description" content="La tua dieta, tradotta in ricette e lista della spesa." />
     <link rel="manifest" href="/manifest.webmanifest" />

@@ -53,6 +53,7 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
 │       ├── rate_limit.py       # slowapi (AI_LIMIT = 20/minuto)
 │       ├── seed.py             # `python -m app.seed`: utente + anagrafica ingredienti
 │       ├── reset_password.py   # `python -m app.reset_password '...'`: unica via di rientro
+│       ├── merge_ingredients.py # `python -m app.merge_ingredients`: fonde i doppioni di anagrafica
 │       ├── routers/            # auth, diet, config, planning, recipes, chat, shopping, tracking
 │       ├── services/
 │       │   ├── ai_client.py    # due backend (openrouter/anthropic) dietro una interfaccia
@@ -299,9 +300,17 @@ Il backend non impone la regola — riceve i pasti e li salva — perché l'edit
 foglio di lavoro locale e l'utente deve poter correggere prima di salvare.
 
 **I nomi degli ingredienti si normalizzano.** `services/ingredients.normalize_name`
-toglie i qualificatori ("zucchine fresche" → "zucchine") e mette in minuscolo: senza,
-la lista della spesa avrebbe tre righe di zucchine e la dispensa non ne coprirebbe
-nessuna.
+mette in minuscolo e toglie i qualificatori: senza, la lista della spesa avrebbe tre
+righe di zucchine e la dispensa non ne coprirebbe nessuna. La linea di taglio è **come
+è messo** l'alimento contro **cos'è**: via conservazione (fresco, surgelato,
+sgusciato), taglio (a lamelle, grattugiato, a fettine) e calibro (medie, grandi, bio);
+restano integrale, magro, light, intero, al naturale, sott'olio — cambiano i macro,
+quindi cambiano l'alimento — e "pelati", che è una conserva e non lo stato di un
+pomodoro. Di conseguenza "surgelato" non decide più il reparto: la parola sparisce
+prima di arrivare a `guess_category`, e il banco giusto lo sceglie l'utente dalla
+lista (dove la scelta resta). Allargando l'elenco, le righe già in tabella vanno
+riallineate a mano: `python -m app.merge_ingredients` fonde i doppioni spostando
+ricette, dispensa, liste e preferenze sulla riga buona.
 
 **Niente email, in tutta l'app.** Nessun SMTP, nessuna registrazione, nessun recupero
 password via link: l'utente nasce dal seed e l'unico endpoint pubblico è `/auth/login`.

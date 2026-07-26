@@ -188,11 +188,13 @@ INGREDIENT_CATALOG: dict[str, tuple[str, float, str]] = {
     "cioccolato fondente": ("condimenti", 16.00, "kg"),
     "vino bianco": ("bevande", 5.00, "l"),
     "vino rosso": ("bevande", 5.00, "l"),
-    # ── Surgelati ──
-    "spinaci surgelati": ("surgelati", 3.00, "kg"),
-    "minestrone surgelato": ("surgelati", 2.80, "kg"),
-    "piselli surgelati": ("surgelati", 2.50, "kg"),
-    "filetti di merluzzo surgelati": ("surgelati", 12.00, "kg"),
+    # ── Piatti pronti e semilavorati ──
+    # "Surgelato" non fa più parte del nome (lo toglie `normalize_name`: è come è
+    # conservato, non cos'è), quindi qui non ci sono più voci col surgelato accanto —
+    # spinaci e piselli hanno già la loro riga sopra. Il reparto lo sposta l'utente
+    # dalla lista della spesa, che è l'unico posto da cui si vede il proprio negozio.
+    "minestrone": ("verdura", 2.80, "kg"),
+    "filetti di merluzzo": ("pesce", 12.00, "kg"),
 }
 
 # Ingredienti proposti come "di base" al primo avvio: quelli che chiunque ha in casa
@@ -233,7 +235,11 @@ _CATEGORY_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
                 "uva", "melone", "anguria", "fich", "cachi", "melagrana", "mirtill",
                 "lampon", "ananas", "avocado", "mandorl", "noci", "nocciol", "pinoli",
                 "pistacch", "uvetta", "datter", "prugn", "frutta")),
-    ("surgelati", ("surgelat", "congelat")),
+    # Nessuna parola chiave per i surgelati: "surgelato" e "congelato" li toglie la
+    # normalizzazione prima di arrivare qui, quindi un nome che li contenga non
+    # esiste. Il reparto resta, ma ce le mette l'utente, che sa dove sono nel suo
+    # supermercato — un tacchino surgelato non è nel banco del pesce solo perché è
+    # nel congelatore.
     ("bevande", ("acqua", "vino", "birra", "succo", "tè", "the", "caffè", "bevanda")),
     ("condimenti", ("olio", "aceto", "sale", "pepe", "zucchero", "miele", "spezi",
                     "origano", "peperoncino", "curry", "paprika", "curcuma", "cannella",

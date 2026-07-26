@@ -2333,6 +2333,87 @@ textarea:focus {
   font-size: 0.9rem;
 }
 
+/* Il diario della generazione: minuti di attesa che si possono guardare. Testo a
+   larghezza fissa e allineato a sinistra, perché è roba che scorre. */
+.generation-log {
+  max-width: 720px;
+  margin: 24px auto 0;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  overflow: hidden;
+}
+
+.generation-log-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.generation-log-tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.generation-log-tab {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  transition: background var(--transition), color var(--transition);
+}
+
+.generation-log-tab:hover:not(:disabled) {
+  background: var(--bg-card-hover);
+}
+
+.generation-log-tab.active {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.generation-log-tab:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.generation-log-meta {
+  margin-left: auto;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.generation-bar {
+  height: 3px;
+  background: var(--border);
+}
+
+.generation-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width var(--transition);
+}
+
+.generation-log-pane {
+  margin: 0;
+  padding: 12px 14px;
+  max-height: 240px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.76rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
 /* ── Modale ────────────────────────────────────────────────────── */
 
 .modal-overlay {

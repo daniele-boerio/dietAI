@@ -131,6 +131,22 @@ def _empty_response_error(model: str, max_tokens: int, finish_reason: str | None
     )
 
 
+def _reasoning_delta(delta) -> str:
+    """Il pezzo di ragionamento dentro un chunk, se il modello lo lascia vedere.
+
+    Non è nello schema OpenAI, quindi arriva fra i campi extra e il nome cambia da
+    fornitore a fornitore: `reasoning` su OpenRouter, `reasoning_content` altrove. Chi
+    il ragionamento lo tiene nascosto (le o-series) non manda niente, e va bene così:
+    resta il testo della risposta, che mentre esce dice già a che punto siamo.
+    """
+    extra = getattr(delta, "model_extra", None) or {}
+    for field in ("reasoning", "reasoning_content"):
+        value = getattr(delta, field, None) or extra.get(field)
+        if isinstance(value, str) and value:
+            return value
+    return ""
+
+
 def _provider_message(exc) -> str:
     """Il messaggio dell'errore così come lo ha scritto il fornitore.
 
@@ -161,7 +177,7 @@ class _AnthropicBackend:
         self._anthropic = anthropic
         self._client = anthropic.Anthropic(api_key=api_key, timeout=600)
 
-    def complete(self, *, model, system, messages, max_tokens, thinking) -> str:
+    def complete(self, *, model, system, messages, max_tokens, thinking, on_progress=None) -> str:
         params: dict = {
             "model": model,
             "max_tokens": max_tokens,
@@ -176,6 +192,17 @@ class _AnthropicBackend:
         try:
             if max_tokens > _STREAM_THRESHOLD:
                 with self._client.messages.stream(**params) as stream:
+                    if on_progress:
+                        # Gli eventi si consumano uno a uno solo se serve guardarli:
+                        # altrimenti basta aspettare il messaggio finale.
+                        for event in stream:
+                            if event.type != "content_block_delta":
+                                continue
+                            kind = getattr(event.delta, "type", "")
+                            if kind == "thinking_delta":
+                                on_progress("reasoning", event.delta.thinking)
+                            elif kind == "text_delta":
+                                on_progress("content", event.delta.text)
                     message = stream.get_final_message()
             else:
                 message = self._client.messages.create(**params)
@@ -250,7 +277,7 @@ class _OpenAICompatibleBackend:
             default_headers={"X-Title": "DietAI"},
         )
 
-    def complete(self, *, model, system, messages, max_tokens, thinking) -> str:
+    def complete(self, *, model, system, messages, max_tokens, thinking, on_progress=None) -> str:
         payload = [{"role": "system", "content": system}, *messages]
 
         # Sui modelli che ragionano (GLM, Hy3, o-series...) il ragionamento è ACCESO
@@ -283,6 +310,15 @@ class _OpenAICompatibleBackend:
                     piece = choice.delta.content
                     if piece:
                         chunks.append(piece)
+                    # I pezzi passano di qui comunque: darli a chi guarda costa una
+                    # chiamata di funzione e trasforma minuti di schermata muta in
+                    # qualcosa che si vede lavorare.
+                    if on_progress:
+                        thought = _reasoning_delta(choice.delta)
+                        if thought:
+                            on_progress("reasoning", thought)
+                        if piece:
+                            on_progress("content", piece)
                 text = "".join(chunks)
             else:
                 response = self._client.chat.completions.create(
@@ -371,13 +407,14 @@ class AIClient:
     def supports_native_pdf(self) -> bool:
         return self._backend.supports_native_pdf
 
-    def _complete(self, system, messages, max_tokens, thinking) -> str:
+    def _complete(self, system, messages, max_tokens, thinking, on_progress=None) -> str:
         text = self._backend.complete(
             model=self.model,
             system=system,
             messages=messages,
             max_tokens=max_tokens,
             thinking=thinking,
+            on_progress=on_progress,
         )
         if not text.strip():
             raise AIError("Il modello ha restituito una risposta vuota. Riprova.")
@@ -390,18 +427,22 @@ class AIClient:
         *,
         max_tokens: int = 16000,
         thinking: bool = False,
+        on_progress=None,
     ) -> dict | list:
         """Chiede una risposta JSON e la restituisce già parsata.
 
         Se il modello sbaglia formato, ritenta ricordandogli il vincolo: costa una
         chiamata in più ma evita di far fallire una generazione da mezzo minuto.
+
+        `on_progress(kind, delta)` — se passata e se la chiamata va in streaming —
+        riceve i pezzi man mano che escono, con `kind` fra "reasoning" e "content".
         """
         messages = [{"role": "user", "content": prompt}]
         last_error = ""
 
         for attempt in range(AI_MAX_RETRIES):
             started = time.monotonic()
-            text = self._complete(system, messages, max_tokens, thinking)
+            text = self._complete(system, messages, max_tokens, thinking, on_progress)
             elapsed = time.monotonic() - started
             try:
                 data = _extract_json(text)

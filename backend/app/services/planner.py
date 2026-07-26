@@ -9,10 +9,11 @@ dall'utente) l'AI non le tocca mai.
 
 import json
 import logging
+import time
 from datetime import date, datetime, timedelta, timezone
 
 from fastapi import HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from ..models import (
     BaseIngredient,
@@ -210,6 +211,91 @@ def is_generating(week: WeekPlan) -> bool:
     if started is None:
         return False
     return datetime.now(timezone.utc) - started < GENERATION_TIMEOUT
+
+
+class GenerationProgress:
+    """Il diario di bordo della generazione: cosa sta uscendo dal modello, adesso.
+
+    Una generazione dura minuti e finora la pagina non poteva dire altro che "sto
+    lavorando": nessun modo di distinguere un modello che sta ragionando da uno
+    piantato, o di capire a che ricetta è arrivato. Ora i pezzi che passano già in
+    streaming vengono raccolti qui e messi dove la pagina può leggerli.
+
+    Passa dal database, come `generation_started_at` e per lo stesso motivo: chi
+    guarda non è per forza chi ha premuto il pulsante, e la pagina si può ricaricare.
+    Se ne tiene solo la coda — a nessuno serve rileggere trentamila caratteri, e la
+    riga deve restare piccola perché la si riscrive ogni paio di secondi.
+
+    Le scritture vanno su una sessione a parte, aperta e chiusa a ogni giro: quella
+    della richiesta ha in mano la settimana a metà, e non può essere committata solo
+    per far vedere due righe di testo. Se il diario non si scrive non succede niente
+    di grave, quindi ogni errore qui viene ingoiato: sarebbe assurdo perdere una
+    generazione pagata per un log.
+    """
+
+    REASONING_TAIL = 4000
+    CONTENT_TAIL = 2000
+    FLUSH_EVERY = 2.0  # secondi
+
+    def __init__(self, week_id: int, expected_recipes: int = 0, session_factory=None):
+        self.week_id = week_id
+        self.expected_recipes = expected_recipes
+        self._session_factory = session_factory
+        self._reasoning: list[str] = []
+        self._content: list[str] = []
+        self._last_flush = 0.0
+
+    def __call__(self, kind: str, delta: str) -> None:
+        (self._reasoning if kind == "reasoning" else self._content).append(delta)
+
+        now = time.monotonic()
+        if now - self._last_flush < self.FLUSH_EVERY:
+            return
+        self.flush()
+
+    def snapshot(self) -> dict:
+        reasoning = "".join(self._reasoning)
+        content = "".join(self._content)
+        return {
+            "reasoning": reasoning[-self.REASONING_TAIL :],
+            "content": content[-self.CONTENT_TAIL :],
+            "reasoning_chars": len(reasoning),
+            "content_chars": len(content),
+            # Ogni ricetta comincia con la sua chiave "title": contarle è il modo più
+            # economico di dire a che punto siamo senza parsare un JSON a metà.
+            "recipes_written": content.count('"title"'),
+            "expected_recipes": self.expected_recipes,
+        }
+
+    def flush(self) -> None:
+        self._last_flush = time.monotonic()
+        if not self._session_factory:
+            return
+
+        session = self._session_factory()
+        try:
+            session.query(WeekPlan).filter(WeekPlan.id == self.week_id).update(
+                {WeekPlan.generation_progress: self.snapshot()}, synchronize_session=False
+            )
+            session.commit()
+        except Exception:
+            logger.debug("Diario della generazione non scritto", exc_info=True)
+            session.rollback()
+        finally:
+            session.close()
+
+
+def clear_generation_progress(db: Session, week: WeekPlan) -> None:
+    """Cancella il diario nel database, non solo nell'oggetto in memoria.
+
+    Il diario lo scrive un'altra sessione, quindi questa non sa che il valore sia mai
+    cambiato: assegnare `None` all'attributo non produrrebbe nessuna UPDATE e la
+    fotografia dell'ultima generazione resterebbe appesa alla settimana per sempre.
+    """
+    week.generation_progress = None
+    db.query(WeekPlan).filter(WeekPlan.id == week.id).update(
+        {WeekPlan.generation_progress: None}, synchronize_session=False
+    )
 
 
 def ensure_not_generating(week: WeekPlan) -> None:
@@ -930,7 +1016,17 @@ def generate_week(
     # la transazione aperta dalle letture qui sopra: senza, Postgres si terrebbe una
     # connessione "idle in transaction" per tutta la durata della chiamata.
     week.generation_started_at = datetime.now(timezone.utc)
+    clear_generation_progress(db, week)
     db.commit()
+
+    progress = GenerationProgress(
+        week.id,
+        expected_recipes=len(to_fill),
+        # Stesso database, connessione diversa: così il diario si committa da solo
+        # senza portarsi dietro la settimana a metà che ha in mano questa sessione.
+        session_factory=sessionmaker(bind=db.get_bind()),
+    )
+    progress.flush()  # una prima riga subito: la pagina ha già qualcosa da mostrare
 
     # Budget: ~2.000 token a ricetta più il margine per il ragionamento. Sopra la
     # soglia il client passa automaticamente in streaming.
@@ -941,11 +1037,13 @@ def generate_week(
             prompt,
             max_tokens=max_tokens,
             thinking=True,
+            on_progress=progress,
         )
     except Exception:
         # Anche se va male la settimana deve tornare generabile, altrimenti resta
         # bloccata su "sto generando" fino allo scadere del timeout.
         week.generation_started_at = None
+        clear_generation_progress(db, week)
         db.commit()
         raise
 
@@ -980,6 +1078,7 @@ def generate_week(
             filled += 1
 
     week.generation_started_at = None
+    clear_generation_progress(db, week)
 
     if filled == 0:
         db.commit()

@@ -250,6 +250,10 @@ class WeekPlan(Base):
     # database e non nel browser perché deve sopravvivere a un cambio pagina e a un
     # ricaricamento: senza, si riparte a premere "Genera" e si paga due volte.
     generation_started_at = Column(DateTime(timezone=True))
+    # Diario di bordo della generazione in corso: coda del ragionamento, coda del
+    # testo e contatori. Serve solo a far vedere che sta succedendo qualcosa nei
+    # minuti in cui il modello scrive. Si azzera insieme a generation_started_at.
+    generation_progress = Column(JSONType)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (

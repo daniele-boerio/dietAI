@@ -17,6 +17,7 @@ from ..services.planner import (
     ensure_unlocked,
     generate_week,
     get_or_create_week,
+    is_generating,
     next_week_start,
     refresh_week_statuses,
     regenerate_meal,
@@ -109,6 +110,27 @@ def generate(
     payload = serialize_week(db, week)
     payload["generation"] = result
     return payload
+
+
+@router.get("/weeks/{week_id}/progress")
+def generation_progress(
+    week_id: int, user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
+):
+    """Cosa sta scrivendo il modello in questo momento.
+
+    Chiamata a raffica mentre la generazione è in corso, quindi non ricostruisce
+    niente: legge la riga della settimana e la restituisce. A generazione finita
+    risponde con `is_generating` falso e il diario vuoto, che è il segnale per la
+    pagina di smettere di chiedere.
+    """
+    week = _get_week(db, user_id, week_id)
+    running = is_generating(week)
+    started = week.generation_started_at
+    return {
+        "is_generating": running,
+        "started_at": started.isoformat() if running and started else None,
+        **(week.generation_progress or {} if running else {}),
+    }
 
 
 @router.post("/weeks/{week_id}/lock")

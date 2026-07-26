@@ -228,6 +228,22 @@ seconda generazione in parallelo — che sarebbe una spesa doppia. Dopo
 `GENERATION_TIMEOUT` (15 minuti) il segno si considera morto, così un processo
 riavviato a metà non blocca la settimana per sempre.
 
+**La generazione si può guardare mentre succede.** Dura minuti e si paga: una
+schermata ferma non permette di distinguere un modello che ragiona da uno piantato.
+`ai_client` accetta un `on_progress(kind, delta)` che riceve i pezzi già in streaming
+(`kind` = `reasoning` o `content`; il ragionamento arriva fra i campi extra, che
+OpenRouter chiama `reasoning` e altri `reasoning_content`), e `GenerationProgress`
+ne scrive coda e contatori in `WeekPlan.generation_progress` ogni due secondi, letti
+da `GET /api/planning/weeks/{id}/progress`. Due dettagli non ovvi: le scritture vanno
+su una **sessione a parte** (quella della richiesta ha in mano la settimana a metà e
+non si può committare per un log), e proprio per questo azzerare il diario a fine
+corsa richiede `clear_generation_progress` — assegnare `None` all'attributo non
+emetterebbe nessuna UPDATE, visto che quella sessione non sa che il valore sia mai
+cambiato. Il numero di ricette scritte si conta dalle chiavi `"title"` nel testo:
+parsare un JSON a metà non si può, contare sì. Se il diario non si scrive non
+succede niente — ogni errore lì viene ingoiato, sarebbe assurdo perdere una
+generazione pagata per un log.
+
 **Una sola chiamata AI per settimana.** L'anti-spreco (mezza zucchina lunedì, l'altra
 metà giovedì) funziona solo se il modello vede tutti i pasti insieme. Sopra gli 8.000
 token di output `ai_client` passa in streaming da solo.

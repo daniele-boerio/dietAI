@@ -154,6 +154,9 @@ export const api = {
       { method: 'POST' }
     ),
 
+  // Cosa sta scrivendo il modello adesso: si chiede solo mentre genera.
+  getGenerationProgress: (weekId) => request(`/planning/weeks/${weekId}/progress`),
+
   lockWeek: (weekId) => request(`/planning/weeks/${weekId}/lock`, { method: 'POST' }),
 
   unlockWeek: (weekId) => request(`/planning/weeks/${weekId}/unlock`, { method: 'POST' }),

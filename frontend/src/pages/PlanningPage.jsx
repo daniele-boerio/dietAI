@@ -4,6 +4,7 @@ import { CalendarOff, Lock, RefreshCw, Sparkles, Unlock } from 'lucide-react';
 import { api, formatDate } from '../api';
 import { useApp } from '../App';
 import ConfirmDialog from '../components/ConfirmDialog';
+import GenerationLog from '../components/GenerationLog';
 import WeekGrid from '../components/WeekGrid';
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -259,6 +260,7 @@ export default function PlanningPage({ nextWeek = false }) {
             L'AI sta incastrando macro, stagionalità e avanzi per non farti buttare
             mezza zucchina. Ci vogliono da trenta secondi a un paio di minuti.
           </p>
+          <GenerationLog weekId={week.id} />
         </div>
       ) : (
         <WeekGrid

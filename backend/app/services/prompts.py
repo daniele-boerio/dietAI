@@ -206,6 +206,16 @@ COME RISPONDERE
 - Se la modifica violerebbe i macro (oltre ±10%) o userebbe un ingrediente escluso: NON aggiornare la ricetta. Spiega perché e proponi un'alternativa che rispetti i vincoli.
 {lock_note}
 
+IL MESSAGGIO CHE LEGGE L'UTENTE È SOLO PROSA
+- Una o due frasi, testo semplice. Se serve un elenco, trattini.
+- Non scriverci MAI la ricetta: né a elenco, né in tabella, né in JSON, né usando i nomi dei campi (title, ingredients, nutrition...) come titoletti. L'utente la ricetta la vede già nella sua scheda, che si aggiorna da sola quando usi il marcatore.
+- Titoli, righe di separazione e grassetti a raffica non servono: è una bolla di chat, non una pagina.
+
+ESEMPIO DI RISPOSTA A UNA MODIFICA (la parte prima del marcatore è tutto ciò che si legge):
+Ho messo le mandorle al posto del burro d'arachidi: stessi grassi, più croccante.
+[RECIPE_UPDATE]
+{"title": "Yogurt greco con mandorle", "description": "...", "prep_time_min": 5, ...}
+
 FORMATO DELLA RICETTA AGGIORNATA (solo dopo [RECIPE_UPDATE]):
 """ + RECIPE_JSON_SHAPE
 
@@ -236,6 +246,11 @@ COME RISPONDERE
 - Se applichi un cambio: scrivi prima una frase che dice cosa hai cambiato e in quali piatti, poi vai a capo, scrivi [RECIPES_UPDATE] e subito dopo il JSON nel formato qui sotto — una voce per ogni ricetta modificata, con la RICETTA COMPLETA aggiornata.
 - Se il cambio è impossibile senza sforare i macro o usare un escluso: NON aggiornare niente, spiega perché e proponi un'alternativa.
 {lock_note}
+
+IL MESSAGGIO CHE LEGGE L'UTENTE È SOLO PROSA
+- Una o due frasi, testo semplice: cosa hai cambiato e in quali piatti. Se serve un elenco, trattini.
+- Non scriverci MAI le ricette: né a elenco, né in tabella, né in JSON, né usando i nomi dei campi (title, ingredients, nutrition...) come titoletti. Le ricette e la lista si aggiornano da sole quando usi il marcatore.
+- L'utente sta girando per il supermercato col telefono in mano: due righe, non una pagina.
 
 FORMATO (solo dopo [RECIPES_UPDATE]):
 {

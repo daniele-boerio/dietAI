@@ -196,6 +196,19 @@ etichette dei pasti portano la data proprio perché "Lunedì / Pranzo" con due s
 in lista sarebbe ambiguo. A spesa fatta (`is_locked`) resta informativa, come la
 chat sul pasto. Il prompt (`SHOPPING_CHAT_SYSTEM`) sta in `prompts.py` con gli altri.
 
+**In chat la ricetta va dopo il marcatore, mai dentro il messaggio.** `[RECIPE_UPDATE]`
+(o `[RECIPES_UPDATE]`) è l'unico modo che ha il backend di sapere che c'è una modifica
+da applicare. Un modello che riempie lo schema a mano in markdown — con i nomi dei
+campi come titoletti e i dizionari degli ingredienti in chiaro — produce il fallimento
+peggiore: l'utente legge un piatto pronto e nel piano non è cambiato niente. I prompt
+lo vietano esplicitamente ("il messaggio che legge l'utente è solo prosa") con un
+esempio di risposta corretta, e `_needs_marker_retry` riconosce il caso (pezzi di JSON
+o nomi di campi nel testo) e richiede la risposta una volta sola, spiegando l'errore:
+la prima chiamata è già pagata, la seconda costa meno che perderla. Non si ritenta a
+piano bloccato, dove non ci sarebbe niente da applicare. Le bolle passano da
+`ChatText`, che rende il minimo di markdown che i modelli usano davvero (grassetto,
+elenchi, paragrafi) costruendo elementi React — nessuna libreria, nessun HTML grezzo.
+
 **Il modello si sceglie per ruolo.** `planning`, `chat`, `diet` hanno pesi diversi:
 incastrare trenta pasti nei macro è difficile, rispondere in chat no. `get_client(db,
 user, role)` costruisce il client col modello scelto dall'utente (`user_preferences`)

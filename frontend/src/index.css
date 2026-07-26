@@ -1114,7 +1114,26 @@ textarea {
   border-radius: var(--radius-md);
   font-size: 0.88rem;
   line-height: 1.55;
-  white-space: pre-wrap;
+}
+
+/* Il contenuto della bolla passa da ChatText, che lo spezza già in paragrafi ed
+   elenchi: qui servono solo i margini per non farli sembrare un blocco unico. */
+.chat-bubble p {
+  margin: 0 0 6px;
+}
+
+.chat-bubble ul,
+.chat-bubble ol {
+  margin: 4px 0 8px;
+  padding-left: 20px;
+}
+
+.chat-bubble li {
+  margin: 2px 0;
+}
+
+.chat-bubble > *:last-child {
+  margin-bottom: 0;
 }
 
 .chat-bubble.user {

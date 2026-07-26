@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { MessageSquare, Send, Trash2 } from 'lucide-react';
 import { api } from '../api';
 import { useApp } from '../App';
+import ChatText from './ChatText';
 
 const SUGGESTIONS = [
   'Come lo preparo in meno tempo?',
@@ -99,7 +100,7 @@ export default function MealChat({ mealId, locked, onRecipeUpdated }) {
 
         {messages.map((m) => (
           <div key={m.id} className={`chat-bubble ${m.role}`}>
-            {m.content}
+            <ChatText text={m.content} />
           </div>
         ))}
 

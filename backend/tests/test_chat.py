@@ -58,8 +58,33 @@ def meal_id(client, diet, monkeypatch):
     return week["days"][0]["meals"][1]["id"]  # Pranzo
 
 
+class FakeChatSequence(FakeChat):
+    """Una risposta diversa a ogni turno: serve a provare il secondo tentativo.
+
+    Finite le risposte previste ripete l'ultima, così un test che ne chiedesse una in
+    più fallisce sull'asserzione e non con un IndexError.
+    """
+
+    def __init__(self, *replies):
+        super().__init__(replies[0])
+        self.replies = list(replies)
+        self.calls = []
+
+    def chat(self, system, messages, **kwargs):
+        self.system = system
+        self.messages = messages
+        self.calls.append(messages)
+        return self.replies.pop(0) if len(self.replies) > 1 else self.replies[0]
+
+
 def use_chat(monkeypatch, reply) -> FakeChat:
     fake = FakeChat(reply)
+    monkeypatch.setattr(chat_router, "get_client", lambda db, user, role: fake)
+    return fake
+
+
+def use_chat_sequence(monkeypatch, *replies) -> FakeChatSequence:
+    fake = FakeChatSequence(*replies)
     monkeypatch.setattr(chat_router, "get_client", lambda db, user, role: fake)
     return fake
 
@@ -168,6 +193,70 @@ def test_un_json_rotto_non_rompe_la_conversazione(client, meal_id, monkeypatch):
 
     assert res["recipe_updated"] is False
     assert "Non sono riuscito ad applicare la modifica" in res["content"]
+
+
+# ── La ricetta scritta nel messaggio invece che dopo il marcatore ──────────────
+
+# Com'è successo davvero: il modello riempie lo schema a mano, in markdown, e i pezzi
+# di JSON finiscono sotto gli occhi dell'utente. Senza marcatore la ricetta non viene
+# applicata: si legge un piatto pronto e nel piano non è cambiato niente.
+RISPOSTA_SBAGLIATA = """Ecco la ricetta per la tua colazione, ottimizzata per i macro:
+
+**Yogurt greco con cereali e mandorle**
+
+**Prep_time_min**: 5
+
+**Ingredients**:
+- {"name": "yogurt greco bianco magro", "quantity": 200, "unit": "ml"}
+- {"name": "mandorle", "quantity": 15, "unit": "g"}
+"""
+
+
+def test_una_ricetta_scritta_nel_messaggio_viene_richiesta(client, meal_id, monkeypatch):
+    fake = use_chat_sequence(monkeypatch, RISPOSTA_SBAGLIATA, _risposta_con_ricetta())
+
+    res = client.post(
+        f"/api/chat/meals/{meal_id}/messages", json={"content": "Cambiami la colazione"}
+    ).json()
+
+    # Il secondo tentativo ha il marcatore: la ricetta si applica davvero.
+    assert res["recipe_updated"] is True
+    assert res["recipe"]["title"] == "Pasta al pesto di zucchine"
+    assert '"name"' not in res["content"]
+    # E al modello è stato detto cosa aveva sbagliato, non la stessa cosa di prima.
+    assert len(fake.calls) == 2
+    assert "[RECIPE_UPDATE]" in fake.calls[1][-1]["content"]
+
+
+def test_una_risposta_normale_non_fa_ripartire_niente(client, meal_id, monkeypatch):
+    """Il secondo tentativo si paga: deve scattare solo sul caso che risolve."""
+    fake = use_chat_sequence(monkeypatch, "Sì, le mandorle vanno benissimo al posto delle noci.")
+
+    client.post(f"/api/chat/meals/{meal_id}/messages", json={"content": "Posso usare le mandorle?"})
+
+    assert len(fake.calls) == 1
+
+
+def test_se_sbaglia_due_volte_la_risposta_non_si_perde(client, meal_id, monkeypatch):
+    fake = use_chat_sequence(monkeypatch, RISPOSTA_SBAGLIATA, RISPOSTA_SBAGLIATA)
+
+    res = client.post(
+        f"/api/chat/meals/{meal_id}/messages", json={"content": "Cambiami la colazione"}
+    ).json()
+
+    assert len(fake.calls) == 2  # si riprova una volta sola
+    assert res["recipe_updated"] is False
+    assert "Yogurt greco" in res["content"]  # meglio una risposta brutta che nessuna
+
+
+def test_a_piano_bloccato_non_si_ritenta(client, meal_id, monkeypatch):
+    """Non c'è niente da applicare: chiedere di nuovo sarebbe una chiamata buttata."""
+    client.post("/api/shopping/current/complete")
+    fake = use_chat_sequence(monkeypatch, RISPOSTA_SBAGLIATA, _risposta_con_ricetta())
+
+    client.post(f"/api/chat/meals/{meal_id}/messages", json={"content": "Cambiala"})
+
+    assert len(fake.calls) == 1
 
 
 # ── Piano bloccato ─────────────────────────────────────────────────────────────

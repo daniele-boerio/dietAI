@@ -1,6 +1,7 @@
 """Chat contestuale su un pasto: si parla della ricetta e, se serve, la si modifica."""
 
 import logging
+import re
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
@@ -45,6 +46,49 @@ RECIPES_UPDATE_MARKER = "[RECIPES_UPDATE]"
 # Quanti messaggi passati rimandare al modello. Oltre non serve: la conversazione su
 # un singolo pasto è corta, e ogni messaggio in più è contesto pagato a ogni turno.
 HISTORY_LIMIT = 20
+
+# I segni che il modello ha scritto la ricetta *dentro* il messaggio invece che dopo il
+# marcatore: pezzi di JSON crudi, o i nomi dei campi dello schema usati come titoletti.
+_RECIPE_DUMP = re.compile(
+    r'"(?:name|quantity|prep_time_min|cook_time_min|ingredients|nutrition)"\s*:'
+    r"|\*\*(?:ingredients|instructions|nutrition|prep_time_min|cook_time_min)\*\*",
+    re.IGNORECASE,
+)
+
+
+def _retry_for_marker(
+    client, system: str, messages: list[dict], answer: str, marker: str, max_tokens: int
+) -> str:
+    """Richiede la risposta quando il modello ha scritto la ricetta a parole.
+
+    Senza marcatore la ricetta non viene applicata: l'utente legge un piatto
+    bell'e pronto e nel piano non è cambiato niente — il modo peggiore di fallire,
+    perché sembra riuscito. Quando si riconosce il caso (nel messaggio ci sono pezzi
+    di JSON o i nomi dei campi) conviene ridirglielo: una seconda chiamata di chat
+    costa poco e recupera la prima, che è già stata pagata.
+
+    Se anche il secondo tentativo sbaglia si tiene quello nuovo solo se ha il
+    marcatore, altrimenti resta il primo: almeno è una risposta intera.
+    """
+    logger.info("Chat: ricetta scritta nel messaggio invece che dopo %s, richiedo", marker)
+    retry = messages + [
+        {"role": "assistant", "content": answer[:2000]},
+        {
+            "role": "user",
+            "content": (
+                "Hai scritto la ricetta dentro il messaggio. Rispondi di nuovo: prima UNA "
+                f"frase che dice cosa hai cambiato, poi una riga con {marker}, poi SOLO il "
+                "JSON completo della ricetta. Nel messaggio niente elenchi di ingredienti, "
+                "niente nomi di campi, niente JSON."
+            ),
+        },
+    ]
+    second = client.chat(system, retry, max_tokens=max_tokens)
+    return second if marker in second else answer
+
+
+def _needs_marker_retry(answer: str, marker: str) -> bool:
+    return marker not in answer and bool(_RECIPE_DUMP.search(answer))
 
 
 def _get_meal(db: Session, user_id: int, meal_id: int) -> tuple[PlannedMeal, DayPlan, WeekPlan]:
@@ -152,6 +196,8 @@ def send_message(
     # Budget largo: sui modelli che ragionano una parte se ne va in ragionamento
     # prima ancora che comincino a scrivere.
     answer = client.chat(system, messages, max_tokens=8000)
+    if not frozen and _needs_marker_retry(answer, UPDATE_MARKER):
+        answer = _retry_for_marker(client, system, messages, answer, UPDATE_MARKER, 8000)
 
     recipe_updated = False
     visible = answer
@@ -364,6 +410,10 @@ def send_shopping_message(
     # Budget più largo della chat sul pasto: qui una risposta può contenere più ricette
     # complete in una volta.
     answer = client.chat(system, messages, max_tokens=16000)
+    if not week.is_locked and _needs_marker_retry(answer, RECIPES_UPDATE_MARKER):
+        answer = _retry_for_marker(
+            client, system, messages, answer, RECIPES_UPDATE_MARKER, 16000
+        )
 
     changed: list[str] = []
     visible = answer

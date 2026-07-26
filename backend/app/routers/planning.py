@@ -1,7 +1,7 @@
 """Piano settimanale: lettura della griglia, generazione e modifica dei singoli pasti."""
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
@@ -12,7 +12,6 @@ from ..models import DayPlan, MealSlot, PlannedMeal, Recipe, User, WeekPlan
 from ..rate_limit import AI_LIMIT, limiter
 from ..schemas import AssignMealRequest, FollowedRequest, RecurringRequest, SkipDayRequest
 from ..services.planner import (
-    LOCK_DAYS,
     current_week_start,
     ensure_not_skipped,
     ensure_unlocked,
@@ -28,7 +27,12 @@ from ..services.planner import (
     unskip_meal,
 )
 from ..services.recipes import create_recipe
-from ..services.shopping import complete_shopping, get_or_create_list, rebuild_shopping_list
+from ..services.shopping import (
+    complete_shopping,
+    get_or_create_list,
+    lock_bought_week,
+    rebuild_lists_for,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -116,11 +120,7 @@ def lock_week(
     if week.is_locked:
         raise HTTPException(409, "Piano già bloccato")
 
-    now = datetime.now(timezone.utc)
-    week.is_locked = True
-    week.locked_at = now
-    week.lock_expires_at = now + timedelta(days=LOCK_DAYS)
-    week.status = "locked"
+    lock_bought_week(week, datetime.now(timezone.utc))
     db.commit()
     return {
         "locked_at": week.locked_at.isoformat(),
@@ -218,7 +218,7 @@ def assign_meal(
     meal.is_followed = None
     db.commit()
 
-    rebuild_shopping_list(db, user.id, week)
+    rebuild_lists_for(db, user.id, week)
     db.commit()
 
     slot = db.get(MealSlot, meal.meal_slot_id)
@@ -240,7 +240,7 @@ def clear_meal(
     meal.is_followed = None
     db.commit()
 
-    rebuild_shopping_list(db, user_id, week)
+    rebuild_lists_for(db, user_id, week)
     db.commit()
 
     slot = db.get(MealSlot, meal.meal_slot_id)
@@ -299,7 +299,7 @@ def set_followed(
         moved = skip_meal(db, user_id, meal, day, week)
     db.commit()
 
-    rebuild_shopping_list(db, user_id, week)
+    rebuild_lists_for(db, user_id, week)
     db.commit()
 
     slot = db.get(MealSlot, meal.meal_slot_id)
@@ -333,6 +333,6 @@ def set_day_skipped(
     skip_day(db, user_id, day, week, body.is_skipped)
     db.commit()
 
-    rebuild_shopping_list(db, user_id, week)
+    rebuild_lists_for(db, user_id, week)
     db.commit()
     return serialize_week(db, week)

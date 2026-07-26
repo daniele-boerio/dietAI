@@ -139,14 +139,28 @@ def test_un_giorno_tracciato_non_si_salta(client, settimana_generata, oggi):
 # ── Effetti sul resto dell'app ─────────────────────────────────────────────────
 
 
-def test_la_lista_della_spesa_perde_i_giorni_saltati(client, settimana_generata, oggi):
+def test_la_lista_segue_le_ricette_slittate(client, settimana_generata, oggi):
+    """I giorni saltati non si comprano, ma le loro ricette sì: sono slittate avanti.
+
+    La lista copre tutte le settimane con ricette non ancora comprate, quindi i due
+    pranzi traboccati sulla prossima restano nel conto — si cucineranno, e sono da
+    comprare. Quello che non si compra è il giorno saltato, non la ricetta.
+    """
     oggi(2)
     lst = client.get("/api/shopping/current").json()
     items = {i["name"]: i for cat in lst["categories"] for i in cat["items"]}
 
-    # Zucchine: 250 g al giorno, ma i giorni rimasti sono cinque, non sette.
-    assert items["zucchine"]["quantity"] == pytest.approx(5 * 250)
-    # E la lista dice da quando parte, così il totale più basso si spiega da sé.
+    # Sette pranzi generati, sette da cucinare: cinque qui, due nella settimana dopo.
+    assert items["zucchine"]["quantity"] == pytest.approx(7 * 250)
+    assert len(lst["weeks_covered"]) == 2
+
+    prossima = client.get("/api/shopping/next").json()
+    zucchine_prossima = next(
+        i["quantity"] for c in prossima["categories"] for i in c["items"] if i["name"] == "zucchine"
+    )
+    assert zucchine_prossima == pytest.approx(2 * 250)
+
+    # La lista dice comunque da quando si comincia a cucinare.
     assert lst["days_skipped"] == 2
     assert lst["covers_from"] == (planner.monday_of(date.today()) + timedelta(days=2)).isoformat()
 

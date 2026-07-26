@@ -1,11 +1,15 @@
 """Lista della spesa: aggregazione, stima costo, completamento e blocco.
 
-La lista non è una cosa che l'utente compila: è una funzione del piano settimanale.
-Ogni volta che il piano cambia viene ricalcolata da zero, sottraendo quello che in
-casa c'è già (dispensa) e quello che c'è sempre (ingredienti di base).
+La lista non è una cosa che l'utente compila: è una funzione del piano. Ogni volta
+che il piano cambia viene ricalcolata da zero, sottraendo quello che in casa c'è già
+(dispensa) e quello che c'è sempre (ingredienti di base).
+
+"Il piano", non "la settimana": la lista copre tutte le settimane generate di cui la
+spesa non è ancora stata fatta, non solo quella corrente. È l'utente a decidere
+quanto avanti spingersi, generando o non generando le settimane successive.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
@@ -66,20 +70,70 @@ def get_or_create_list(db: Session, week: WeekPlan) -> ShoppingList:
     return lst
 
 
-def _aggregate_week_ingredients(db: Session, week: WeekPlan) -> dict[tuple[int, str], float]:
-    """Somma le quantità di tutte le ricette della settimana, per (ingrediente, unità base).
+def weeks_covered(db: Session, user_id: int, week: WeekPlan) -> list[WeekPlan]:
+    """Le settimane che entrano in questa lista: dalla sua in avanti, quelle non comprate.
+
+    La spesa segue il piano, non il calendario: se è già stata generata anche la
+    settimana prossima i suoi ingredienti servono davvero, e comprarli nello stesso
+    giro è il motivo per cui l'app esiste (una zucchina che avanza lunedì si usa
+    giovedì solo se la si compra una volta sola). Quanto avanti spingersi lo decide
+    l'utente generando le settimane che vuole.
+
+    Restano fuori le settimane già bloccate: `is_locked` significa che quella spesa è
+    stata fatta, quindi quel cibo è in frigo e non nel carrello. Vale anche per la
+    settimana della lista stessa — se è bloccata la sua lista è storia, non una spesa
+    da rifare.
+
+    E restano fuori le settimane senza ricette. Una settimana vuota esiste appena la
+    si apre nel piano, ma non ha niente da comprare: contarla vorrebbe dire scrivere
+    "spesa per due settimane" a chi ne ha generata una, e soprattutto bloccarla a
+    spesa fatta — cioè impedire di generarla proprio quando ci si vuole mettere.
+    """
+    candidate = (
+        db.query(WeekPlan)
+        .filter(
+            WeekPlan.user_id == user_id,
+            WeekPlan.week_start_date >= week.week_start_date,
+            WeekPlan.is_locked.is_(False),
+        )
+        .order_by(WeekPlan.week_start_date)
+        .all()
+    )
+    if not candidate:
+        return []
+
+    with_recipes = {
+        row[0]
+        for row in db.query(DayPlan.week_plan_id)
+        .join(PlannedMeal, PlannedMeal.day_plan_id == DayPlan.id)
+        .filter(
+            DayPlan.week_plan_id.in_([w.id for w in candidate]),
+            PlannedMeal.recipe_id.isnot(None),
+            DayPlan.is_skipped.is_(False),
+            PlannedMeal.is_skipped.is_(False),
+        )
+        .distinct()
+    }
+    return [w for w in candidate if w.id in with_recipes]
+
+
+def _aggregate_ingredients(db: Session, weeks: list[WeekPlan]) -> dict[tuple[int, str], float]:
+    """Somma le quantità di tutte le ricette delle settimane, per (ingrediente, unità base).
 
     Giorni e pasti saltati restano fuori: i primi sono passati senza che si facesse la
     spesa (comprare oggi gli ingredienti di lunedì è esattamente lo spreco da
     evitare), i secondi hanno già la loro ricetta accodata su un altro giorno, e
     contarli qui vorrebbe dire comprare due volte lo stesso piatto.
     """
+    if not weeks:
+        return {}
+
     rows = (
         db.query(RecipeIngredient)
         .join(PlannedMeal, PlannedMeal.recipe_id == RecipeIngredient.recipe_id)
         .join(DayPlan, DayPlan.id == PlannedMeal.day_plan_id)
         .filter(
-            DayPlan.week_plan_id == week.id,
+            DayPlan.week_plan_id.in_([w.id for w in weeks]),
             DayPlan.is_skipped.is_(False),
             PlannedMeal.is_skipped.is_(False),
         )
@@ -102,7 +156,7 @@ def rebuild_shopping_list(db: Session, user_id: int, week: WeekPlan) -> Shopping
     if lst.is_completed:
         return lst
 
-    totals = _aggregate_week_ingredients(db, week)
+    totals = _aggregate_ingredients(db, weeks_covered(db, user_id, week))
 
     base_ids = {
         r[0]
@@ -153,6 +207,32 @@ def rebuild_shopping_list(db: Session, user_id: int, week: WeekPlan) -> Shopping
     lst.estimated_cost = round(estimated_total, 2) if estimated_total else None
     db.flush()
     return lst
+
+
+def rebuild_lists_for(db: Session, user_id: int, week: WeekPlan) -> None:
+    """Ricostruisce ogni lista aperta che comprende questa settimana.
+
+    Da quando una lista copre più settimane, generare o cambiare una ricetta della
+    prossima cambia anche la spesa di questa. Rifare solo la lista della settimana
+    toccata lascerebbe l'altra ferma a prima — e al supermercato si va con quella.
+    """
+    from .planner import current_week_start
+
+    anchors = (
+        db.query(WeekPlan)
+        .join(ShoppingList, ShoppingList.week_plan_id == WeekPlan.id)
+        .filter(
+            WeekPlan.user_id == user_id,
+            # Una lista comincia dalla sua settimana: quelle successive non c'entrano.
+            WeekPlan.week_start_date <= week.week_start_date,
+            # Le liste delle settimane passate sono storia, anche se rimaste aperte.
+            WeekPlan.week_start_date >= current_week_start(),
+            ShoppingList.is_completed.is_(False),
+        )
+        .all()
+    )
+    for anchor in anchors:
+        rebuild_shopping_list(db, user_id, anchor)
 
 
 def serialize_shopping_list(db: Session, week: WeekPlan, lst: ShoppingList) -> dict:
@@ -213,6 +293,12 @@ def serialize_shopping_list(db: Session, week: WeekPlan, lst: ShoppingList) -> d
     covered = [d for d in days if not d.is_skipped]
     past_skipped = [d for d in days if d.is_skipped and d.date < today()]
 
+    # Le settimane che la lista sta comprando. Su una lista già completata la domanda
+    # non ha più senso (quelle settimane sono bloccate, cioè fuori dal calcolo): si
+    # riporta la sua, che è quella a cui la spesa è intestata.
+    weeks = [week] if lst.is_completed else weeks_covered(db, week.user_id, week)
+    last_day = max((w.week_start_date for w in weeks), default=week.week_start_date)
+
     return {
         "id": lst.id,
         "week_plan_id": week.id,
@@ -223,6 +309,11 @@ def serialize_shopping_list(db: Session, week: WeekPlan, lst: ShoppingList) -> d
         "is_locked": week.is_locked,
         "days_skipped": len(past_skipped),
         "covers_from": covered[0].date.isoformat() if covered else None,
+        # Fin dove arriva la spesa: la domenica dell'ultima settimana coperta.
+        "covers_to": (last_day + timedelta(days=6)).isoformat(),
+        "weeks_covered": [
+            {"id": w.id, "week_start_date": w.week_start_date.isoformat()} for w in weeks
+        ],
         "total_items": total_items,
         "checked_items": checked_items,
         "categories": categories,
@@ -245,25 +336,39 @@ def shopping_list_summary(db: Session, lst: ShoppingList) -> str:
     return ", ".join(sorted(names)) if names else "(lista vuota)"
 
 
+def lock_bought_week(week: WeekPlan, now: datetime) -> None:
+    """Blocca una settimana perché il suo cibo è stato comprato.
+
+    Il blocco dura sette giorni, ma per una settimana futura partono dal suo lunedì:
+    contati da oggi scadrebbero prima ancora che la settimana cominci, e il piano
+    tornerebbe modificabile con gli ingredienti già in frigo.
+    """
+    start = datetime.combine(week.week_start_date, time.min, tzinfo=timezone.utc)
+    week.is_locked = True
+    week.locked_at = now
+    week.lock_expires_at = max(now, start) + timedelta(days=LOCK_DAYS)
+    week.status = "locked"
+
+
 def complete_shopping(db: Session, user_id: int, week: WeekPlan, lst: ShoppingList) -> dict:
-    """Segna la spesa come fatta: blocca il piano per 7 giorni e riempie la dispensa.
+    """Segna la spesa come fatta: blocca il piano e riempie la dispensa.
 
     Il blocco è il punto del progetto: una volta comprato il cibo, cambiare le
-    ricette significa buttarlo. Da qui in poi la settimana è in sola lettura e le
-    modifiche si fanno sulla settimana successiva.
+    ricette significa buttarlo. Si bloccano **tutte** le settimane che la lista
+    copriva, non solo la prima: se la spesa comprendeva anche la prossima, anche
+    quelle ricette adesso sono pagate.
     """
     if lst.is_completed:
         raise HTTPException(409, "Questa spesa risulta già completata.")
 
     now = datetime.now(timezone.utc)
+    covered = weeks_covered(db, user_id, week) or [week]
 
     lst.is_completed = True
     lst.completed_at = now
 
-    week.is_locked = True
-    week.locked_at = now
-    week.lock_expires_at = now + timedelta(days=LOCK_DAYS)
-    week.status = "locked"
+    for covered_week in covered:
+        lock_bought_week(covered_week, now)
 
     # Quello che è stato spuntato è finito nel carrello, quindi ora è in dispensa.
     for item in db.query(ShoppingListItem).filter(
@@ -290,16 +395,31 @@ def complete_shopping(db: Session, user_id: int, week: WeekPlan, lst: ShoppingLi
             )
 
     db.commit()
+
+    # Il blocco più lontano: è fin lì che il piano comprato è intoccabile.
+    until = max(w.lock_expires_at for w in covered)
     return {
-        "detail": "Spesa completata: il piano è bloccato per 7 giorni.",
-        "week_locked_until": week.lock_expires_at.isoformat(),
+        "detail": (
+            "Spesa completata: il piano è bloccato per 7 giorni."
+            if len(covered) == 1
+            else f"Spesa completata: bloccate {len(covered)} settimane di piano."
+        ),
+        "weeks_locked": len(covered),
+        "week_locked_until": until.isoformat(),
     }
 
 
 def export_text(db: Session, week: WeekPlan, lst: ShoppingList) -> str:
     """Lista in testo semplice, da incollare in un messaggio o in una nota."""
     data = serialize_shopping_list(db, week, lst)
-    lines = [f"Lista della spesa — settimana del {week.week_start_date.strftime('%d/%m/%Y')}", ""]
+    if len(data["weeks_covered"]) > 1:
+        testata = (
+            f"Lista della spesa — dal {week.week_start_date.strftime('%d/%m/%Y')} "
+            f"al {date.fromisoformat(data['covers_to']).strftime('%d/%m/%Y')}"
+        )
+    else:
+        testata = f"Lista della spesa — settimana del {week.week_start_date.strftime('%d/%m/%Y')}"
+    lines = [testata, ""]
 
     for category in data["categories"]:
         lines.append(f"{category['label'].upper()}")

@@ -16,7 +16,7 @@ from ..services.ai_client import AIError, get_client
 from ..services.ingredients import get_or_create_ingredient, normalize_name
 from ..services.planner import DAY_NAMES, build_context
 from ..services.recipes import create_recipe, ingredients_of, recipe_for_prompt, serialize_recipe
-from ..services.shopping import rebuild_shopping_list
+from ..services.shopping import rebuild_lists_for
 
 logger = logging.getLogger(__name__)
 
@@ -225,7 +225,7 @@ def substitute_ingredient(
         .all()
     )
     for week in weeks:
-        rebuild_shopping_list(db, user.id, week)
+        rebuild_lists_for(db, user.id, week)
     db.commit()
 
     return {

@@ -25,9 +25,10 @@ from ..services.planner import DAY_NAMES, build_context, meal_context_for_chat, 
 from ..services.recipes import ingredients_of, serialize_recipe, update_recipe_from_ai
 from ..services.shopping import (
     get_or_create_list,
-    rebuild_shopping_list,
+    rebuild_lists_for,
     serialize_shopping_list,
     shopping_list_summary,
+    weeks_covered,
 )
 
 logger = logging.getLogger(__name__)
@@ -189,7 +190,7 @@ def send_message(
     db.commit()
 
     if recipe_updated:
-        rebuild_shopping_list(db, user.id, week)
+        rebuild_lists_for(db, user.id, week)
         db.commit()
 
     return {
@@ -223,14 +224,27 @@ def _get_week(db: Session, user_id: int, week_id: int) -> WeekPlan:
     return week
 
 
-def _editable_meals(db: Session, week: WeekPlan) -> dict[int, tuple[PlannedMeal, DayPlan, MealSlot]]:
-    """I pasti della settimana che la chat può toccare: quelli con una ricetta, non su
-    un giorno saltato e non saltati a mano — cioè esattamente quelli che pesano sulla
-    lista della spesa."""
+def _meal_label(day: DayPlan, slot: MealSlot) -> str:
+    """Come si chiama un pasto in chat. La data c'è perché la spesa può coprire più
+    settimane, e "Lunedì / Pranzo" da solo sarebbe ambiguo."""
+    return f"{DAY_NAMES[day.day_of_week]} {day.date.strftime('%d/%m')} / {slot.name}"
+
+
+def _editable_meals(
+    db: Session, user_id: int, week: WeekPlan
+) -> dict[int, tuple[PlannedMeal, DayPlan, MealSlot]]:
+    """I pasti che la chat può toccare: quelli con una ricetta, non su un giorno
+    saltato e non saltati a mano — cioè esattamente quelli che pesano sulla lista.
+
+    Non solo quelli della settimana della lista: la spesa copre anche le settimane
+    generate più avanti, e se le zucchine non si trovano vanno tolte da tutte le
+    ricette comprate in quel giro, altrimenti restano in lista.
+    """
     out = {}
-    for day, meal, slot in week_meals(db, week):
-        if meal.recipe_id and not day.is_skipped and not meal.is_skipped:
-            out[meal.id] = (meal, day, slot)
+    for source in weeks_covered(db, user_id, week) or [week]:
+        for day, meal, slot in week_meals(db, source):
+            if meal.recipe_id and not day.is_skipped and not meal.is_skipped:
+                out[meal.id] = (meal, day, slot)
     return out
 
 
@@ -242,19 +256,19 @@ def _week_index(db: Session, meals: dict[int, tuple[PlannedMeal, DayPlan, MealSl
     """
     lines = []
     for meal_id, (meal, day, slot) in sorted(
-        meals.items(), key=lambda kv: (kv[1][1].day_of_week, kv[1][2].order_index)
+        meals.items(), key=lambda kv: (kv[1][1].date, kv[1][2].order_index)
     ):
         recipe = db.get(Recipe, meal.recipe_id)
         ingredients = ", ".join(
             f"{i['name']} {i['quantity']:g} {i['unit']}" for i in ingredients_of(db, recipe.id)
         )
         lines.append(
-            f"- meal_id {meal_id} · {DAY_NAMES[day.day_of_week]} / {slot.name} — "
+            f"- meal_id {meal_id} · {_meal_label(day, slot)} — "
             f"target {slot.target_calories} kcal (P {slot.target_protein_g:g} "
             f"C {slot.target_carbs_g:g} G {slot.target_fat_g:g}) — "
             f'"{recipe.title}" — ingredienti: {ingredients}'
         )
-    return "\n".join(lines) if lines else "(nessuna ricetta in settimana)"
+    return "\n".join(lines) if lines else "(nessuna ricetta in programma)"
 
 
 def _apply_recipes_update(
@@ -280,7 +294,7 @@ def _apply_recipes_update(
         recipe = db.get(Recipe, meal.recipe_id)
         update_recipe_from_ai(db, recipe, recipe_data)
         meal.is_followed = None  # la ricetta è cambiata: il tracking riparte da zero
-        changed.append(f"{DAY_NAMES[day.day_of_week]} / {slot.name}")
+        changed.append(_meal_label(day, slot))
     return changed
 
 
@@ -314,7 +328,7 @@ def send_shopping_message(
     fatta: a piano bloccato il cibo è comprato e la chat resta informativa.
     """
     week = _get_week(db, user.id, week_id)
-    meals = _editable_meals(db, week)
+    meals = _editable_meals(db, user.id, week)
     lst = get_or_create_list(db, week)
 
     lock_note = (
@@ -384,7 +398,7 @@ def send_shopping_message(
     db.commit()
 
     if changed:
-        rebuild_shopping_list(db, user.id, week)
+        rebuild_lists_for(db, user.id, week)
         db.commit()
 
     return {

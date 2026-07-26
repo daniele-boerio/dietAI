@@ -991,10 +991,12 @@ def generate_week(
     db.commit()
 
     # La lista della spesa segue sempre il piano: ricostruirla qui evita che l'utente
-    # veda una lista che non c'entra con le ricette appena generate.
-    from .shopping import rebuild_shopping_list
+    # veda una lista che non c'entra con le ricette appena generate. Sono le liste al
+    # plurale perché generare la settimana prossima riempie anche la spesa di questa,
+    # se è quella che la comprende.
+    from .shopping import rebuild_lists_for
 
-    rebuild_shopping_list(db, user.id, week)
+    rebuild_lists_for(db, user.id, week)
     db.commit()
 
     return {
@@ -1077,9 +1079,9 @@ def regenerate_meal(
     meal.is_followed = None
     db.commit()
 
-    from .shopping import rebuild_shopping_list
+    from .shopping import rebuild_lists_for
 
-    rebuild_shopping_list(db, user.id, week)
+    rebuild_lists_for(db, user.id, week)
     db.commit()
     return recipe
 

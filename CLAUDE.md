@@ -86,10 +86,24 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
 vuota. Generare vuol dire riempire le caselle libere. Se la dieta cambia,
 `ensure_week_structure` riallinea le settimane esistenti.
 
+**La spesa copre tutte le settimane generate, non solo quella corrente.**
+`weeks_covered` prende, dalla settimana della lista in avanti, tutte quelle per cui la
+spesa non risulta ancora fatta (`is_locked` significa "già comprata", quindi resta
+fuori: quel cibo è in frigo, non nel carrello). Chi decide quanto avanti spingersi è
+l'utente, generando o non generando le settimane successive — l'app non mette un
+tetto. È l'anti-spreco portato oltre il lunedì: una confezione sola invece di due
+mezze. La conseguenza è che una lista non è più "di" una settimana, e chi tocca il
+piano deve chiamare `rebuild_lists_for` (tutte le liste aperte che comprendono quella
+settimana) e non `rebuild_shopping_list` su una sola: generare la prossima cambia la
+spesa di questa, e la dashboard legge la lista senza ricostruirla.
+
 **Il blocco è la regola di business centrale.** `POST /api/shopping/current/complete`
-mette `is_locked`, `lock_expires_at = now + 7 giorni` e sposta gli articoli spuntati in
-dispensa. Da lì: lettura sì, `regenerate`/`assign`/`generate` → **409**; voti, preferiti
-e tracking restano permessi; la chat diventa informativa (non aggiorna la ricetta).
+sposta gli articoli spuntati in dispensa e blocca **tutte** le settimane che la lista
+copriva, non solo la prima: se la spesa comprendeva anche la prossima, anche quelle
+ricette sono pagate. Il blocco dura 7 giorni ma per una settimana futura partono dal
+suo lunedì (`lock_bought_week`), altrimenti scadrebbe prima ancora di cominciare. Da
+lì: lettura sì, `regenerate`/`assign`/`generate` → **409**; voti, preferiti e tracking
+restano permessi; la chat diventa informativa (non aggiorna la ricetta).
 `refresh_week_statuses` archivia le settimane scadute a ogni lettura, senza scheduler.
 
 **Il piano segue la spesa, non il calendario.** Finché la spesa non risulta fatta,
@@ -100,7 +114,9 @@ rimetterlo in fila se lo slittamento si ripete il giorno dopo, invece di far pas
 avanti la ricetta di oggi). Un giorno saltato esce dalla lista della spesa, dalla
 generazione e dalle medie del tracking — comprare mercoledì gli ingredienti di lunedì
 è esattamente lo spreco che l'app esiste per evitare, e contare quel giorno come
-"andato male" sarebbe falso: non c'è proprio stato. Succede da solo dentro
+"andato male" sarebbe falso: non c'è proprio stato. Attenzione: esce il *giorno*, non
+la ricetta. Quella è slittata avanti e la spesa la compra dov'è finita, anche se è
+traboccata sulla settimana dopo — che ora la lista comprende. Succede da solo dentro
 `get_or_create_week`, cioè a ogni lettura del piano, senza pulsanti. Non slittano i
 pasti fissi (la pizza del sabato è del sabato) né i giorni già tracciati, e non slitta
 niente se la spesa è fatta — nemmeno dopo uno sblocco d'emergenza, perché il cibo
@@ -114,7 +130,8 @@ settimana è piena (`skip_meal`). Nessuno slittamento a catena: gli altri giorni
 muovono. La casella saltata **conserva la `recipe_id` come memoria** di cosa c'era in
 programma, ma smette di contare ovunque — spesa, totali del giorno (cala anche il
 target, non è un buco da colmare), tracking e generazione la filtrano tutti su
-`is_skipped`. `is_followed = True` annulla il rinvio (`unskip_meal`): la ricetta torna e
+`is_skipped`. Il totale della spesa però non cala: la ricetta si compra dove si è
+accodata, che è il punto (il piatto si cucina lo stesso, un altro giorno). `is_followed = True` annulla il rinvio (`unskip_meal`): la ricetta torna e
 la casella dove si era accodata si svuota. `skip_day` fa lo stesso per l'intera giornata
 (weekend fuori), un pasto alla volta, e solo da oggi in avanti — i giorni passati sono
 competenza di `shift_past_days`, che è un'altra cosa. **Attenzione a non confondere i
@@ -145,15 +162,17 @@ per un pasto che invece rispetta la dieta. Vedi `_is_fixed`, `serialize_week` e
 `_is_fixed()` li salta nella generazione e la settimana successiva se li ricopia
 (`apply_recurring_meals`, con `copy_recipe`: copia, non riferimento).
 
-**La chat della spesa cambia un ingrediente in tutta la settimana.** Oltre alla chat
+**La chat della spesa cambia un ingrediente in tutta la lista.** Oltre alla chat
 sul singolo pasto (`/api/chat/meals/...`, marcatore `[RECIPE_UPDATE]`) c'è la chat "da
 supermercato" (`/api/chat/shopping/{week_id}/...`, marcatore `[RECIPES_UPDATE]`): serve a
 quando non trovi o vuoi cambiare un alimento, e riscrive in un colpo solo **tutte** le
-ricette della settimana che lo usano, poi rifà la lista. Vive sulla settimana
-(`ShoppingChatMessage`, non sul pasto), passa al modello un indice compatto dei pasti
+ricette che lo usano, poi rifà la lista. Vive sulla settimana (`ShoppingChatMessage`,
+non sul pasto) ma non si ferma lì: passa al modello un indice compatto dei pasti
 modificabili (`_editable_meals`: quelli con ricetta, non su giorno/pasto saltato — cioè
-quelli che pesano sulla spesa) con i loro `meal_id`, e applica solo gli aggiornamenti
-che citano un `meal_id` valido. A spesa fatta (`is_locked`) resta informativa, come la
+quelli che pesano sulla spesa, su tutte le settimane che la spesa copre) con i loro
+`meal_id`, e applica solo gli aggiornamenti che citano un `meal_id` valido. Le
+etichette dei pasti portano la data proprio perché "Lunedì / Pranzo" con due settimane
+in lista sarebbe ambiguo. A spesa fatta (`is_locked`) resta informativa, come la
 chat sul pasto. Il prompt (`SHOPPING_CHAT_SYSTEM`) sta in `prompts.py` con gli altri.
 
 **Il modello si sceglie per ruolo.** `planning`, `chat`, `diet` hanno pesi diversi:

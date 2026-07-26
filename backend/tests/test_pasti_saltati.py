@@ -138,21 +138,28 @@ def test_funziona_anche_a_piano_bloccato(client, settimana_generata):
 # ── Effetti sul resto dell'app ─────────────────────────────────────────────────
 
 
-def test_il_pasto_saltato_esce_dalla_lista_della_spesa(client, settimana_generata):
-    prima = client.get("/api/shopping/current").json()
-    pollo_prima = next(
-        i for cat in prima["categories"] for i in cat["items"] if i["name"] == "petto di pollo"
+def _pollo(lst: dict) -> float:
+    return next(
+        (i["quantity"] for c in lst["categories"] for i in c["items"] if i["name"] == "petto di pollo"),
+        0,
     )
+
+
+def test_il_pasto_saltato_si_compra_dove_si_è_accodato(client, settimana_generata):
+    """La cena non cucinata non esce dalla spesa: si sposta con la sua ricetta.
+
+    La settimana è piena, quindi quella cena si accoda al lunedì dopo — che la lista
+    copre. Il pollo si compra ancora, ma per quel giorno lì: sparirebbe dal conto
+    solo se la ricetta non avesse più un posto dove essere cucinata.
+    """
+    prima = _pollo(client.get("/api/shopping/current").json())
 
     cena = pasto(settimana_generata, 0, "Cena")
     client.put(f"/api/planning/meals/{cena['id']}/followed", json={"is_followed": False})
 
-    dopo = client.get("/api/shopping/current").json()
-    pollo_dopo = next(
-        i for cat in dopo["categories"] for i in cat["items"] if i["name"] == "petto di pollo"
-    )
-    # Una cena in meno: 150 g di pollo che non si comprano più questa settimana.
-    assert pollo_dopo["quantity"] == pytest.approx(pollo_prima["quantity"] - 150)
+    assert _pollo(client.get("/api/shopping/current").json()) == pytest.approx(prima)
+    # 150 g di quel pollo ora sono da comprare per la settimana prossima.
+    assert _pollo(client.get("/api/shopping/next").json()) == pytest.approx(150)
 
 
 def test_i_totali_del_giorno_scendono_col_pasto_saltato(client, settimana_generata):

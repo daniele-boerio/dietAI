@@ -7,6 +7,7 @@ risposta sola.
 """
 
 import json
+from datetime import date, timedelta
 
 import pytest
 
@@ -14,6 +15,13 @@ from app.routers import chat as chat_router
 from app.services import planner
 from tests.test_chat import FakeChat
 from tests.test_flow import FakeModel
+
+
+def etichetta(dow: int, slot: str = "Pranzo") -> str:
+    """Come la chat chiama un pasto. La data c'è perché la spesa può coprire più
+    settimane, e "Lunedì / Pranzo" da solo sarebbe ambiguo."""
+    giorno = planner.monday_of(date.today()) + timedelta(days=dow)
+    return f"{planner.DAY_NAMES[dow]} {giorno.strftime('%d/%m')} / {slot}"
 
 
 @pytest.fixture()
@@ -80,7 +88,7 @@ def test_cambia_la_ricetta_e_rifa_la_lista(client, week, monkeypatch):
     ).json()
 
     assert res["list_updated"] is True
-    assert res["changed_meals"] == ["Lunedì / Pranzo"]
+    assert res["changed_meals"] == [etichetta(0)]
     # Il marcatore e il JSON non finiscono sotto gli occhi dell'utente.
     assert "[RECIPES_UPDATE]" not in res["content"]
 
@@ -107,7 +115,7 @@ def test_cambia_piu_ricette_in_un_colpo(client, week, monkeypatch):
         json={"content": "Togli le zucchine da tutti i pranzi"},
     ).json()
 
-    assert res["changed_meals"] == ["Lunedì / Pranzo", "Martedì / Pranzo", "Mercoledì / Pranzo"]
+    assert res["changed_meals"] == [etichetta(0), etichetta(1), etichetta(2)]
     for mid in ids:
         assert client.get(f"/api/planning/meals/{mid}").json()["recipe"]["title"] == "Pasta alle melanzane"
 
@@ -174,7 +182,7 @@ def test_il_procedimento_a_lista_non_fa_500(client, week, monkeypatch):
     )
 
     assert res.status_code == 200, res.text
-    assert res.json()["changed_meals"] == ["Lunedì / Pranzo"]
+    assert res.json()["changed_meals"] == [etichetta(0)]
 
     # I passi diventano un procedimento numerato, uno per riga.
     ricetta_salvata = client.get(f"/api/planning/meals/{mid}").json()["recipe"]

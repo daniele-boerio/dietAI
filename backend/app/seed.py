@@ -32,8 +32,11 @@ def seed_ingredients(db) -> tuple[int, int]:
             # spaghetti tornerebbero in "altro" al primo deploy.
             if not ingredient.category_by_user:
                 ingredient.category = category
-            ingredient.avg_price_per_unit = price
-            ingredient.price_unit = price_unit
+            # Stessa cosa per il prezzo: quello segnato allo scaffale è vero, quello
+            # del catalogo è una media nazionale. Vince il primo.
+            if not ingredient.price_by_user:
+                ingredient.avg_price_per_unit = price
+                ingredient.price_unit = price_unit
             ingredient.season_months = season_months_for(name)
             updated += 1
         else:

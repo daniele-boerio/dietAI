@@ -1468,12 +1468,53 @@ textarea {
   color: var(--text-muted);
 }
 
+/* Anche il prezzo è un pulsante: si tocca per dire quanto è costato davvero. */
 .shopping-price {
   color: var(--text-muted);
   font-size: 0.8rem;
   font-variant-numeric: tabular-nums;
-  min-width: 52px;
+  min-width: 58px;
   text-align: right;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px dashed transparent;
+  flex-shrink: 0;
+}
+
+.shopping-price:hover {
+  border-color: var(--border-light);
+}
+
+/* Prezzo segnato allo scaffale: è un dato, non una stima. */
+.shopping-price.mine {
+  color: var(--text-secondary);
+  font-weight: 600;
+  border-bottom-color: var(--accent);
+}
+
+.shopping-price-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.shopping-price-edit em {
+  font-style: normal;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.shopping-price-edit input {
+  width: 76px;
+  padding: 5px 7px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  background: var(--bg-surface);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.85rem;
 }
 
 .shopping-footer {
@@ -2776,7 +2817,8 @@ textarea:focus {
     padding: 13px 4px 13px 15px;
   }
 
-  .shopping-qty {
+  .shopping-qty,
+  .shopping-price {
     padding: 10px 8px;
   }
 

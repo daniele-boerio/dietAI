@@ -109,6 +109,16 @@ dice alla UI che la lista parte più in là perché questa settimana è già in 
 settimana solo aperta e mai generata non fa da àncora: mostrerebbe una lista vuota al
 posto della conferma della spesa.
 
+**I prezzi veri battono il catalogo.** `utils/pricing.py` porta medie nazionali: nel
+negozio dove l'utente fa la spesa valgono poco, ed è per questo che un totale stimato
+non dice quasi niente. `PUT /api/shopping/items/{id}/price` chiede la cifra che si ha
+sotto gli occhi — quanto è costato *quel* pacco — e `unit_price_from` (l'inverso di
+`price_for`) ne ricava il prezzo al kg/l/unità, che finisce su `Ingredient` e da lì in
+poi vale per tutte le liste. Come per il reparto serve un flag (`price_by_user`) che
+protegga il numero dal seed, che gira a ogni avvio del container. Il prezzo si segna
+anche a spesa fatta — lo scontrino si guarda a casa — e la lista espone `priced_items`
+perché il totale possa dire su cosa si regge invece di spacciarsi per un preventivo.
+
 **Il reparto di un ingrediente lo decide chi fa la spesa.** `Ingredient.category`
 serve a girare il supermercato una volta sola, e il catalogo non può sapere che gli
 spaghetti stanno con pane e cereali (`guess_category` non li riconosce e finiscono in

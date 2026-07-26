@@ -61,6 +61,51 @@ function QuantityInput({ item, onDone, onCancel }) {
   );
 }
 
+/**
+ * Il campo per dire quanto è costato.
+ *
+ * Si chiede la cifra che si ha sotto gli occhi — quanto è costato quel pacco — non un
+ * prezzo al chilo da ricavare a mente: il conto al kg lo fa il server, che conosce la
+ * quantità della riga. Vuoto cancella il prezzo tuo e rimette la media del catalogo.
+ */
+function PriceInput({ item, onDone, onCancel }) {
+  const [value, setValue] = useState(item.price_by_user ? (item.estimated_price ?? '') : '');
+  const annullato = useRef(false);
+
+  const conferma = () => {
+    if (annullato.current) return;
+    const numero = value === '' ? null : Number(String(value).replace(',', '.'));
+    onDone(Number.isFinite(numero) && numero > 0 ? numero : null);
+  };
+
+  return (
+    <span className="shopping-price-edit">
+      <em>€</em>
+      <input
+        type="number"
+        step="0.01"
+        inputMode="decimal"
+        autoFocus
+        value={value}
+        placeholder={item.estimated_price != null ? String(item.estimated_price) : '0,00'}
+        onFocus={(e) => e.target.select()}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={conferma}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            e.target.blur();
+          } else if (e.key === 'Escape') {
+            e.preventDefault();
+            annullato.current = true;
+            onCancel();
+          }
+        }}
+      />
+    </span>
+  );
+}
+
 export default function ShoppingPage() {
   const { addToast } = useApp();
   const [list, setList] = useState(null);
@@ -71,8 +116,9 @@ export default function ShoppingPage() {
   const [chatOpen, setChatOpen] = useState(false);
   // L'articolo che si sta spostando di reparto (null = nessun dialogo aperto).
   const [moving, setMoving] = useState(null);
-  // L'articolo di cui si sta scrivendo la quantità presa.
+  // L'articolo di cui si sta scrivendo la quantità presa, e quello del prezzo pagato.
   const [quantityOf, setQuantityOf] = useState(null);
+  const [priceOf, setPriceOf] = useState(null);
 
   const load = useCallback(
     async ({ silent = false } = {}) => {
@@ -130,6 +176,21 @@ export default function ShoppingPage() {
     if (quantity === item.bought_quantity) return;
     try {
       setList(await api.setBoughtQuantity(item.id, quantity));
+    } catch (e) {
+      addToast(e.message, 'error');
+      load({ silent: true });
+    }
+  };
+
+  // Il prezzo del catalogo è una media italiana e nel negozio dove fai la spesa vale
+  // poco: è per questo che il totale stimato non dice quasi niente. Ogni cifra segnata
+  // qui insegna all'app un prezzo vero, e resta per tutte le liste che verranno.
+  const savePrice = async (item, paid) => {
+    setPriceOf(null);
+    try {
+      const aggiornata = await api.setPaidPrice(item.id, paid);
+      setList(aggiornata);
+      if (paid) addToast(`${item.name}: prezzo segnato ✓`);
     } catch (e) {
       addToast(e.message, 'error');
       load({ silent: true });
@@ -331,9 +392,32 @@ export default function ShoppingPage() {
                         </button>
                       )}
 
-                      <span className="shopping-price">
-                        {item.estimated_price != null ? formatMoney(item.estimated_price) : ''}
-                      </span>
+                      {/* Il prezzo si tocca per dire quanto è costato davvero: da lì
+                          l'app impara il prezzo unitario e smette di stimare a caso.
+                          Si può fare anche a spesa fatta, scontrino alla mano. */}
+                      {priceOf === item.id ? (
+                        <PriceInput
+                          item={item}
+                          onDone={(paid) => savePrice(item, paid)}
+                          onCancel={() => setPriceOf(null)}
+                        />
+                      ) : (
+                        <button
+                          className={`shopping-price ${item.price_by_user ? 'mine' : ''}`}
+                          onClick={() => setPriceOf(item.id)}
+                          title={
+                            item.price_by_user
+                              ? `Prezzo tuo: ${formatMoney(item.unit_price)}/${item.price_unit}${
+                                  item.last_paid_at
+                                    ? ` · segnato il ${formatDate(item.last_paid_at)}`
+                                    : ''
+                                }`
+                              : 'Quanto è costato? Segnalo e la stima diventa la tua'
+                          }
+                        >
+                          {item.estimated_price != null ? formatMoney(item.estimated_price) : '€ —'}
+                        </button>
+                      )}
                       <button
                         className="icon-button shopping-move"
                         onClick={() => setMoving({ ...item, from: cat.label })}
@@ -351,7 +435,16 @@ export default function ShoppingPage() {
           <div className="shopping-footer">
             <div className="shopping-total">
               {formatMoney(list.estimated_cost) || '—'}
-              <small>totale stimato · {list.total_items} articoli</small>
+              {/* Un totale fatto di medie nazionali non serve a niente, e dirlo è
+                  meglio che farlo sembrare un preventivo: la frase cambia man mano
+                  che i prezzi veri prendono il posto di quelli del catalogo. */}
+              <small>
+                {list.priced_items === 0
+                  ? `stima sui prezzi medi · ${list.total_items} articoli`
+                  : list.priced_items === list.total_items
+                    ? `sui tuoi prezzi · ${list.total_items} articoli`
+                    : `${list.priced_items} di ${list.total_items} articoli a prezzo tuo`}
+              </small>
             </div>
             {!list.is_completed && (
               <button

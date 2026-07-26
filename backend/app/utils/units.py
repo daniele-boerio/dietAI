@@ -87,6 +87,26 @@ def format_quantity(quantity: float, unit: str) -> str:
     return f"{num} {unit}"
 
 
+def unit_price_from(paid: float, quantity: float, unit: str) -> tuple[float, str] | None:
+    """Il prezzo al kg / al litro / a unità che si ricava da uno scontrino.
+
+    È l'inverso di `price_for`: lì si stima quanto costerà una quantità partendo da un
+    prezzo medio, qui si impara quanto costa l'unità di misura partendo da quello che
+    si è pagato davvero. Serve perché all'utente si chiede la cifra che ha sotto gli
+    occhi — quanto è costato quel pacco — non un prezzo al chilo da calcolare a mente.
+    """
+    base_qty, base_unit = to_base(quantity, unit)
+    if paid <= 0 or base_qty <= 0:
+        return None
+    if base_unit == "g":
+        return round(paid / (base_qty / 1000), 2), "kg"
+    if base_unit == "ml":
+        return round(paid / (base_qty / 1000), 2), "l"
+    if base_unit == "unità":
+        return round(paid / base_qty, 2), "unità"
+    return None
+
+
 def price_for(quantity: float, unit: str, avg_price: float | None, price_unit: str | None):
     """Stima il costo di una quantità dato il prezzo medio per kg / l / unità.
 

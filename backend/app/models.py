@@ -161,6 +161,13 @@ class Ingredient(Base):
     season_months = Column(JSONType)
     avg_price_per_unit = Column(Float)
     price_unit = Column(String)  # "kg", "l", "unità"
+    # Il prezzo del catalogo è una media italiana: al negozio dove fa la spesa
+    # l'utente vale poco. Quando lo corregge segnando quanto ha pagato, il flag
+    # protegge il suo numero dal seed e dice alla UI che quella cifra è vera.
+    price_by_user = Column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    last_paid_at = Column(DateTime(timezone=True))
 
     __table_args__ = (
         CheckConstraint(

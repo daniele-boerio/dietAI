@@ -295,6 +295,14 @@ def serialize_shopping_list(db: Session, week: WeekPlan, lst: ShoppingList) -> d
                     else None
                 ),
                 "estimated_price": item.estimated_price,
+                # Un prezzo che l'utente ha segnato allo scaffale vale come dato, uno
+                # del catalogo vale come indizio: la UI li distingue.
+                "price_by_user": ingredient.price_by_user,
+                "last_paid_at": (
+                    ingredient.last_paid_at.isoformat() if ingredient.last_paid_at else None
+                ),
+                "unit_price": ingredient.avg_price_per_unit,
+                "price_unit": ingredient.price_unit,
             }
         )
         if item.estimated_price:
@@ -313,6 +321,9 @@ def serialize_shopping_list(db: Session, week: WeekPlan, lst: ShoppingList) -> d
 
     total_items = sum(len(c["items"]) for c in categories)
     checked_items = sum(1 for c in categories for i in c["items"] if i["is_checked"])
+    # Quanti costi vengono da un prezzo segnato allo scaffale invece che dalla media
+    # del catalogo: è la misura di quanto ci si può fidare del totale.
+    priced_items = sum(1 for c in categories for i in c["items"] if i["price_by_user"])
 
     # L'avviso "la lista è più corta" parla di spesa mancata, quindi conta solo i
     # giorni saltati perché ormai passati: una giornata saltata a mano più avanti
@@ -355,6 +366,7 @@ def serialize_shopping_list(db: Session, week: WeekPlan, lst: ShoppingList) -> d
         ],
         "total_items": total_items,
         "checked_items": checked_items,
+        "priced_items": priced_items,
         "categories": categories,
         "categories_summary": summary,
         # Tutti i reparti, non solo quelli con qualcosa dentro: servono a spostarci un

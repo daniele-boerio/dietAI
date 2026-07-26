@@ -372,3 +372,97 @@ def test_la_quantita_di_un_altro_utente_non_si_tocca(client, settimana, db):
 
     assert res.status_code == 404
     assert db.get(ShoppingListItem, pasta["id"]).bought_quantity is None
+
+
+# ── Quanto è costato davvero ───────────────────────────────────────────────────
+
+
+def test_il_prezzo_segnato_diventa_il_prezzo_dell_ingrediente(client, settimana, db):
+    """Dalla cifra dello scaffale si ricava il prezzo al chilo: è quello che serve
+    per stimare tutte le liste che verranno."""
+    from app.models import Ingredient
+
+    pasta = voce(client, "pasta")  # 700 g in lista
+    res = client.put(f"/api/shopping/items/{pasta['id']}/price", json={"paid": 2.10})
+
+    assert res.status_code == 200, res.text
+    riga = next(i for c in res.json()["categories"] for i in c["items"] if i["name"] == "pasta")
+    assert riga["price_by_user"] is True
+    assert riga["estimated_price"] == pytest.approx(2.10)
+    # 2,10 € per 700 g fanno 3,00 €/kg.
+    assert riga["unit_price"] == pytest.approx(3.00)
+    assert riga["price_unit"] == "kg"
+    assert db.query(Ingredient).filter(Ingredient.name == "pasta").first().last_paid_at
+
+
+def test_il_prezzo_si_ricava_da_quello_che_hai_preso_non_da_quello_che_serviva(client, settimana):
+    """Se hai comprato il pacco da 1 kg, i 3 € che hai pagato sono per 1 kg."""
+    pasta = voce(client, "pasta")
+    client.put(f"/api/shopping/items/{pasta['id']}/quantity", json={"quantity": 1000})
+
+    res = client.put(f"/api/shopping/items/{pasta['id']}/price", json={"paid": 3.00})
+
+    riga = next(i for c in res.json()["categories"] for i in c["items"] if i["name"] == "pasta")
+    assert riga["unit_price"] == pytest.approx(3.00)  # 3 € per 1 kg
+
+
+def test_il_prezzo_vero_vale_anche_per_le_liste_dopo(client, settimana):
+    pasta = voce(client, "pasta")
+    client.put(f"/api/shopping/items/{pasta['id']}/price", json={"paid": 7.00})  # 10 €/kg
+
+    client.post("/api/shopping/current/complete")
+    w = client.get("/api/planning/weeks/next").json()
+    client.post(f"/api/planning/weeks/{w['id']}/generate")
+
+    prossima = voce(client, "pasta")
+    assert prossima["estimated_price"] == pytest.approx(7.00)
+    assert prossima["price_by_user"] is True
+
+
+def test_il_totale_dice_quanti_prezzi_sono_tuoi(client, settimana):
+    lst = client.get("/api/shopping/current").json()
+    assert lst["priced_items"] == 0
+
+    client.put(f"/api/shopping/items/{voce(client, 'pasta')['id']}/price", json={"paid": 2.10})
+
+    assert client.get("/api/shopping/current").json()["priced_items"] == 1
+
+
+def test_cancellare_il_prezzo_rimette_quello_del_catalogo(client, settimana):
+    from app.utils.pricing import INGREDIENT_CATALOG
+
+    pasta = voce(client, "pasta")
+    client.put(f"/api/shopping/items/{pasta['id']}/price", json={"paid": 9.99})
+
+    res = client.put(f"/api/shopping/items/{pasta['id']}/price", json={"paid": None})
+
+    riga = next(i for c in res.json()["categories"] for i in c["items"] if i["name"] == "pasta")
+    assert riga["price_by_user"] is False
+    assert riga["unit_price"] == pytest.approx(INGREDIENT_CATALOG["pasta"][1])
+
+
+def test_il_prezzo_si_segna_anche_a_spesa_fatta(client, settimana):
+    """Lo scontrino si guarda a casa: la spesa è chiusa, i prezzi no."""
+    pasta = voce(client, "pasta")
+    client.put(f"/api/shopping/items/{pasta['id']}/check", json={"is_checked": True})
+    client.post("/api/shopping/current/complete")
+
+    res = client.put(f"/api/shopping/items/{pasta['id']}/price", json={"paid": 2.10})
+    assert res.status_code == 200, res.text
+
+
+def test_il_prezzo_segnato_sopravvive_al_seed(client, settimana, db):
+    """Il seed gira a ogni avvio del container e riallinea i prezzi al catalogo:
+    senza il flag, il prezzo vero durerebbe fino al primo deploy."""
+    from app.models import Ingredient
+    from app.seed import seed_ingredients
+
+    pasta = voce(client, "pasta")
+    client.put(f"/api/shopping/items/{pasta['id']}/price", json={"paid": 7.00})
+
+    seed_ingredients(db)
+
+    riga = db.query(Ingredient).filter(Ingredient.name == "pasta").first()
+    db.refresh(riga)
+    assert riga.avg_price_per_unit == pytest.approx(10.00)
+    assert riga.price_by_user is True

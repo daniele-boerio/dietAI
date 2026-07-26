@@ -180,3 +180,9 @@ class BoughtQuantityRequest(BaseModel):
     """Quanto se n'è preso davvero, nell'unità della riga. None = quanto ne serviva."""
 
     quantity: float | None = Field(default=None, gt=0)
+
+
+class PaidPriceRequest(BaseModel):
+    """Quanto è costato, in euro, per la quantità presa. None = torna al catalogo."""
+
+    paid: float | None = Field(default=None, gt=0, le=10000)

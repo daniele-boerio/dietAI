@@ -1,4 +1,6 @@
-"""Lista della spesa: lettura, spunte, completamento ed esportazione."""
+"""Lista della spesa: lettura, spunte, quantità e prezzi, completamento, esportazione."""
+
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import PlainTextResponse
@@ -7,9 +9,10 @@ from sqlalchemy.orm import Session
 from ..auth import get_current_user_id
 from ..database import get_db
 from ..models import Ingredient, ShoppingList, ShoppingListItem, WeekPlan
-from ..schemas import BoughtQuantityRequest, CheckItemRequest
+from ..schemas import BoughtQuantityRequest, CheckItemRequest, PaidPriceRequest
 from ..services.planner import refresh_week_statuses
-from ..utils.units import price_for
+from ..utils.pricing import catalog_entry
+from ..utils.units import price_for, unit_price_from
 from ..services.shopping import (
     active_shopping_week,
     complete_shopping,
@@ -106,22 +109,77 @@ def set_bought_quantity(
     if body.quantity is not None:
         row.is_checked = True
 
-    # Il prezzo della riga segue quello che si porta a casa, e con esso il totale.
-    ingredient = db.get(Ingredient, row.ingredient_id)
-    row.estimated_price = price_for(
-        row.bought_quantity or row.total_quantity,
-        row.unit,
-        ingredient.avg_price_per_unit,
-        ingredient.price_unit,
-    )
-    db.flush()
-    totale = sum(
-        i.estimated_price or 0
-        for i in db.query(ShoppingListItem).filter(ShoppingListItem.shopping_list_id == lst.id)
-    )
-    lst.estimated_cost = round(totale, 2) if totale else None
+    # Il costo della riga segue quello che si porta a casa, e con esso il totale.
+    _refresh_prices(db, lst)
     db.commit()
 
+    return serialize_shopping_list(db, week, lst)
+
+
+def _refresh_prices(db: Session, lst: ShoppingList) -> None:
+    """Ricalcola il costo di ogni riga e il totale della lista.
+
+    Il prezzo di una riga dipende da due cose che cambiano mentre si fa la spesa: la
+    quantità che si è presa e il prezzo che si è pagato. Rifarli tutti costa una query
+    e toglie il dubbio su quale riga fosse rimasta indietro.
+    """
+    totale = 0.0
+    rows = (
+        db.query(ShoppingListItem, Ingredient)
+        .join(Ingredient, Ingredient.id == ShoppingListItem.ingredient_id)
+        .filter(ShoppingListItem.shopping_list_id == lst.id)
+        .all()
+    )
+    for item, ingredient in rows:
+        item.estimated_price = price_for(
+            item.bought_quantity or item.total_quantity,
+            item.unit,
+            ingredient.avg_price_per_unit,
+            ingredient.price_unit,
+        )
+        totale += item.estimated_price or 0
+    lst.estimated_cost = round(totale, 2) if totale else None
+
+
+@router.put("/items/{item_id}/price")
+def set_paid_price(
+    item_id: int,
+    body: PaidPriceRequest,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    """Quanto è costato davvero, per la quantità presa.
+
+    Il prezzo del catalogo è una media italiana e al negozio dove fa la spesa l'utente
+    vale poco: è per questo che il totale stimato non dice quasi niente. Segnando la
+    cifra dello scaffale — quella che si ha sotto gli occhi, non un prezzo al chilo da
+    ricavare a mente — l'app impara il prezzo unitario e da lì in poi tutte le liste
+    contano con quello.
+
+    Si può fare anche a spesa fatta: lo scontrino si guarda a casa. `null` cancella il
+    prezzo tuo e rimette quello del catalogo, se l'ingrediente ci sta dentro.
+    """
+    row, lst, week = _own_item(db, user_id, item_id)
+    ingredient = db.get(Ingredient, row.ingredient_id)
+
+    if body.paid is None:
+        entry = catalog_entry(ingredient.name)
+        ingredient.avg_price_per_unit = entry[1] if entry else None
+        ingredient.price_unit = entry[2] if entry else None
+        ingredient.price_by_user = False
+        ingredient.last_paid_at = None
+    else:
+        learned = unit_price_from(
+            body.paid, row.bought_quantity or row.total_quantity, row.unit
+        )
+        if not learned:
+            raise HTTPException(400, "Non riesco a ricavare un prezzo da questa quantità.")
+        ingredient.avg_price_per_unit, ingredient.price_unit = learned
+        ingredient.price_by_user = True
+        ingredient.last_paid_at = datetime.now(timezone.utc)
+
+    _refresh_prices(db, lst)
+    db.commit()
     return serialize_shopping_list(db, week, lst)
 
 

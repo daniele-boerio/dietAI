@@ -253,6 +253,14 @@ export const api = {
       body: JSON.stringify({ quantity }),
     }),
 
+  // Quanto è costato per la quantità presa: l'app ne ricava il prezzo unitario e da
+  // lì in poi conta con quello. null rimette il prezzo medio del catalogo.
+  setPaidPrice: (itemId, paid) =>
+    request(`/shopping/items/${itemId}/price`, {
+      method: 'PUT',
+      body: JSON.stringify({ paid }),
+    }),
+
   completeShopping: () => request('/shopping/current/complete', { method: 'POST' }),
 
   exportShoppingList: () => text('/shopping/export'),

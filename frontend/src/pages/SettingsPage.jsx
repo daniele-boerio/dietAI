@@ -1,19 +1,19 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, useParams } from 'react-router-dom';
-import { KeyRound, Trash2, X } from 'lucide-react';
+import { KeyRound, X } from 'lucide-react';
 import { api } from '../api';
 import { useApp } from '../App';
 import { useAuth } from '../AuthContext';
 import IngredientInput from '../components/IngredientInput';
 import ModelPicker from '../components/ModelPicker';
 
-// La dieta non è qui: ha una pagina sua (`/diet`). Queste sono le cose che si
-// regolano intorno alla dieta, non la dieta.
+// Qui stanno solo le cose che si impostano una volta e poi restano. Quelle che
+// cambiano di continuo hanno una pagina loro: la dieta (`/diet`) e la dispensa
+// (`/pantry`), che si riempie da sola a ogni spesa.
 const TABS = [
   { key: 'preferences', label: 'Preferenze' },
   { key: 'base', label: 'Ingredienti di base' },
   { key: 'excluded', label: 'Alimenti esclusi' },
-  { key: 'pantry', label: 'Dispensa' },
   { key: 'models', label: 'Modelli AI' },
   { key: 'account', label: 'Account e API key' },
 ];
@@ -51,7 +51,6 @@ export default function SettingsPage() {
           {tab === 'preferences' && <PreferencesTab />}
           {tab === 'base' && <BaseTab />}
           {tab === 'excluded' && <ExcludedTab />}
-          {tab === 'pantry' && <PantryTab />}
           {tab === 'models' && <ModelsTab />}
           {tab === 'account' && <AccountTab />}
         </div>
@@ -181,87 +180,6 @@ function ExcludedTab() {
           </span>
         ))}
         {items.length === 0 && <p className="field-hint">Nessun alimento escluso.</p>}
-      </div>
-    </div>
-  );
-}
-
-function PantryTab() {
-  const { addToast } = useApp();
-  const [items, setItems] = useState([]);
-  const [draft, setDraft] = useState('');
-  const [quantity, setQuantity] = useState('');
-  const [unit, setUnit] = useState('g');
-
-  const load = () => api.getPantry().then(setItems).catch(() => {});
-
-  useEffect(() => {
-    load();
-  }, []);
-
-  const add = async () => {
-    if (!draft.trim()) return;
-    try {
-      await api.addPantryItem({
-        ingredient_name: draft.trim(),
-        quantity: quantity ? Number(quantity) : null,
-        unit: quantity ? unit : null,
-      });
-      setDraft('');
-      setQuantity('');
-      load();
-    } catch (e) {
-      addToast(e.message, 'error');
-    }
-  };
-
-  return (
-    <div className="card">
-      <div className="card-title">Dispensa</div>
-      <p className="field-hint" style={{ marginBottom: 14 }}>
-        Quello che hai già in casa viene sottratto dalla lista della spesa e proposto per
-        primo alle ricette. Si aggiorna da solo quando segni una spesa come fatta.
-      </p>
-
-      <div className="inline-form">
-        <IngredientInput value={draft} onChange={setDraft} />
-        <input
-          type="number"
-          placeholder="Quantità"
-          value={quantity}
-          onChange={(e) => setQuantity(e.target.value)}
-          style={{ maxWidth: 110 }}
-        />
-        <select value={unit} onChange={(e) => setUnit(e.target.value)} style={{ maxWidth: 100 }}>
-          <option value="g">g</option>
-          <option value="ml">ml</option>
-          <option value="unità">unità</option>
-        </select>
-        <button className="btn btn-secondary" onClick={add}>
-          Aggiungi
-        </button>
-      </div>
-
-      <div className="list-rows" style={{ marginTop: 14 }}>
-        {items.map((i) => (
-          <div key={i.id} className="list-row">
-            <div className="list-row-main">
-              <strong>{i.name}</strong>
-              <span>{i.category}</span>
-            </div>
-            <span style={{ color: 'var(--text-secondary)' }}>{i.label || '—'}</span>
-            <button
-              className="icon-button danger"
-              onClick={async () => {
-                await api.removePantryItem(i.id);
-                load();
-              }}
-            >
-              <Trash2 size={15} />
-            </button>
-          </div>
-        ))}
-        {items.length === 0 && <p className="field-hint">Dispensa vuota.</p>}
       </div>
     </div>
   );

@@ -1258,7 +1258,7 @@ const routes = [
       { path: 'diet', element: <DietPage /> },   // pagina a sé: non è una preferenza
       { path: 'settings/base', element: <SettingsBasePage /> },
       { path: 'settings/excluded', element: <SettingsExcludedPage /> },
-      { path: 'settings/pantry', element: <SettingsPantryPage /> },
+      { path: 'pantry', element: <PantryPage /> },  // accanto alla spesa, non fra le opzioni
       { path: 'settings/preferences', element: <SettingsPreferencesPage /> },
     ],
   },

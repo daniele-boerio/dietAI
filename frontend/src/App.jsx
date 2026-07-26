@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  Refrigerator,
   Salad,
   Settings,
   ShoppingCart,
@@ -22,6 +23,7 @@ import RecipesPage from './pages/RecipesPage';
 import RecipeDetailPage from './pages/RecipeDetailPage';
 import TrackingPage from './pages/TrackingPage';
 import DietPage from './pages/DietPage';
+import PantryPage from './pages/PantryPage';
 import SettingsPage from './pages/SettingsPage';
 import LoginPage from './pages/LoginPage';
 import OnboardingPage from './pages/OnboardingPage';
@@ -99,6 +101,9 @@ function AuthenticatedApp() {
     { to: '/', icon: LayoutDashboard, label: 'Oggi', end: true },
     { to: '/plan', icon: CalendarDays, label: 'Settimana' },
     { to: '/shopping', icon: ShoppingCart, label: 'Spesa' },
+    // La dispensa sta accanto alla spesa perché ne è l'altra metà: la lista è quello
+    // che manca, la dispensa quello che c'è già — e la seconda si sottrae dalla prima.
+    { to: '/pantry', icon: Refrigerator, label: 'Dispensa' },
     { to: '/recipes', icon: ChefHat, label: 'Ricettario' },
     { to: '/tracking', icon: TrendingUp, label: 'Andamento' },
   ];
@@ -183,9 +188,11 @@ function AuthenticatedApp() {
             <Route path="/recipes/:recipeId" element={<RecipeDetailPage />} />
             <Route path="/tracking" element={<TrackingPage />} />
             <Route path="/diet" element={<DietPage />} />
-            {/* La dieta stava fra le impostazioni: il vecchio indirizzo resta valido
-                per i collegamenti già in giro (e per chi l'aveva nei preferiti). */}
+            <Route path="/pantry" element={<PantryPage />} />
+            {/* Dieta e dispensa stavano fra le impostazioni: i vecchi indirizzi restano
+                validi per i collegamenti già in giro (e per chi li aveva nei preferiti). */}
             <Route path="/settings/diet" element={<Navigate to="/diet" replace />} />
+            <Route path="/settings/pantry" element={<Navigate to="/pantry" replace />} />
             {/* Sempre con la scheda nell'indirizzo: così quella aperta risulta anche
                 accesa nell'elenco a fianco, e il link si può mandare a qualcuno. */}
             <Route path="/settings" element={<Navigate to="/settings/preferences" replace />} />

@@ -284,6 +284,33 @@ def update_pantry(
     if not item:
         raise HTTPException(404, "Non trovato")
 
+    # Cambiare il nome vuol dire puntare la riga a un altro ingrediente dell'anagrafica:
+    # non è una modifica di testo, perché da quel collegamento dipendono il reparto, il
+    # prezzo e soprattutto lo scomputo dalla lista della spesa.
+    if body.ingredient_name is not None:
+        try:
+            ingredient = get_or_create_ingredient(db, body.ingredient_name)
+        except ValueError:
+            raise HTTPException(400, "Nome ingrediente non valido")
+
+        if ingredient.id != item.ingredient_id:
+            # In dispensa c'è una riga sola per ingrediente (vincolo UNIQUE). Sommare
+            # le due quantità sarebbe una sorpresa — e con unità diverse un errore.
+            occupato = (
+                db.query(PantryItem)
+                .filter(
+                    PantryItem.user_id == user_id,
+                    PantryItem.ingredient_id == ingredient.id,
+                    PantryItem.id != item.id,
+                )
+                .first()
+            )
+            if occupato:
+                raise HTTPException(
+                    409, f"'{ingredient.name}' è già in dispensa: modifica quella riga."
+                )
+            item.ingredient_id = ingredient.id
+
     if "quantity" in body.model_fields_set:
         item.quantity_available = body.quantity
     if "unit" in body.model_fields_set:

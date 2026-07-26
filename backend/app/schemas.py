@@ -74,6 +74,9 @@ class PantryCreate(BaseModel):
 
 
 class PantryUpdate(BaseModel):
+    """Cambia una riga della dispensa. I campi non passati restano come sono."""
+
+    ingredient_name: str | None = Field(default=None, min_length=1, max_length=120)
     quantity: float | None = Field(default=None, ge=0)
     unit: str | None = Field(default=None, max_length=20)
 

@@ -36,6 +36,8 @@ from ..utils.units import to_base
 # stato dei pomodori ma una conserva.
 _NOISE = re.compile(
     r"\b("
+    # marchi commerciali
+    r"hero|barilla|de\s+cecco|rustichella|garofalo|buitoni|mutti|sa|valfrutta|unifruit|"
     # conservazione e stato
     r"fresc[ao]|fresch[ei]|secc[ao]|secch[ei]|surgelat[oaie]|congelat[oaie]|"
     r"sgusciat[oaie]|sbucciat[oaie]|maturo|matura|"
@@ -67,6 +69,18 @@ _PASTA_TYPES = re.compile(
     re.IGNORECASE,
 )
 
+# Tipi di pesce magro da normalizzare a "filetto di pesce magro"
+_PESCE_MAGRO = re.compile(
+    r"\b(filetti?|filett[io])\s+di\s+(branzino|orata|sogliola|merluzzo|platessa)\b|\b(branzino|orata|sogliola|merluzzo|platessa)\b",
+    re.IGNORECASE,
+)
+
+# Gamberi: togliere qualificatori geografici e conservare solo "gamberi"
+_GAMBERI = re.compile(
+    r"\bgamberi\s+(indopacifici?|rossi?|bianchi?|di\s+\w+)\b",
+    re.IGNORECASE,
+)
+
 # Quello che sta fra parentesi è sempre una glossa, mai l'alimento: "pasta corta
 # (penne)", "legumi (ceci o fagioli)". Si toglie prima dei qualificatori, o resterebbe
 # attaccato al nome e farebbe una riga a sé nella lista della spesa.
@@ -77,8 +91,19 @@ _DANGLING = re.compile(r"\s+(a|di|in|al|alla|con|da)\s*$", re.IGNORECASE)
 
 
 def normalize_name(name: str) -> str:
-    """Minuscolo, senza glosse fra parentesi, senza qualificatori e senza spazi doppi."""
+    """Minuscolo, senza glosse fra parentesi, senza qualificatori e senza spazi doppi.
+    
+    I tipi di pasta (spaghetti, penne, ecc.) vengono normalizzati a "pasta".
+    I filetti di pesce magro (branzino, orata, sogliola, merluzzo) diventano "filetto di pesce magro".
+    I gamberi con qualificatori geografici (indopacifici, rossi, bianchi) diventano "gamberi".
+    """
     n = _PARENTESI.sub(" ", (name or "").strip().lower())
+    # Normalizza i tipi di pasta a "pasta"
+    n = _PASTA_TYPES.sub("pasta", n)
+    # Normalizza i filetti di pesce magro a "filetto di pesce magro"
+    n = _PESCE_MAGRO.sub("filetto di pesce magro", n)
+    # Normalizza gamberi con qualificatori a "gamberi"
+    n = _GAMBERI.sub("gamberi", n)
     n = _NOISE.sub(" ", n)
     n = re.sub(r"[\s,;]+", " ", n).strip(" -,.")
     n = _DANGLING.sub("", n).strip(" -,.")

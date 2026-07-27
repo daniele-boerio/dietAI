@@ -263,6 +263,8 @@ export const api = {
 
   completeShopping: () => request('/shopping/current/complete', { method: 'POST' }),
 
+  clearShoppingList: () => request('/shopping/current/items', { method: 'DELETE' }),
+
   exportShoppingList: () => text('/shopping/export'),
 
   // Sposta l'ingrediente in un altro reparto: vale per tutte le liste, da qui in poi.

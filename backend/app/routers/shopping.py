@@ -193,6 +193,23 @@ def complete(
     return complete_shopping(db, user_id, lst)
 
 
+@router.delete("/current/items")
+def clear_shopping_list(
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    """Cancella tutti gli articoli dalla lista della spesa corrente.
+    
+    La lista si ripopolerà automaticamente con gli ingredienti delle ricette
+    da generare, escludendo ciò che è già in dispensa.
+    """
+    _, lst = current_list(db, user_id)
+    db.query(ShoppingListItem).filter(ShoppingListItem.shopping_list_id == lst.id).delete()
+    lst.estimated_cost = None
+    db.commit()
+    return serialize_shopping_list(db, user_id, lst)
+
+
 @router.get("/export", response_class=PlainTextResponse)
 def export(
     user_id: int = Depends(get_current_user_id),

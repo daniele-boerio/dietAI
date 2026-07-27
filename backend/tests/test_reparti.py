@@ -1,8 +1,8 @@
 """In che reparto sta un ingrediente lo decide chi fa la spesa, non il catalogo.
 
-La categoria esiste per far girare il supermercato una volta sola: se gli spaghetti
-finiscono in "altro" perché il catalogo non li conosce, la lista fa fare un giro a
-vuoto. Spostarli è una correzione dell'anagrafica, quindi vale su tutte le liste da lì
+La categoria esiste per far girare il supermercato una volta sola: se il seitan
+finisce in "altro" perché il catalogo non lo conosce, la lista fa fare un giro a
+vuoto. Spostarlo è una correzione dell'anagrafica, quindi vale su tutte le liste da lì
 in avanti — e deve sopravvivere al seed, che gira a ogni avvio del container.
 """
 
@@ -21,21 +21,21 @@ def reparto(lst: dict, nome: str) -> str | None:
 
 
 @pytest.fixture()
-def spaghetti(client, diet):
-    """Un pranzo di spaghetti, ingrediente che il catalogo non conosce."""
+def seitan(client, diet):
+    """Un pranzo col seitan, ingrediente che il catalogo non conosce."""
     week = client.get("/api/planning/weeks/current").json()
     meal = next(m for m in week["days"][0]["meals"] if m["slot_name"] == "Pranzo")
     res = client.put(
         f"/api/planning/meals/{meal['id']}/assign",
         json={
             "recipe": {
-                "title": "Spaghetti al pomodoro",
-                "instructions": "Lessa gli spaghetti e condiscili.",
+                "title": "Seitan al pomodoro",
+                "instructions": "Rosola il seitan e condiscilo.",
                 "calories": 700,
                 "protein_g": 25,
                 "carbs_g": 100,
                 "fat_g": 15,
-                "ingredients": [{"name": "spaghetti", "quantity": 100, "unit": "g"}],
+                "ingredients": [{"name": "seitan", "quantity": 100, "unit": "g"}],
             }
         },
     )
@@ -44,29 +44,29 @@ def spaghetti(client, diet):
 
 
 @pytest.fixture()
-def spaghetti_id(client, spaghetti, db):
-    return db.query(Ingredient).filter(Ingredient.name == "spaghetti").first().id
+def seitan_id(client, seitan, db):
+    return db.query(Ingredient).filter(Ingredient.name == "seitan").first().id
 
 
-def test_quello_che_il_catalogo_non_conosce_finisce_in_altro(client, spaghetti):
+def test_quello_che_il_catalogo_non_conosce_finisce_in_altro(client, seitan):
     """Il caso da cui nasce lo spostamento: nessuna parola chiave azzecca il reparto."""
     lst = client.get("/api/shopping/current").json()
-    assert reparto(lst, "spaghetti") == "altro"
+    assert reparto(lst, "seitan") == "altro"
 
 
-def test_spostare_un_ingrediente_lo_porta_nel_reparto_scelto(client, spaghetti_id):
+def test_spostare_un_ingrediente_lo_porta_nel_reparto_scelto(client, seitan_id):
     res = client.put(
-        f"/api/config/ingredients/{spaghetti_id}/category", json={"category": "cereali"}
+        f"/api/config/ingredients/{seitan_id}/category", json={"category": "cereali"}
     )
 
     assert res.status_code == 200, res.text
     assert res.json()["label"] == "Pane e cereali"
 
     lst = client.get("/api/shopping/current").json()
-    assert reparto(lst, "spaghetti") == "cereali"
+    assert reparto(lst, "seitan") == "cereali"
 
 
-def test_la_lista_porta_i_reparti_fra_cui_scegliere(client, spaghetti):
+def test_la_lista_porta_i_reparti_fra_cui_scegliere(client, seitan):
     """Servono tutti, non solo quelli che hanno qualcosa dentro: il reparto giusto
     per un ingrediente è quasi sempre uno di quelli ancora vuoti."""
     lst = client.get("/api/shopping/current").json()
@@ -76,9 +76,9 @@ def test_la_lista_porta_i_reparti_fra_cui_scegliere(client, spaghetti):
     assert len(chiavi) == 12
 
 
-def test_un_reparto_inventato_non_passa(client, spaghetti_id):
+def test_un_reparto_inventato_non_passa(client, seitan_id):
     res = client.put(
-        f"/api/config/ingredients/{spaghetti_id}/category", json={"category": "scaffale 4"}
+        f"/api/config/ingredients/{seitan_id}/category", json={"category": "scaffale 4"}
     )
     assert res.status_code == 400
 

@@ -23,17 +23,50 @@ from app.services.ingredients import merge_duplicates, normalize_name
         ("mandorle sgusciate", "mandorle"),
         # Taglio e formato: cambia come te lo danno, non cosa compri.
         ("mandorle a lamelle", "mandorle"),
-        ("parmigiano grattugiato", "parmigiano"),
         ("peperoni a listarelle", "peperoni"),
         ("petto di pollo a fettine", "petto di pollo"),
         ("aglio a spicchi", "aglio"),
         # Calibro e qualità.
         ("zucchine medie", "zucchine"),
         ("pomodori bio", "pomodori"),
+        # Formato della pasta: penne o fusilli sono lo stesso pacco e lo stesso piatto.
+        ("pasta corta", "pasta"),
+        ("pasta corta (penne)", "pasta"),
+        ("pasta lunga", "pasta"),
+        ("pasta di semola di grano duro", "pasta"),
+        ("spaghetti", "pasta"),
+        ("fusilli", "pasta"),
+        # E l'accordo che salta per strada non deve fare una riga a sé.
+        ("fusilli integrali", "pasta integrale"),
+        # Sulla pasta ci va il formaggio che c'è: parmigiano e grana sono una riga sola.
+        ("parmigiano grattugiato", "formaggio grattugiato"),
+        ("grana padano", "formaggio grattugiato"),
+        ("formaggio grattato", "formaggio grattugiato"),
     ],
 )
 def test_i_qualificatori_spariscono(scritto, atteso):
     assert normalize_name(scritto) == atteso
+
+
+@pytest.mark.parametrize(
+    "cereale",
+    [
+        # Il formato della pasta si può unificare, un altro cereale no: sono altri
+        # macro e un altro scaffale. È costato una fusione da disfare a mano.
+        "cous cous",
+        "riso",
+        "riso integrale",
+        "orzo",
+        "farro",
+        "quinoa",
+        # Ripiena e gnocchi: dentro c'è altro (carne, formaggio, patate).
+        "ravioli",
+        "tortellini",
+        "gnocchi",
+    ],
+)
+def test_un_cereale_non_diventa_pasta(cereale):
+    assert normalize_name(cereale) == cereale
 
 
 @pytest.mark.parametrize(
@@ -48,6 +81,9 @@ def test_i_qualificatori_spariscono(scritto, atteso):
         "cioccolato fondente",
         # "Pelati" non è lo stato dei pomodori: è una conserva, un altro prodotto.
         "pomodori pelati",
+        # Il formaggio da grattugia si unifica, gli altri no: qui dentro c'è di tutto.
+        "formaggio spalmabile",
+        "mozzarella",
     ],
 )
 def test_quello_che_cambia_l_alimento_resta(scritto):
@@ -140,3 +176,75 @@ def test_rilanciarlo_non_fa_niente(client, db):
 
     merge_duplicates(db)
     assert merge_duplicates(db) == []
+
+
+# ── Riparazione dei cereali fusi per sbaglio ──────────────────────────────────
+
+
+def _ricetta(db, user_id, titolo, istruzioni, ingredient_id):
+    from app.models import Recipe
+
+    ricetta = Recipe(
+        user_id=user_id,
+        title=titolo,
+        instructions=istruzioni,
+        calories=500,
+        protein_g=20,
+        carbs_g=70,
+        fat_g=10,
+    )
+    db.add(ricetta)
+    db.flush()
+    db.add(
+        RecipeIngredient(
+            recipe_id=ricetta.id, ingredient_id=ingredient_id, quantity=80, unit="g"
+        )
+    )
+    return ricetta
+
+
+def test_i_cereali_fusi_tornano_al_loro_nome(client, db, monkeypatch):
+    """Il danno da disfare: una fusione troppo larga aveva reso "pasta" anche il
+    cous cous. Il nome originale non è più in anagrafica, ma la ricetta lo dice ancora."""
+    from app.models import User
+    from app import repair_cereals
+
+    monkeypatch.setattr(repair_cereals, "SessionLocal", lambda: db)
+    monkeypatch.setattr(db, "close", lambda: None)
+
+    user = db.query(User).first()
+    pasta = Ingredient(name="pasta", category="cereali")
+    db.add(pasta)
+    db.flush()
+    couscous = _ricetta(db, user.id, "Cous cous di verdure", "Sgrana il cous cous.", pasta.id)
+    vera = _ricetta(db, user.id, "Pasta al pomodoro", "Cuoci la pasta.", pasta.id)
+    db.commit()
+
+    repair_cereals.main()
+
+    riga = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == couscous.id).one()
+    assert db.get(Ingredient, riga.ingredient_id).name == "cous cous"
+    # Quella che la pasta la usava davvero resta dov'è.
+    riga = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == vera.id).one()
+    assert db.get(Ingredient, riga.ingredient_id).name == "pasta"
+
+
+def test_dove_il_testo_non_decide_non_si_indovina(client, db, monkeypatch):
+    """Due cereali nel testo: sceglierne uno a caso sarebbe peggio che lasciar decidere."""
+    from app.models import User
+    from app import repair_cereals
+
+    monkeypatch.setattr(repair_cereals, "SessionLocal", lambda: db)
+    monkeypatch.setattr(db, "close", lambda: None)
+
+    user = db.query(User).first()
+    pasta = Ingredient(name="pasta", category="cereali")
+    db.add(pasta)
+    db.flush()
+    dubbia = _ricetta(db, user.id, "Insalata di cereali", "Riso o farro, a piacere.", pasta.id)
+    db.commit()
+
+    repair_cereals.main()
+
+    riga = db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == dubbia.id).one()
+    assert db.get(Ingredient, riga.ingredient_id).name == "pasta"

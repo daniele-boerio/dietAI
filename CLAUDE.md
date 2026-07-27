@@ -130,7 +130,7 @@ perché il totale possa dire su cosa si regge invece di spacciarsi per un preven
 
 **Il reparto di un ingrediente lo decide chi fa la spesa.** `Ingredient.category`
 serve a girare il supermercato una volta sola, e il catalogo non può sapere che gli
-spaghetti stanno con pane e cereali (`guess_category` non li riconosce e finiscono in
+il seitan sta con la carne (`guess_category` non lo riconosce e finisce in
 "altro"). `PUT /api/config/ingredients/{id}/category` li sposta per tutte le liste,
 presenti e future, e alza `category_by_user`: senza quel flag il seed — che gira **a
 ogni avvio del container** e riallinea l'anagrafica al catalogo — se la riprenderebbe
@@ -311,14 +311,29 @@ foglio di lavoro locale e l'utente deve poter correggere prima di salvare.
 mette in minuscolo e toglie i qualificatori: senza, la lista della spesa avrebbe tre
 righe di zucchine e la dispensa non ne coprirebbe nessuna. La linea di taglio è **come
 è messo** l'alimento contro **cos'è**: via conservazione (fresco, surgelato,
-sgusciato), taglio (a lamelle, grattugiato, a fettine) e calibro (medie, grandi, bio);
-restano integrale, magro, light, intero, al naturale, sott'olio — cambiano i macro,
-quindi cambiano l'alimento — e "pelati", che è una conserva e non lo stato di un
-pomodoro. Di conseguenza "surgelato" non decide più il reparto: la parola sparisce
-prima di arrivare a `guess_category`, e il banco giusto lo sceglie l'utente dalla
-lista (dove la scelta resta). Allargando l'elenco, le righe già in tabella vanno
-riallineate a mano: `python -m app.merge_ingredients` fonde i doppioni spostando
-ricette, dispensa, liste e preferenze sulla riga buona.
+sgusciato), taglio (a lamelle, grattugiato, a fettine), calibro (medie, grandi, bio) e
+le glosse fra parentesi ("pasta corta (penne)"); restano integrale, magro, light,
+intero, al naturale, sott'olio — cambiano i macro, quindi cambiano l'alimento — e
+"pelati", che è una conserva e non lo stato di un pomodoro. Di conseguenza "surgelato"
+non decide più il reparto: la parola sparisce prima di arrivare a `guess_category`, e
+il banco giusto lo sceglie l'utente dalla lista (dove la scelta resta).
+
+Oltre a togliere parole, `normalize_name` **unisce** quello che per la dieta e per la
+spesa è lo stesso alimento: i formati della pasta (`_PASTA_TYPES`: penne, fusilli,
+spaghetti → `pasta`), i pesci bianchi (`_PESCE_MAGRO` → `filetto di pesce magro`) e i
+formaggi da grattugia (`_DA_GRATTUGIA` → `formaggio grattugiato`). Sono liste da
+allargare col bilancino, perché **unire due alimenti diversi è un danno che si disfa a
+mano**: `riso`, `cous cous`, `farro`, `orzo` finiti dentro `_PASTA_TYPES` hanno reso
+"pasta" mezzo ricettario, e la fusione cancella la riga di anagrafica — il nome
+originale resta solo nel testo della ricetta. Le unificazioni confrontano il **nome
+intero** e non una parola in mezzo, o "grana padano" diventa "formaggio padano". I
+nomi fabbricati così vanno aggiunti a `utils/pricing.py`, o restano senza prezzo.
+
+Cambiata una regola, le righe già in tabella vanno riallineate a mano:
+`python -m app.merge_ingredients` fonde i doppioni spostando ricette, dispensa, liste
+e preferenze sulla riga buona. Se la fusione ha unito troppo,
+`python -m app.repair_cereals` rimette al loro posto le ricette che nel testo dicono
+ancora cous cous o riso; la dispensa no, perché le scorte sommate non si dividono.
 
 **Niente email, in tutta l'app.** Nessun SMTP, nessuna registrazione, nessun recupero
 password via link: l'utente nasce dal seed e l'unico endpoint pubblico è `/auth/login`.

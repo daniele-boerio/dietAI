@@ -195,6 +195,11 @@ INGREDIENT_CATALOG: dict[str, tuple[str, float, str]] = {
     # dalla lista della spesa, che è l'unico posto da cui si vede il proprio negozio.
     "minestrone": ("verdura", 2.80, "kg"),
     "filetti di merluzzo": ("pesce", 12.00, "kg"),
+    # I due nomi che la normalizzazione fabbrica unendo alimenti diversi (branzino e
+    # orata, parmigiano e grana): senza una riga qui resterebbero senza prezzo, e il
+    # totale della lista avrebbe due buchi proprio sulle voci più care.
+    "filetto di pesce magro": ("pesce", 14.00, "kg"),
+    "formaggio grattugiato": ("latticini", 19.00, "kg"),
 }
 
 # Ingredienti proposti come "di base" al primo avvio: quelli che chiunque ha in casa

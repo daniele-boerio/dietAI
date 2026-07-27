@@ -59,13 +59,18 @@ _NOISE = re.compile(
     re.IGNORECASE,
 )
 
-# Tipi di pasta da normalizzare a "pasta": spaghetti, penne, fusilli, ecc.
-# Restano fuori i formati con un'identità propria ("pasta all'uovo", "pasta sfoglia").
+# Formati di pasta da normalizzare a "pasta": penne o fusilli sono lo stesso pacco
+# per la spesa e lo stesso alimento per la dieta.
+#
+# **Qui dentro ci va solo pasta.** Un altro cereale è un altro alimento, con altri
+# macro e un altro scaffale: riso, cous cous, orzo, farro e quinoa restano quello che
+# sono. Fuori anche la pasta ripiena (ravioli, tortellini: dentro c'è carne o
+# formaggio) e gli gnocchi, che sono patate.
 _PASTA_TYPES = re.compile(
-    r"\b(spaghetti|penne|fusilli|farfalle|rigatoni|sedani|bucatini|linguine|fettuccine|tagliatelle|"
-    r"gnocchi|ravioli|tortellini|cappelletti|agnolotti|tortelli|bavette|trenette|vermicelli|"
-    r"pennette|mezzemaniche|tortiglioni|cannelloni|lasagna|taglioni|pappardelle|maltagliati|"
-    r"casarecce|orecchiette|rotelle|conchiglie|tubetti|ditalini|riso|orzo|farro|cous\s+cous)\b",
+    r"\b(spaghetti|penne|fusilli|farfalle|rigatoni|sedani|bucatini|linguine|fettuccine|"
+    r"tagliatelle|bavette|trenette|vermicelli|pennette|mezzemaniche|tortiglioni|"
+    r"tagliolini|pappardelle|maltagliati|casarecce|orecchiette|rotelle|conchiglie|"
+    r"tubetti|ditalini)\b",
     re.IGNORECASE,
 )
 
@@ -81,11 +86,22 @@ _GAMBERI = re.compile(
     re.IGNORECASE,
 )
 
-# Formaggio grattugiato: parmigiano, grana, formaggio grattato → "formaggio grattugiato"
-_FORMAGGIO_GRATTUGIATO = re.compile(
-    r"\b(parmigiano|grana|formaggio)\b",
-    re.IGNORECASE,
-)
+# I formaggi da grattugia finiscono tutti sulla stessa riga: sulla pasta ci va quello
+# che c'è in casa, e la dieta li conta uguali. Si confronta il **nome intero**, non una
+# parola qualsiasi dentro: "formaggio spalmabile" è un altro alimento, e cercare
+# "grana" in mezzo a un nome trasformava "grana padano" in "formaggio padano".
+_DA_GRATTUGIA = {
+    "parmigiano",
+    "parmigiano reggiano",
+    "grana",
+    "grana padano",
+    "pecorino",
+    "pecorino romano",
+}
+
+# La dicitura esplicita va riconosciuta *prima* di togliere il rumore, o "grattugiato"
+# sparisce (è un taglio, sta fra i qualificatori) e resta un generico "formaggio".
+_GRATTUGIATO_ESPLICITO = re.compile(r"^formaggio\s+gratt(ugiat|at)[oaie]$", re.IGNORECASE)
 
 # Olive: togliere tipi e qualificatori, conservare solo "olive"
 _OLIVE = re.compile(
@@ -101,30 +117,40 @@ _PARENTESI = re.compile(r"\([^)]*\)")
 # Preposizioni rimaste appese dopo aver tolto un qualificatore ("mandorle a" → "mandorle").
 _DANGLING = re.compile(r"\s+(a|di|in|al|alla|con|da)\s*$", re.IGNORECASE)
 
+# L'accordo che salta quando il formato diventa "pasta": "fusilli integrali" → "pasta
+# integrali". Senza questa riga sarebbe una riga di spesa a sé, accanto a "pasta
+# integrale", che è esattamente il doppione che stiamo cercando di evitare.
+_PLURALI = ((r"\bintegrali\b", "integrale"), (r"\bfreschi\b", ""))
+
 
 def normalize_name(name: str) -> str:
     """Minuscolo, senza glosse fra parentesi, senza qualificatori e senza spazi doppi.
-    
-    I tipi di pasta (spaghetti, penne, ecc.) vengono normalizzati a "pasta".
-    I filetti di pesce magro (branzino, orata, sogliola, merluzzo) diventano "filetto di pesce magro".
-    I gamberi con qualificatori geografici (indopacifici, rossi, bianchi) diventano "gamberi".
-    Parmigiano, grana e formaggio diventano "formaggio grattugiato".
-    Olive con tipi (taggiasche, nere, ecc.) diventano "olive".
+
+    Oltre a togliere il rumore, unisce sulla stessa riga le cose che per la dieta e
+    per la spesa sono lo stesso alimento: i formati della pasta (spaghetti, penne),
+    i pesci bianchi (`_PESCE_MAGRO`), i formaggi da grattugia. **Un altro cereale non
+    è pasta**: riso, cous cous, farro e orzo restano quello che sono, e lo stesso vale
+    per la pasta ripiena e gli gnocchi.
     """
     n = _PARENTESI.sub(" ", (name or "").strip().lower())
-    # Normalizza i tipi di pasta a "pasta"
+    n = re.sub(r"[\s,;]+", " ", n).strip(" -,.")
+
+    # Prima del rumore: "grattugiato" è un taglio e fra un attimo sparisce.
+    if _GRATTUGIATO_ESPLICITO.match(n):
+        return "formaggio grattugiato"
+
     n = _PASTA_TYPES.sub("pasta", n)
-    # Normalizza i filetti di pesce magro a "filetto di pesce magro"
     n = _PESCE_MAGRO.sub("filetto di pesce magro", n)
-    # Normalizza gamberi con qualificatori a "gamberi"
     n = _GAMBERI.sub("gamberi", n)
-    # Normalizza formaggio grattugiato a "formaggio grattugiato"
-    n = _FORMAGGIO_GRATTUGIATO.sub("formaggio grattugiato", n)
-    # Normalizza olive con tipi a "olive"
     n = _OLIVE.sub("olive", n)
     n = _NOISE.sub(" ", n)
+    for plurale, singolare in _PLURALI:
+        n = re.sub(plurale, singolare, n)
     n = re.sub(r"[\s,;]+", " ", n).strip(" -,.")
     n = _DANGLING.sub("", n).strip(" -,.")
+
+    if n in _DA_GRATTUGIA:
+        return "formaggio grattugiato"
     return n[:120]
 
 

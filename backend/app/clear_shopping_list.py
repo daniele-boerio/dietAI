@@ -22,15 +22,21 @@ def main():
             print("❌ Nessuna settimana corrente trovata.")
             return
         
-        # La settimana deve avere una lista della spesa
-        if not current_week.shopping_list:
+        # Trova la lista della spesa associata
+        shopping_list = (
+            db.query(ShoppingList)
+            .filter(ShoppingList.week_plan_id == current_week.id)
+            .first()
+        )
+        
+        if not shopping_list:
             print("❌ Nessuna lista della spesa associata alla settimana.")
             return
         
         # Conta gli articoli prima
         count = (
             db.query(ShoppingListItem)
-            .filter(ShoppingListItem.shopping_list_id == current_week.shopping_list.id)
+            .filter(ShoppingListItem.shopping_list_id == shopping_list.id)
             .count()
         )
         
@@ -40,11 +46,11 @@ def main():
         
         # Cancella
         db.query(ShoppingListItem).filter(
-            ShoppingListItem.shopping_list_id == current_week.shopping_list.id
+            ShoppingListItem.shopping_list_id == shopping_list.id
         ).delete()
         
         # Azzera il costo stimato
-        current_week.shopping_list.estimated_cost = None
+        shopping_list.estimated_cost = None
         
         db.commit()
         print(f"✓ Rimossi {count} articoli dalla lista della spesa.")

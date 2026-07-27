@@ -13,9 +13,10 @@ const todayIso = () => new Date().toISOString().slice(0, 10);
 export default function WeekGrid({
   week,
   busyMealId,
+  followingMealId,
   busyDayId,
   onRegenerate,
-  onToggleRecurring,
+  onFollowed,
   onToggleDaySkip,
 }) {
   const today = todayIso();
@@ -69,10 +70,12 @@ export default function WeekGrid({
                 key={meal.id}
                 meal={meal}
                 locked={week.is_locked}
+                past={week.is_past}
                 skipped={day.is_skipped}
-                busy={busyMealId === meal.id}
+                busy={busyMealId === meal.id || followingMealId === meal.id}
+                regenerating={busyMealId === meal.id}
                 onRegenerate={onRegenerate}
-                onToggleRecurring={onToggleRecurring}
+                onFollowed={onFollowed}
                 style={{ gridColumn: column, gridRow: mealIndex + 2 }}
               />
             ))}

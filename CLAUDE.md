@@ -87,6 +87,20 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
 vuota. Generare vuol dire riempire le caselle libere. Se la dieta cambia,
 `ensure_week_structure` riallinea le settimane esistenti.
 
+**Il piano si sfoglia, e il passato è di sola lettura.** Non ci sono più due schede
+fisse (questa settimana / la prossima): `GET /api/planning/weeks/by-date/{data}`
+apre qualunque lunedì e `/plan/:weekStart` è la pagina, con `/plan` e `/plan/next`
+lasciati validi perché sono linkati in giro. Avanti vale la regola di sopra —
+la settimana nasce appena la si apre, e quanto pianificare lo decide l'utente, come
+per la spesa. Indietro no: una settimana passata che non c'è **non** viene creata
+adesso (arriverebbe con i pasti fissi ricopiati in giorni già passati, e l'archivio
+si riempirebbe di settimane mai vissute), quindi l'endpoint risponde con una
+settimana vuota, `id` a `None` e la stessa forma delle altre. Su ciò che invece c'è
+davvero, `is_past` mette la settimana in consultazione: `ensure_not_past` rifiuta con
+**409** generazione e rigenerazione — pagare una chiamata al modello per rifare
+giovedì scorso è la spesa più inutile dell'app — mentre voti, preferiti e "l'ho
+seguito" restano, che è il motivo per cui si torna indietro.
+
 **La spesa copre tutte le settimane generate, non solo quella corrente.**
 `weeks_covered` prende, dalla settimana della lista in avanti, tutte quelle per cui la
 spesa non risulta ancora fatta (`is_locked` significa "già comprata", quindi resta
@@ -155,8 +169,8 @@ niente se la spesa è fatta — nemmeno dopo uno sblocco d'emergenza, perché il
 resta comprato. Vedi `shift_past_days` e `_reflow_recipes`.
 
 **"Ho mangiato altro" accoda il piatto, non lo perde.** È il caso simmetrico e vale
-soprattutto a spesa fatta: `is_followed = False` su un pasto (dalla home, dal dettaglio
-o dalla chat) mette `PlannedMeal.is_skipped` e sposta la sua ricetta sulla prima casella
+soprattutto a spesa fatta: `is_followed = False` su un pasto (dalla home, dalla
+griglia della settimana, dal dettaglio o dalla chat) mette `PlannedMeal.is_skipped` e sposta la sua ricetta sulla prima casella
 libera di quello stesso pasto — più avanti in settimana, o sulla prossima se la
 settimana è piena (`skip_meal`). Nessuno slittamento a catena: gli altri giorni non si
 muovono. La casella saltata **conserva la `recipe_id` come memoria** di cosa c'era in
@@ -351,6 +365,17 @@ threadpool. La regola non ha eccezioni e `tests/test_concurrency.py` la fa rispe
   `viewport-fit=cover` lascia passare la pagina sotto la tacca. E ciò che compare solo
   `:hover` col dito non compare mai: le correzioni per il touch stanno nel blocco
   `@media (pointer: coarse)` in fondo al foglio, bersagli da 44px compresi.
+- **Indietro non deve mai uscire dall'app**, e va sempre da `useGoBack(fallback)`
+  (`lib/navigation.js`), mai `navigate(-1)` da solo. Sulla prima pagina della
+  sessione dietro non c'è niente, e su iPhone — dove DietAI si apre a schermo intero
+  dalla home — "niente" è uno schermo nero da cui si esce solo chiudendo l'app. Il
+  caso non è raro: iOS chiude le app in background e le riapre sull'ultimo indirizzo,
+  che diventa l'unica voce di cronologia. `key === 'default'` riconosce quella voce.
+- **Nessuna pagina renderizza il vuoto.** Se il caricamento fallisce si mostra
+  `LoadError` (messaggio + Riprova), mai `return null`: col tema scuro il vuoto è uno
+  schermo nero, e il toast dell'errore dopo tre secondi non c'è più. Per lo stesso
+  motivo le rotte stanno dentro un `ErrorBoundary`: un errore in un componente
+  staccherebbe l'intero albero React lasciando la finestra nera.
 - La griglia settimanale (≥1100px) allinea le righe sciogliendo `.day-column` con
   `display: contents`, e **ogni cella dichiara riga e colonna** (inline, da `WeekGrid`).
   Non affidarsi al posizionamento automatico: il cursore di CSS Grid non torna

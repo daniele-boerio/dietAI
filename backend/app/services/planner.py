@@ -320,6 +320,22 @@ def ensure_unlocked(week: WeekPlan) -> None:
         )
 
 
+def ensure_not_past(week: WeekPlan) -> None:
+    """Il passato si consulta, non si ripianifica.
+
+    Da quando il piano si sfoglia all'indietro la settimana scorsa è a un clic di
+    distanza: generarci sopra una ricetta vorrebbe dire pagare una chiamata al
+    modello per cucinare un giorno che è già passato. Restano permessi il tracking
+    e i voti — segnare com'è andata è proprio ciò per cui si torna indietro.
+    """
+    if week.week_start_date < current_week_start():
+        raise HTTPException(
+            409,
+            "Questa settimana è passata: puoi consultarla e segnare com'è andata, "
+            "ma non ripianificarla.",
+        )
+
+
 def ensure_not_skipped(day: DayPlan, meal: PlannedMeal | None = None) -> None:
     if meal is not None and meal.is_skipped:
         raise HTTPException(
@@ -872,6 +888,9 @@ def serialize_meal(
             "is_locked": week.is_locked,
             "status": week.status,
             "is_current": week.week_start_date == current_week_start(),
+            # Sfogliando all'indietro si arriva anche qui: la pagina deve sapere che
+            # la ricetta si guarda e si traccia, ma non si rigenera più.
+            "is_past": week.week_start_date < current_week_start(),
         }
     return data
 
@@ -939,6 +958,9 @@ def serialize_week(db: Session, week: WeekPlan) -> dict:
         "locked_at": week.locked_at.isoformat() if week.locked_at else None,
         "lock_expires_at": week.lock_expires_at.isoformat() if week.lock_expires_at else None,
         "is_current": week.week_start_date == current_week_start(),
+        # Una settimana archiviata è storia: si sfoglia, ma non si genera (vedi
+        # `ensure_not_past`) e la griglia mette le sue caselle in sola lettura.
+        "is_past": week.week_start_date < current_week_start(),
         # La UI ci si aggancia per rimettere il loader quando si torna sulla pagina
         # a generazione avviata.
         "is_generating": is_generating(week),
@@ -974,6 +996,7 @@ def generate_week(
     l'operazione di tutti i giorni, rifare da capo una settimana già piena è una
     scelta esplicita che la UI fa confermare.
     """
+    ensure_not_past(week)
     ensure_unlocked(week)
     ensure_not_generating(week)
     rows = week_meals(db, week)
@@ -1146,6 +1169,7 @@ def regenerate_meal(
     """
     day = db.get(DayPlan, meal.day_plan_id)
     week = db.get(WeekPlan, day.week_plan_id)
+    ensure_not_past(week)
     ensure_unlocked(week)
     ensure_not_skipped(day, meal)
 

@@ -1,16 +1,23 @@
 import { Link } from 'react-router-dom';
-import { Clock, Flame, MessageSquare, Pin, RefreshCw } from 'lucide-react';
+import { Check, Clock, Flame, RefreshCw, X } from 'lucide-react';
 import MacroBar from './MacroBar';
 
 // Card di un incrocio giorno × pasto. Mostra sempre lo slot e il target, anche
 // quando la casella è vuota: la struttura della dieta si legge prima delle ricette.
+//
+// In fondo ci stanno le tre cose che si fanno davanti alla griglia: cambiare il
+// piatto e dire com'è andata. Chat e "rendi fisso" stanno dentro il dettaglio, che è
+// a un tocco sulla card: da qui servivano di rado, e occupavano il posto di quello
+// che invece si preme ogni sera.
 export default function MealCard({
   meal,
   locked,
+  past,
   skipped,
   busy,
+  regenerating,
   onRegenerate,
-  onToggleRecurring,
+  onFollowed,
   style,
 }) {
   const { recipe } = meal;
@@ -83,25 +90,40 @@ export default function MealCard({
                 ? 'Pasto saltato: la ricetta è stata rimandata più avanti'
                 : skipped
                   ? 'Giorno saltato: è passato senza la spesa'
-                  : locked
-                    ? 'Piano bloccato'
-                    : 'Rigenera'
+                  : past
+                    ? 'Settimana passata: si consulta, non si rigenera'
+                    : locked
+                      ? 'Piano bloccato'
+                      : 'Rigenera'
           }
-          disabled={locked || off || busy || meal.self_managed}
+          disabled={locked || past || off || busy || meal.self_managed}
           onClick={() => onRegenerate(meal)}
         >
-          <RefreshCw className={busy ? 'spinning' : ''} />
+          {/* Gira solo se sta davvero rigenerando: mentre si salva "l'ho seguito"
+              la card è occupata lo stesso, ma questa icona direbbe un'altra cosa. */}
+          <RefreshCw className={regenerating ? 'spinning' : ''} />
         </button>
-        <Link className="meal-action" to={`/meals/${meal.id}`} title="Chat e dettaglio">
-          <MessageSquare />
-        </Link>
+
+        {/* Com'è andata si segna da qui, senza aprire il pasto: è la cosa che si fa
+            ogni sera, di solito col telefono in mano. Restano premibili anche a
+            piano bloccato e sulle settimane passate — il tracking è proprio ciò per
+            cui ci si torna — e su un pasto già rimandato, dove "l'ho seguito" è il
+            modo di annullare il rinvio. */}
         <button
-          className={`meal-action ${meal.is_recurring ? 'on' : ''}`}
-          title={meal.is_recurring ? 'Non è più fisso' : 'Rendi fisso ogni settimana'}
-          disabled={!recipe}
-          onClick={() => onToggleRecurring(meal)}
+          className={`meal-action ok ${meal.is_followed === true ? 'on' : ''}`}
+          title="L'ho seguito"
+          disabled={!recipe || skipped || busy}
+          onClick={() => onFollowed(meal, true)}
         >
-          <Pin />
+          <Check />
+        </button>
+        <button
+          className={`meal-action no ${meal.is_followed === false ? 'on' : ''}`}
+          title="Ho mangiato altro"
+          disabled={!recipe || skipped || busy}
+          onClick={() => onFollowed(meal, false)}
+        >
+          <X />
         </button>
       </div>
     </div>

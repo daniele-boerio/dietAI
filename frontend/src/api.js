@@ -146,6 +146,10 @@ export const api = {
 
   getNextWeek: () => request('/planning/weeks/next'),
 
+  // Una settimana qualsiasi, dal suo lunedì (ISO). Indietro le settimane mai
+  // pianificate tornano vuote (`id` a null) invece di essere create adesso.
+  getWeekByDate: (weekStart) => request(`/planning/weeks/by-date/${weekStart}`),
+
   // Di default riempie solo le caselle vuote; regenerateAll rifà tutta la settimana
   // (una chiamata al modello su tutti i pasti: la UI la fa confermare).
   generateWeek: (weekId, regenerateAll = false) =>

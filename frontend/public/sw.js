@@ -27,8 +27,24 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin || url.pathname.startsWith('/api')) return;
 
   // Navigazioni: rete prima, cache come rete di sicurezza (SPA → index.html).
+  //
+  // La copia in cache si riscrive a ogni apertura riuscita, e non è un dettaglio:
+  // l'index.html messo da parte all'installazione punta a un bundle col suo hash nel
+  // nome, che il deploy successivo cancella dal server. Con la rete ballerina — cioè
+  // sul telefono — la pagina di riserva caricherebbe uno script che non esiste più:
+  // l'app si apre e resta nera, senza nemmeno un errore da leggere.
   if (request.mode === 'navigate') {
-    event.respondWith(fetch(request).catch(() => caches.match('/index.html')));
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE).then((c) => c.put('/index.html', copy));
+          }
+          return response;
+        })
+        .catch(() => caches.match('/index.html'))
+    );
     return;
   }
 

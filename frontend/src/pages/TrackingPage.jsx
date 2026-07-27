@@ -3,6 +3,7 @@ import { TrendingUp } from 'lucide-react';
 import { api, formatDate, formatNumber } from '../api';
 import { useApp } from '../App';
 import EmptyState from '../components/EmptyState';
+import LoadError from '../components/LoadError';
 import YearHeatmap from '../components/YearHeatmap';
 
 // Gauge ad anello disegnato con conic-gradient: nessuna libreria di grafici per tre
@@ -76,7 +77,10 @@ function WeeklyView() {
   const [weeks, setWeeks] = useState([]);
   const [selected, setSelected] = useState('');
   const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
+  // Cambia a ogni "Riprova": è l'unica dipendenza che serve per rifare la fetch.
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     api.getWeeks().then(setWeeks).catch(() => {});
@@ -86,13 +90,19 @@ function WeeklyView() {
     setLoading(true);
     api
       .getTracking(selected || undefined)
-      .then(setData)
-      .catch((e) => addToast(e.message, 'error'))
+      .then((d) => {
+        setData(d);
+        setError(null);
+      })
+      .catch((e) => {
+        setError(e.message);
+        addToast(e.message, 'error');
+      })
       .finally(() => setLoading(false));
-  }, [selected, addToast]);
+  }, [selected, attempt, addToast]);
 
   if (loading) return <div className="spinner" />;
-  if (!data) return null;
+  if (!data) return <LoadError message={error} onRetry={() => setAttempt((n) => n + 1)} />;
 
   const summary = data.weekly_summary;
   const maxCalories = Math.max(

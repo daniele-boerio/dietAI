@@ -623,6 +623,8 @@ textarea {
   margin-bottom: 18px;
 }
 
+/* Schede a pillola (settimana/anno in Andamento). Il piano non le usa più: lì le
+   settimane non sono due, si sfogliano. */
 .week-tabs {
   display: inline-flex;
   background: var(--bg-surface);
@@ -644,6 +646,47 @@ textarea {
   background: var(--bg-card);
   color: var(--text-primary);
   box-shadow: var(--shadow-card);
+}
+
+/* Il piano si sfoglia una settimana per volta, avanti e indietro senza fondo. */
+.week-nav {
+  display: inline-flex;
+  align-items: center;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  padding: 3px;
+}
+
+.week-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 99px;
+  color: var(--text-secondary);
+  transition: background var(--transition), color var(--transition);
+}
+
+.week-nav-btn:hover {
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+
+.week-nav-btn svg {
+  width: 17px;
+  height: 17px;
+}
+
+.week-nav-label {
+  min-width: 122px;
+  text-align: center;
+  padding: 0 6px;
+  font-size: 0.83rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
 }
 
 .week-progress {
@@ -957,6 +1000,24 @@ textarea {
 
 .meal-action.on {
   color: var(--accent);
+}
+
+/* "L'ho seguito" e "ho mangiato altro": acceso è il colore che il tracking usa
+   ovunque per le stesse due cose, così la griglia si legge come il resto dell'app. */
+.meal-action.ok.on {
+  color: var(--success);
+}
+
+.meal-action.no.on {
+  color: var(--danger);
+}
+
+.meal-action.ok:hover:not(:disabled) {
+  color: var(--success);
+}
+
+.meal-action.no:hover:not(:disabled) {
+  color: var(--danger);
 }
 
 .meal-action svg {
@@ -2809,8 +2870,23 @@ textarea:focus {
     font-size: 0.86rem;
   }
 
+  /* Le frecce fra una settimana e l'altra si premono col pollice: 30px sono un
+     bersaglio da mouse, non da dito. */
+  .week-nav-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  .week-nav-label {
+    font-size: 0.86rem;
+  }
+
+  /* Segnare "l'ho seguito" dalla griglia è la cosa che si fa più spesso col
+     telefono in mano, e sono tre bersagli in fila larghi un terzo di card: sotto i
+     44px si preme quello sbagliato. */
   .meal-action {
     padding: 10px 4px;
+    min-height: 44px;
   }
 
   .shopping-tick {

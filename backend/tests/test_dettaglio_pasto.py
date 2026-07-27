@@ -12,7 +12,16 @@ import pytest
 from app.services import planner, prompts
 from tests.test_flow import FakeModel, _fake_recipe
 
-CHIAVI_SETTIMANA = {"id", "week_start_date", "is_locked", "status", "is_current"}
+CHIAVI_SETTIMANA = {
+    "id",
+    "week_start_date",
+    "is_locked",
+    "status",
+    "is_current",
+    # Il piano si sfoglia all'indietro: da lì si arriva a pasti di settimane
+    # archiviate, e la pagina deve sapere che non si rigenerano più.
+    "is_past",
+}
 
 
 class ModelloDiProva(FakeModel):

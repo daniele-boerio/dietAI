@@ -15,6 +15,7 @@ import { api, formatDate, formatMoney } from '../api';
 import { useApp } from '../App';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
+import LoadError from '../components/LoadError';
 import ShoppingChat from '../components/ShoppingChat';
 
 /**
@@ -109,6 +110,7 @@ function PriceInput({ item, onDone, onCancel }) {
 export default function ShoppingPage() {
   const { addToast } = useApp();
   const [list, setList] = useState(null);
+  const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [collapsed, setCollapsed] = useState({});
   const [confirmDone, setConfirmDone] = useState(false);
@@ -125,7 +127,9 @@ export default function ShoppingPage() {
       if (!silent) setLoading(true);
       try {
         setList(await api.getShoppingList());
+        setError(null);
       } catch (e) {
+        setError(e.message);
         addToast(e.message, 'error');
       } finally {
         if (!silent) setLoading(false);
@@ -239,7 +243,7 @@ export default function ShoppingPage() {
   };
 
   if (loading) return <div className="spinner" />;
-  if (!list) return null;
+  if (!list) return <LoadError message={error} onRetry={load} />;
 
   // La spesa segue il piano, non il calendario: copre tutte le settimane generate di
   // cui non si è ancora fatta la spesa, quindi il periodo va detto.

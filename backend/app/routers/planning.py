@@ -1,7 +1,7 @@
 """Piano settimanale: lettura della griglia, generazione e modifica dei singoli pasti."""
 
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
@@ -18,6 +18,7 @@ from ..services.planner import (
     generate_week,
     get_or_create_week,
     is_generating,
+    monday_of,
     next_week_start,
     refresh_week_statuses,
     regenerate_meal,
@@ -90,6 +91,57 @@ def get_next_week(
     refresh_week_statuses(db, user_id)
     week = get_or_create_week(db, user_id, next_week_start())
     return serialize_week(db, week)
+
+
+@router.get("/weeks/by-date/{week_start}")
+def get_week_by_date(
+    week_start: date,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    """Una settimana qualunque, indietro o avanti quanto si vuole.
+
+    La data viene riportata al suo lunedì, così un indirizzo con un giorno qualsiasi
+    apre comunque la settimana giusta.
+
+    Avanti vale la regola di sempre — la settimana esiste appena la si apre — e
+    quanto spingersi lo decide l'utente, come per la spesa: chi apre la settimana fra
+    un mese la sta pianificando. Il passato invece non si inventa: se in quella
+    settimana non c'era nessun piano si risponde con una settimana vuota (`id` a
+    None) e non la si crea adesso, o sfogliare all'indietro riempirebbe l'archivio di
+    settimane mai vissute, coi pasti fissi ricopiati in giorni già passati.
+    """
+    refresh_week_statuses(db, user_id)
+    monday = monday_of(week_start)
+
+    if monday < current_week_start():
+        week = (
+            db.query(WeekPlan)
+            .filter(WeekPlan.user_id == user_id, WeekPlan.week_start_date == monday)
+            .first()
+        )
+        if not week:
+            # Stessa forma di una settimana vera: la pagina cambia solo il contenuto,
+            # non il modo di leggerlo.
+            return {
+                "id": None,
+                "week_start_date": monday.isoformat(),
+                "status": "empty",
+                "is_locked": False,
+                "locked_at": None,
+                "lock_expires_at": None,
+                "is_current": False,
+                "is_past": True,
+                "is_generating": False,
+                "meals_total": 0,
+                "meals_filled": 0,
+                "meals_self_managed": 0,
+                "days_skipped": 0,
+                "days": [],
+            }
+        return serialize_week(db, week)
+
+    return serialize_week(db, get_or_create_week(db, user_id, monday))
 
 
 @router.post("/weeks/{week_id}/generate")

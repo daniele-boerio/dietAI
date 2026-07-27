@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import {
+  Archive,
   ArrowLeft,
   CalendarOff,
   Check,
@@ -15,16 +16,18 @@ import { api, formatDate } from '../api';
 import { useApp } from '../App';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
+import LoadError from '../components/LoadError';
 import MealChat from '../components/MealChat';
 import RecipeView from '../components/RecipeView';
 import StarRating from '../components/StarRating';
+import { useGoBack } from '../lib/navigation';
 import { scalatiDallaDispensa } from '../lib/pantry';
 
 export default function MealDetailPage() {
   const { mealId } = useParams();
   const { addToast } = useApp();
-  const navigate = useNavigate();
   const [meal, setMeal] = useState(null);
+  const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [substituting, setSubstituting] = useState(false);
@@ -32,10 +35,18 @@ export default function MealDetailPage() {
   const [confirmClear, setConfirmClear] = useState(false);
   const [picker, setPicker] = useState(false);
 
-  const load = useCallback(async () => {
+  // Lo spinner solo quando si è senza niente a schermo: `load()` si richiama anche
+  // dopo una sostituzione, col dialogo del risultato aperto sopra la pagina, e
+  // rimettere lo spinner lo farebbe sparire e ricomparire.
+  const load = useCallback(async ({ spinner = false } = {}) => {
+    if (spinner) setLoading(true);
     try {
       setMeal(await api.getMeal(mealId));
+      setError(null);
     } catch (e) {
+      // Il toast dura tre secondi, la pagina resta: senza il messaggio anche qui,
+      // chi torna sulla schermata trova solo il vuoto e non sa perché.
+      setError(e.message);
       addToast(e.message, 'error');
     } finally {
       setLoading(false);
@@ -45,6 +56,12 @@ export default function MealDetailPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Da dove si torna indietro quando questa è la prima pagina della sessione —
+  // il caso normale sul telefono, che riapre l'app sull'ultimo indirizzo aperto.
+  const tornaIndietro = useGoBack(
+    meal?.week && !meal.week.is_current ? `/plan/${meal.week.week_start_date}` : '/plan'
+  );
 
   const regenerate = async () => {
     setBusy(true);
@@ -131,7 +148,7 @@ export default function MealDetailPage() {
   };
 
   if (loading) return <div className="spinner" />;
-  if (!meal) return null;
+  if (!meal) return <LoadError message={error} onRetry={() => load({ spinner: true })} />;
 
   // Il `?.` non è pignoleria: questa pagina si ridisegna con la risposta dell'ultimo
   // pulsante premuto, e una risposta senza `week` non deve poter spegnere la schermata.
@@ -139,13 +156,17 @@ export default function MealDetailPage() {
   // Un giorno saltato è in sola lettura come un piano bloccato, ma per il motivo
   // opposto: lì il cibo è già comprato, qui non lo è mai stato.
   const skipped = meal.day_is_skipped;
-  const frozen = locked || skipped || meal.is_skipped;
+  // Il piano si sfoglia all'indietro: da lì si arriva anche ai pasti delle settimane
+  // archiviate. Si rileggono, si votano e si può ancora segnare com'è andata — ma
+  // rigenerarli spenderebbe una chiamata al modello per un giorno già passato.
+  const past = meal.week?.is_past;
+  const frozen = locked || past || skipped || meal.is_skipped;
 
   return (
     <>
       <div className="page-header">
         <div>
-          <button className="btn btn-ghost" onClick={() => navigate(-1)}>
+          <button className="btn btn-ghost" onClick={tornaIndietro}>
             <ArrowLeft size={16} /> Indietro
           </button>
           <h1 className="page-title" style={{ marginTop: 6 }}>
@@ -191,7 +212,18 @@ export default function MealDetailPage() {
         </div>
       </div>
 
-      {locked && (
+      {past && (
+        <div className="notice notice-lock">
+          <Archive />
+          <div>
+            <strong>Settimana passata.</strong> Puoi ancora votare la ricetta e segnare
+            com'è andata — è il motivo per cui si torna indietro — ma il piatto non si
+            rigenera: quel giorno è già stato.
+          </div>
+        </div>
+      )}
+
+      {locked && !past && (
         <div className="notice notice-lock">
           <Lock />
           <div>
@@ -201,7 +233,7 @@ export default function MealDetailPage() {
         </div>
       )}
 
-      {skipped && !locked && (
+      {skipped && !locked && !past && (
         <div className="notice notice-skip">
           <CalendarOff />
           <div>

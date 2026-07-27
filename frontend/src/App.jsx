@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
+import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import {
   CalendarDays,
   ChefHat,
@@ -29,6 +29,7 @@ import LoginPage from './pages/LoginPage';
 import OnboardingPage from './pages/OnboardingPage';
 import Toast from './components/Toast';
 import ThemeToggle from './components/ThemeToggle';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // ── Contesto globale: toast e poco altro ──
 // Lo stato del server non si tiene qui: ogni pagina carica quello che le serve e lo
@@ -62,6 +63,7 @@ export default function App() {
 
 function AuthenticatedApp() {
   const { user, logout } = useAuth();
+  const { pathname } = useLocation();
   const [toasts, setToasts] = useState([]);
   const [navOpen, setNavOpen] = useState(false);
 
@@ -178,27 +180,34 @@ function AuthenticatedApp() {
         </nav>
 
         <main className="main-content">
-          <Routes>
-            <Route path="/" element={<DashboardPage />} />
-            <Route path="/plan" element={<PlanningPage />} />
-            <Route path="/plan/next" element={<PlanningPage nextWeek />} />
-            <Route path="/meals/:mealId" element={<MealDetailPage />} />
-            <Route path="/shopping" element={<ShoppingPage />} />
-            <Route path="/recipes" element={<RecipesPage />} />
-            <Route path="/recipes/:recipeId" element={<RecipeDetailPage />} />
-            <Route path="/tracking" element={<TrackingPage />} />
-            <Route path="/diet" element={<DietPage />} />
-            <Route path="/pantry" element={<PantryPage />} />
-            {/* Dieta e dispensa stavano fra le impostazioni: i vecchi indirizzi restano
-                validi per i collegamenti già in giro (e per chi li aveva nei preferiti). */}
-            <Route path="/settings/diet" element={<Navigate to="/diet" replace />} />
-            <Route path="/settings/pantry" element={<Navigate to="/pantry" replace />} />
-            {/* Sempre con la scheda nell'indirizzo: così quella aperta risulta anche
-                accesa nell'elenco a fianco, e il link si può mandare a qualcuno. */}
-            <Route path="/settings" element={<Navigate to="/settings/preferences" replace />} />
-            <Route path="/settings/:tab" element={<SettingsPage />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+          {/* Un errore in una pagina non deve spegnere l'app: senza questa rete
+              resterebbe una finestra vuota, nera col tema scuro, e sul telefono
+              nemmeno un modo per capire cosa sia successo. */}
+          <ErrorBoundary resetKey={pathname}>
+            <Routes>
+              <Route path="/" element={<DashboardPage />} />
+              <Route path="/plan" element={<PlanningPage />} />
+              {/* Il lunedì della settimana da aprire, o `next` — l'indirizzo di prima,
+                  che resta valido dovunque sia già linkato. */}
+              <Route path="/plan/:weekStart" element={<PlanningPage />} />
+              <Route path="/meals/:mealId" element={<MealDetailPage />} />
+              <Route path="/shopping" element={<ShoppingPage />} />
+              <Route path="/recipes" element={<RecipesPage />} />
+              <Route path="/recipes/:recipeId" element={<RecipeDetailPage />} />
+              <Route path="/tracking" element={<TrackingPage />} />
+              <Route path="/diet" element={<DietPage />} />
+              <Route path="/pantry" element={<PantryPage />} />
+              {/* Dieta e dispensa stavano fra le impostazioni: i vecchi indirizzi restano
+                  validi per i collegamenti già in giro (e per chi li aveva nei preferiti). */}
+              <Route path="/settings/diet" element={<Navigate to="/diet" replace />} />
+              <Route path="/settings/pantry" element={<Navigate to="/pantry" replace />} />
+              {/* Sempre con la scheda nell'indirizzo: così quella aperta risulta anche
+                  accesa nell'elenco a fianco, e il link si può mandare a qualcuno. */}
+              <Route path="/settings" element={<Navigate to="/settings/preferences" replace />} />
+              <Route path="/settings/:tab" element={<SettingsPage />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </ErrorBoundary>
         </main>
       </div>
 

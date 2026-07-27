@@ -1,27 +1,42 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Heart, Trash2 } from 'lucide-react';
 import { api, formatDate } from '../api';
 import { useApp } from '../App';
 import ConfirmDialog from '../components/ConfirmDialog';
+import LoadError from '../components/LoadError';
 import RecipeView from '../components/RecipeView';
 import StarRating from '../components/StarRating';
+import { useGoBack } from '../lib/navigation';
 
 export default function RecipeDetailPage() {
   const { recipeId } = useParams();
   const { addToast } = useApp();
   const navigate = useNavigate();
+  const tornaIndietro = useGoBack('/recipes');
   const [recipe, setRecipe] = useState(null);
+  const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setLoading(true);
     api
       .getRecipe(recipeId)
-      .then(setRecipe)
-      .catch((e) => addToast(e.message, 'error'))
+      .then((r) => {
+        setRecipe(r);
+        setError(null);
+      })
+      .catch((e) => {
+        setError(e.message);
+        addToast(e.message, 'error');
+      })
       .finally(() => setLoading(false));
   }, [recipeId, addToast]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const rate = async (rating) => {
     await api.rateRecipe(recipe.id, rating);
@@ -47,13 +62,13 @@ export default function RecipeDetailPage() {
   };
 
   if (loading) return <div className="spinner" />;
-  if (!recipe) return null;
+  if (!recipe) return <LoadError message={error} onRetry={load} />;
 
   return (
     <>
       <div className="page-header">
         <div>
-          <button className="btn btn-ghost" onClick={() => navigate(-1)}>
+          <button className="btn btn-ghost" onClick={tornaIndietro}>
             <ArrowLeft size={16} /> Indietro
           </button>
         </div>

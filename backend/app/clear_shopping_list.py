@@ -10,30 +10,34 @@ from .models import ShoppingList, ShoppingListItem, WeekPlan
 def main():
     db = SessionLocal()
     try:
-        # Trova la settimana corrente (quella non archiviata più recente)
-        current_week = (
-            db.query(WeekPlan)
+        # Debug: vedi tutte le settimane
+        all_weeks = db.query(WeekPlan).order_by(WeekPlan.week_start_date.desc()).all()
+        print(f"Debug: {len(all_weeks)} settimane totali nel DB")
+        for w in all_weeks[:3]:
+            print(f"  - {w.week_start_date} (status: {w.status})")
+        
+        # Cerca la lista della spesa più recente direttamente
+        shopping_list = (
+            db.query(ShoppingList)
+            .join(WeekPlan, ShoppingList.week_plan_id == WeekPlan.id)
             .filter(WeekPlan.status != 'archived')
             .order_by(WeekPlan.week_start_date.desc())
             .first()
         )
         
-        if not current_week:
-            print("❌ Nessuna settimana corrente trovata.")
-            return
-        
-        # Trova la lista della spesa associata
-        shopping_list = (
-            db.query(ShoppingList)
-            .filter(ShoppingList.week_plan_id == current_week.id)
-            .first()
-        )
-        
         if not shopping_list:
-            print("❌ Nessuna lista della spesa associata alla settimana.")
-            return
+            # Se non la trovi non archiviata, cerca la più recente in assoluto
+            shopping_list = (
+                db.query(ShoppingList)
+                .order_by(ShoppingList.created_at.desc())
+                .first()
+            )
+            if not shopping_list:
+                print("❌ Nessuna lista della spesa trovata nel database.")
+                return
+            print(f"Debug: trovata lista della spesa (creata il {shopping_list.created_at})")
         
-        # Conta gli articoli prima
+        # Conta gli articoli
         count = (
             db.query(ShoppingListItem)
             .filter(ShoppingListItem.shopping_list_id == shopping_list.id)
@@ -57,6 +61,8 @@ def main():
     
     except Exception as e:
         print(f"❌ Errore: {e}")
+        import traceback
+        traceback.print_exc()
         db.rollback()
     finally:
         db.close()

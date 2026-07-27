@@ -46,18 +46,40 @@ _NOISE = re.compile(
     r"a\s+cubetti|a\s+dadini|a\s+fette|a\s+fettine|a\s+rondelle|a\s+lamelle|"
     r"a\s+listarelle|a\s+striscioline|a\s+julienne|a\s+spicchi|a\s+pezzi|a\s+pezzetti|"
     r"in\s+scaglie|in\s+filetti|"
+    # formato: "pasta corta" è pasta, come "pasta di semola di grano duro" — dicono
+    # che taglio è, non che alimento è, e al supermercato si compra un pacco solo.
+    # Restano fuori i formati con un'identità propria ("pasta all'uovo", "pasta
+    # sfoglia") e "integrale", che sta più su fra le parole che cambiano i macro.
+    r"cort[aeio]|lung[ao]|lungh[ei]|formato|"
+    r"di\s+semola(\s+di\s+grano\s+duro)?|"
     r"q\.?b\.?"
     r")\b",
     re.IGNORECASE,
 )
+
+# Tipi di pasta da normalizzare a "pasta": spaghetti, penne, fusilli, ecc.
+# Restano fuori i formati con un'identità propria ("pasta all'uovo", "pasta sfoglia").
+_PASTA_TYPES = re.compile(
+    r"\b(spaghetti|penne|fusilli|farfalle|rigatoni|sedani|bucatini|linguine|fettuccine|tagliatelle|"
+    r"gnocchi|ravioli|tortellini|cappelletti|agnolotti|tortelli|bavette|trenette|vermicelli|"
+    r"pennette|mezzemaniche|tortiglioni|cannelloni|lasagna|taglioni|pappardelle|maltagliati|"
+    r"casarecce|orecchiette|rotelle|conchiglie|tubetti|ditalini|riso|orzo|farro|cous\s+cous)\b",
+    re.IGNORECASE,
+)
+
+# Quello che sta fra parentesi è sempre una glossa, mai l'alimento: "pasta corta
+# (penne)", "legumi (ceci o fagioli)". Si toglie prima dei qualificatori, o resterebbe
+# attaccato al nome e farebbe una riga a sé nella lista della spesa.
+_PARENTESI = re.compile(r"\([^)]*\)")
 
 # Preposizioni rimaste appese dopo aver tolto un qualificatore ("mandorle a" → "mandorle").
 _DANGLING = re.compile(r"\s+(a|di|in|al|alla|con|da)\s*$", re.IGNORECASE)
 
 
 def normalize_name(name: str) -> str:
-    """Minuscolo, senza qualificatori e senza spazi doppi."""
-    n = _NOISE.sub(" ", (name or "").strip().lower())
+    """Minuscolo, senza glosse fra parentesi, senza qualificatori e senza spazi doppi."""
+    n = _PARENTESI.sub(" ", (name or "").strip().lower())
+    n = _NOISE.sub(" ", n)
     n = re.sub(r"[\s,;]+", " ", n).strip(" -,.")
     n = _DANGLING.sub("", n).strip(" -,.")
     return n[:120]
@@ -115,7 +137,9 @@ def _merge_rows(db: Session, canonical: Ingredient, doppione: Ingredient) -> Non
 
     # La dispensa ne ha una riga per utente: dove ci sono entrambe si sommano, ma solo
     # se le unità si parlano — sommare grammi e unità darebbe un numero inventato.
-    for item in db.query(PantryItem).filter(PantryItem.ingredient_id == doppione.id).all():
+    for item in (
+        db.query(PantryItem).filter(PantryItem.ingredient_id == doppione.id).all()
+    ):
         gemella = (
             db.query(PantryItem)
             .filter(
@@ -129,7 +153,9 @@ def _merge_rows(db: Session, canonical: Ingredient, doppione: Ingredient) -> Non
             continue
         if item.quantity_available and gemella.quantity_available:
             somma, unit = to_base(item.quantity_available, item.unit or "unità")
-            base, unit_gemella = to_base(gemella.quantity_available, gemella.unit or "unità")
+            base, unit_gemella = to_base(
+                gemella.quantity_available, gemella.unit or "unità"
+            )
             if unit == unit_gemella:
                 gemella.quantity_available = round(base + somma, 2)
                 gemella.unit = unit
@@ -202,9 +228,16 @@ def merge_duplicates(db: Session) -> list[tuple[str, list[str]]]:
     # Il promemoria di cosa è stato scalato dalla dispensa cita gli ingredienti per id:
     # senza rimapparlo, annullare un "l'ho seguito" cercherebbe una riga cancellata.
     if rimappati:
-        for meal in db.query(PlannedMeal).filter(PlannedMeal.pantry_used.isnot(None)).all():
+        for meal in (
+            db.query(PlannedMeal).filter(PlannedMeal.pantry_used.isnot(None)).all()
+        ):
             meal.pantry_used = [
-                {**voce, "ingredient_id": rimappati.get(voce.get("ingredient_id"), voce.get("ingredient_id"))}
+                {
+                    **voce,
+                    "ingredient_id": rimappati.get(
+                        voce.get("ingredient_id"), voce.get("ingredient_id")
+                    ),
+                }
                 for voce in (meal.pantry_used or [])
             ]
 

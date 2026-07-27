@@ -246,6 +246,33 @@ def test_lo_sblocco_manuale_riapre_il_piano(client, diet, fake_ai):
     assert res.json()["is_locked"] is False
 
 
+def test_dopo_lo_sblocco_il_blocco_si_rimette(client, diet, fake_ai):
+    """Lo sblocco serve a correggere, non a rinunciare al blocco: si torna indietro.
+
+    E i sette giorni ripartono dalla spesa, non da quando si ripreme il pulsante: il
+    cibo è stato comprato quel giorno lì, non oggi.
+    """
+    week = client.get("/api/planning/weeks/current").json()
+    client.post(f"/api/planning/weeks/{week['id']}/generate")
+    client.post("/api/shopping/current/complete")
+    scadenza = client.get("/api/planning/weeks/current").json()["lock_expires_at"]
+
+    client.post(f"/api/planning/weeks/{week['id']}/unlock")
+    aperta = client.get("/api/planning/weeks/current").json()
+    # La spesa risulta fatta anche a piano aperto: è ciò che fa comparire "Riblocca".
+    assert aperta["is_locked"] is False
+    assert aperta["shopping_done"] is True
+
+    res = client.post(f"/api/planning/weeks/{week['id']}/lock")
+    assert res.status_code == 200, res.text
+    assert res.json()["is_locked"] is True
+    assert res.json()["lock_expires_at"] == scadenza
+    # E la risposta è la settimana intera, come da ogni altra rotta che la modifica.
+    assert len(res.json()["days"]) == 7
+
+    assert client.post(f"/api/planning/weeks/{week['id']}/lock").status_code == 409
+
+
 # ── Pasti fissi e ricettario ───────────────────────────────────────────────────
 
 

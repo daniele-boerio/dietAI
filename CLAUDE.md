@@ -151,6 +151,12 @@ suo lunedì (`lock_bought_week`), altrimenti scadrebbe prima ancora di cominciar
 lì: lettura sì, `regenerate`/`assign`/`generate` → **409**; voti, preferiti e tracking
 restano permessi; la chat diventa informativa (non aggiorna la ricetta).
 `refresh_week_statuses` archivia le settimane scadute a ogni lettura, senza scheduler.
+Lo sblocco d'emergenza si disfa: `POST /weeks/{id}/lock` rimette il blocco, e i sette
+giorni **ripartono dalla spesa** (`bought_at`, dalla lista completata) e non da quando
+si ripreme il pulsante — solo se quel blocco sarebbe già scaduto si conta da oggi,
+altrimenti `refresh_week_statuses` lo toglierebbe alla lettura successiva e il
+pulsante sembrerebbe rotto. In pagina compare solo con `shopping_done` a vero:
+bloccare una settimana per cui non hai comprato niente non vorrebbe dire nulla.
 
 **Il piano segue la spesa, non il calendario.** Finché la spesa non risulta fatta,
 ogni giorno che passa viene marcato `DayPlan.is_skipped` e le ricette scalano tutte in

@@ -30,6 +30,7 @@ from ..services.planner import (
 )
 from ..services.recipes import create_recipe
 from ..services.shopping import (
+    bought_at,
     complete_shopping,
     consume_from_pantry,
     get_or_create_list,
@@ -191,17 +192,27 @@ def generation_progress(
 def lock_week(
     week_id: int, user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
 ):
-    """Blocca la settimana a mano (di norma lo fa il completamento della spesa)."""
+    """Rimette il blocco (di norma lo mette il completamento della spesa).
+
+    Serve dopo uno sblocco d'emergenza — quello che si fa per correggere una ricetta
+    a spesa già fatta: finita la correzione il piano va riprotetto, o resta
+    modificabile per errore con gli ingredienti in frigo.
+
+    I sette giorni ripartono dalla spesa, non da adesso: il cibo è stato comprato
+    quel giorno lì. Solo se quel blocco sarebbe già scaduto (o se una spesa non
+    risulta) si conta da oggi, altrimenti il blocco verrebbe tolto dalla prima
+    lettura del piano e il pulsante sembrerebbe non funzionare.
+    """
     week = _get_week(db, user_id, week_id)
     if week.is_locked:
         raise HTTPException(409, "Piano già bloccato")
 
-    lock_bought_week(week, datetime.now(timezone.utc))
+    now = datetime.now(timezone.utc)
+    lock_bought_week(week, bought_at(db, week) or now)
+    if week.lock_expires_at <= now:
+        lock_bought_week(week, now)
     db.commit()
-    return {
-        "locked_at": week.locked_at.isoformat(),
-        "lock_expires_at": week.lock_expires_at.isoformat(),
-    }
+    return serialize_week(db, week)
 
 
 @router.post("/weeks/{week_id}/unlock")

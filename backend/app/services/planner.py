@@ -957,6 +957,10 @@ def serialize_week(db: Session, week: WeekPlan) -> dict:
         "is_locked": week.is_locked,
         "locked_at": week.locked_at.isoformat() if week.locked_at else None,
         "lock_expires_at": week.lock_expires_at.isoformat() if week.lock_expires_at else None,
+        # Spesa fatta ma piano non bloccato = c'è stato uno sblocco d'emergenza. È
+        # l'unico caso in cui ha senso offrire di rimettere il blocco: bloccare una
+        # settimana per cui non hai comprato niente non vorrebbe dire nulla.
+        "shopping_done": _shopping_done(db, week),
         "is_current": week.week_start_date == current_week_start(),
         # Una settimana archiviata è storia: si sfoglia, ma non si genera (vedi
         # `ensure_not_past`) e la griglia mette le sue caselle in sola lettura.

@@ -223,6 +223,17 @@ export default function PlanningPage() {
     }
   };
 
+  // Il ritorno dallo sblocco d'emergenza: corretto quel che c'era da correggere, il
+  // piano va riprotetto — il cibo è comprato lo stesso.
+  const relock = async () => {
+    try {
+      setWeek(await api.lockWeek(week.id));
+      addToast('Piano di nuovo bloccato ✓');
+    } catch (e) {
+      addToast(e.message, 'error');
+    }
+  };
+
   const unlock = async () => {
     try {
       const data = await api.unlockWeek(week.id);
@@ -272,6 +283,14 @@ export default function PlanningPage() {
               </button>
             ) : (
               <>
+                {/* Spesa fatta e piano sbloccato: è uno sblocco d'emergenza rimasto
+                    aperto. Il blocco si rimette da qui, con i giorni che ripartono
+                    dalla spesa. */}
+                {week.shopping_done && (
+                  <button className="btn btn-secondary" onClick={relock}>
+                    <Lock size={16} /> Riblocca
+                  </button>
+                )}
                 {/* Rifare tutto costa una chiamata al modello su tutta la settimana:
                     sta in secondo piano e passa da una conferma. */}
                 {week.meals_filled > 0 && (
@@ -380,6 +399,21 @@ export default function PlanningPage() {
             spesa è fatta: cambiare le ricette adesso vorrebbe dire buttare il cibo. Se ti
             serve modificare qualcosa, lavora sulla{' '}
             <Link to="/plan/next">settimana prossima</Link>.
+          </div>
+        </div>
+      )}
+
+      {/* Spesa fatta e piano aperto: succede solo dopo uno sblocco d'emergenza, e
+          dimenticarselo aperto è facile — a schermo non c'era niente che lo dicesse. */}
+      {!week.is_past && !week.is_locked && week.shopping_done && (
+        <div className="notice">
+          <Unlock />
+          <div>
+            <strong>Piano sbloccato con la spesa già fatta.</strong> Gli ingredienti
+            sono comprati: finite le correzioni conviene rimettere il blocco con{' '}
+            <em>Riblocca</em>, o le ricette restano cambiabili per sbaglio e la{' '}
+            <Link to="/shopping">lista della spesa</Link> continua a puntare su questa
+            settimana invece che sulla prossima.
           </div>
         </div>
       )}

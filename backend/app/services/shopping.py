@@ -513,6 +513,24 @@ def lock_bought_week(week: WeekPlan, now: datetime) -> None:
     week.status = "locked"
 
 
+def bought_at(db: Session, week: WeekPlan) -> datetime | None:
+    """Quando è stata fatta la spesa di questa settimana, se risulta fatta.
+
+    Serve a rimettere il blocco dov'era dopo uno sblocco d'emergenza: i sette giorni
+    li fa partire la spesa, non il momento in cui si ripreme il pulsante.
+    """
+    lst = (
+        db.query(ShoppingList)
+        .filter(ShoppingList.week_plan_id == week.id, ShoppingList.is_completed.is_(True))
+        .order_by(ShoppingList.completed_at.desc())
+        .first()
+    )
+    if lst is None or lst.completed_at is None:
+        return None
+    done = lst.completed_at
+    return done.replace(tzinfo=timezone.utc) if done.tzinfo is None else done
+
+
 def complete_shopping(db: Session, user_id: int, week: WeekPlan, lst: ShoppingList) -> dict:
     """Segna la spesa come fatta: blocca il piano e riempie la dispensa.
 

@@ -36,12 +36,13 @@ from app.services.ingredients import merge_duplicates, normalize_name
         ("pasta di semola di grano duro", "pasta"),
         ("spaghetti", "pasta"),
         ("fusilli", "pasta"),
-        # E l'accordo che salta per strada non deve fare una riga a sé.
-        ("fusilli integrali", "pasta integrale"),
+        # La pasta è pasta, comunque la si scriva: una riga sola nella spesa.
+        ("fusilli integrali", "pasta"),
+        ("pasta integrale", "pasta"),
         # Sulla pasta ci va il formaggio che c'è: parmigiano e grana sono una riga sola.
-        ("parmigiano grattugiato", "formaggio grattugiato"),
-        ("grana padano", "formaggio grattugiato"),
-        ("formaggio grattato", "formaggio grattugiato"),
+        ("parmigiano grattugiato", "formaggio"),
+        ("grana padano", "formaggio"),
+        ("formaggio grattugiato", "formaggio"),
     ],
 )
 def test_i_qualificatori_spariscono(scritto, atteso):
@@ -76,7 +77,10 @@ def test_un_cereale_non_diventa_pasta(cereale):
         # uno yogurt intero per uno magro, e i macro sono il vincolo più duro dell'app.
         "yogurt greco magro",
         "latte intero",
-        "pasta integrale",
+        # "Integrale" resta dove è un altro alimento sullo scaffale. L'eccezione è la
+        # pasta, che sta tutta sulla stessa riga: vedi il test qui sopra.
+        "pane integrale",
+        "riso integrale",
         "tonno al naturale",
         "cioccolato fondente",
         # "Pelati" non è lo stato dei pomodori: è una conserva, un altro prodotto.

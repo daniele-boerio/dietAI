@@ -86,9 +86,9 @@ _GAMBERI = re.compile(
     re.IGNORECASE,
 )
 
-# I formaggi da grattugia finiscono tutti sulla stessa riga: sulla pasta ci va quello
-# che c'è in casa, e la dieta li conta uguali. Si confronta il **nome intero**, non una
-# parola qualsiasi dentro: "formaggio spalmabile" è un altro alimento, e cercare
+# I formaggi da grattugia stanno tutti sulla riga "formaggio", che è come li chiama la
+# dieta: sulla pasta ci va quello che c'è in casa. Si confronta il **nome intero**, non
+# una parola qualsiasi dentro — "formaggio spalmabile" è un altro alimento, e cercare
 # "grana" in mezzo a un nome trasformava "grana padano" in "formaggio padano".
 _DA_GRATTUGIA = {
     "parmigiano",
@@ -98,10 +98,6 @@ _DA_GRATTUGIA = {
     "pecorino",
     "pecorino romano",
 }
-
-# La dicitura esplicita va riconosciuta *prima* di togliere il rumore, o "grattugiato"
-# sparisce (è un taglio, sta fra i qualificatori) e resta un generico "formaggio".
-_GRATTUGIATO_ESPLICITO = re.compile(r"^formaggio\s+gratt(ugiat|at)[oaie]$", re.IGNORECASE)
 
 # Olive: togliere tipi e qualificatori, conservare solo "olive"
 _OLIVE = re.compile(
@@ -117,40 +113,36 @@ _PARENTESI = re.compile(r"\([^)]*\)")
 # Preposizioni rimaste appese dopo aver tolto un qualificatore ("mandorle a" → "mandorle").
 _DANGLING = re.compile(r"\s+(a|di|in|al|alla|con|da)\s*$", re.IGNORECASE)
 
-# L'accordo che salta quando il formato diventa "pasta": "fusilli integrali" → "pasta
-# integrali". Senza questa riga sarebbe una riga di spesa a sé, accanto a "pasta
-# integrale", che è esattamente il doppione che stiamo cercando di evitare.
-_PLURALI = ((r"\bintegrali\b", "integrale"), (r"\bfreschi\b", ""))
+# La pasta è pasta: "fusilli integrali" e "pasta integrale" sono la stessa riga della
+# spesa e lo stesso piatto. È l'unica eccezione alla regola per cui "integrale" resta
+# (vale ancora per il pane e per il riso, dove è un altro alimento sullo scaffale).
+_PASTA_INTEGRALE = re.compile(r"\bpasta\s+integral[ei]\b", re.IGNORECASE)
 
 
 def normalize_name(name: str) -> str:
     """Minuscolo, senza glosse fra parentesi, senza qualificatori e senza spazi doppi.
 
     Oltre a togliere il rumore, unisce sulla stessa riga le cose che per la dieta e
-    per la spesa sono lo stesso alimento: i formati della pasta (spaghetti, penne),
-    i pesci bianchi (`_PESCE_MAGRO`), i formaggi da grattugia. **Un altro cereale non
-    è pasta**: riso, cous cous, farro e orzo restano quello che sono, e lo stesso vale
-    per la pasta ripiena e gli gnocchi.
+    per la spesa sono lo stesso alimento: i formati della pasta (spaghetti, penne e
+    anche "pasta integrale" → `pasta`), i pesci bianchi (`_PESCE_MAGRO`), i formaggi da
+    grattugia (`_DA_GRATTUGIA` → `formaggio`). **Un altro cereale non è pasta**: riso,
+    cous cous, farro e orzo restano quello che sono, e lo stesso vale per la pasta
+    ripiena e gli gnocchi.
     """
     n = _PARENTESI.sub(" ", (name or "").strip().lower())
-    n = re.sub(r"[\s,;]+", " ", n).strip(" -,.")
-
-    # Prima del rumore: "grattugiato" è un taglio e fra un attimo sparisce.
-    if _GRATTUGIATO_ESPLICITO.match(n):
-        return "formaggio grattugiato"
-
     n = _PASTA_TYPES.sub("pasta", n)
     n = _PESCE_MAGRO.sub("filetto di pesce magro", n)
     n = _GAMBERI.sub("gamberi", n)
     n = _OLIVE.sub("olive", n)
     n = _NOISE.sub(" ", n)
-    for plurale, singolare in _PLURALI:
-        n = re.sub(plurale, singolare, n)
     n = re.sub(r"[\s,;]+", " ", n).strip(" -,.")
+    n = _PASTA_INTEGRALE.sub("pasta", n)
     n = _DANGLING.sub("", n).strip(" -,.")
 
-    if n in _DA_GRATTUGIA:
-        return "formaggio grattugiato"
+    # "Formaggio grattugiato" ci arriva già così: `grattugiato` è un taglio, l'ha tolto
+    # il rumore qui sopra.
+    if n in _DA_GRATTUGIA or n == "formaggio":
+        return "formaggio"
     return n[:120]
 
 

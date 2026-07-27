@@ -319,15 +319,21 @@ non decide più il reparto: la parola sparisce prima di arrivare a `guess_catego
 il banco giusto lo sceglie l'utente dalla lista (dove la scelta resta).
 
 Oltre a togliere parole, `normalize_name` **unisce** quello che per la dieta e per la
-spesa è lo stesso alimento: i formati della pasta (`_PASTA_TYPES`: penne, fusilli,
-spaghetti → `pasta`), i pesci bianchi (`_PESCE_MAGRO` → `filetto di pesce magro`) e i
-formaggi da grattugia (`_DA_GRATTUGIA` → `formaggio grattugiato`). Sono liste da
-allargare col bilancino, perché **unire due alimenti diversi è un danno che si disfa a
-mano**: `riso`, `cous cous`, `farro`, `orzo` finiti dentro `_PASTA_TYPES` hanno reso
-"pasta" mezzo ricettario, e la fusione cancella la riga di anagrafica — il nome
-originale resta solo nel testo della ricetta. Le unificazioni confrontano il **nome
-intero** e non una parola in mezzo, o "grana padano" diventa "formaggio padano". I
-nomi fabbricati così vanno aggiunti a `utils/pricing.py`, o restano senza prezzo.
+spesa è lo stesso alimento, col nome che usa la dieta: i formati della pasta
+(`_PASTA_TYPES`: penne, fusilli, spaghetti, e anche "pasta integrale" → `pasta`), i
+pesci bianchi (`_PESCE_MAGRO` → `filetto di pesce magro`), i formaggi da grattugia
+(`_DA_GRATTUGIA`: parmigiano, grana padano → `formaggio`). Sono liste da allargare col
+bilancino, perché **unire due alimenti diversi è un danno che si disfa a mano**:
+`riso`, `cous cous`, `farro`, `orzo` finiti dentro `_PASTA_TYPES` hanno reso "pasta"
+mezzo ricettario, e la fusione cancella la riga di anagrafica — il nome originale
+resta solo nel testo della ricetta. Le unificazioni confrontano il **nome intero** e
+non una parola in mezzo, o "grana padano" diventa "formaggio padano".
+
+Chi unisce tocca anche `utils/pricing.py`, in due modi: il nome fabbricato va aggiunto
+(o resta senza prezzo, e sono sempre le voci più care) e quelli che ha inghiottito
+vanno tolti — il seed semina l'anagrafica coi nomi del catalogo così come sono
+scritti, quindi un nome che `normalize_name` non può più produrre diventa una riga che
+nessuna ricetta userà mai, ricreata a ogni avvio del container.
 
 Cambiata una regola, le righe già in tabella vanno riallineate a mano:
 `python -m app.merge_ingredients` fonde i doppioni spostando ricette, dispensa, liste

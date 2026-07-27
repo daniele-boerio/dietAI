@@ -100,9 +100,6 @@ INGREDIENT_CATALOG: dict[str, tuple[str, float, str]] = {
     # ── Pesce ──
     "salmone": ("pesce", 24.00, "kg"),
     "salmone affumicato": ("pesce", 34.00, "kg"),
-    "merluzzo": ("pesce", 14.00, "kg"),
-    "orata": ("pesce", 13.00, "kg"),
-    "branzino": ("pesce", 14.00, "kg"),
     "tonno fresco": ("pesce", 22.00, "kg"),
     "tonno in scatola": ("pesce", 14.00, "kg"),
     "sgombro": ("pesce", 8.00, "kg"),
@@ -112,7 +109,6 @@ INGREDIENT_CATALOG: dict[str, tuple[str, float, str]] = {
     "seppie": ("pesce", 12.00, "kg"),
     "cozze": ("pesce", 5.00, "kg"),
     "vongole": ("pesce", 12.00, "kg"),
-    "platessa": ("pesce", 12.00, "kg"),
     # ── Latticini e uova ──
     "latte": ("latticini", 1.40, "l"),
     "latte scremato": ("latticini", 1.40, "l"),
@@ -121,9 +117,6 @@ INGREDIENT_CATALOG: dict[str, tuple[str, float, str]] = {
     "ricotta": ("latticini", 8.00, "kg"),
     "mozzarella": ("latticini", 9.00, "kg"),
     "mozzarella di bufala": ("latticini", 16.00, "kg"),
-    "parmigiano reggiano": ("latticini", 22.00, "kg"),
-    "grana padano": ("latticini", 16.00, "kg"),
-    "pecorino": ("latticini", 20.00, "kg"),
     "stracchino": ("latticini", 12.00, "kg"),
     "philadelphia": ("latticini", 12.00, "kg"),
     "fiocchi di latte": ("latticini", 8.00, "kg"),
@@ -133,7 +126,6 @@ INGREDIENT_CATALOG: dict[str, tuple[str, float, str]] = {
     "albume": ("uova", 6.00, "l"),
     # ── Cereali e derivati ──
     "pasta": ("cereali", 1.80, "kg"),
-    "pasta integrale": ("cereali", 2.40, "kg"),
     "riso": ("cereali", 2.50, "kg"),
     "riso integrale": ("cereali", 3.20, "kg"),
     "riso basmati": ("cereali", 3.50, "kg"),
@@ -194,12 +186,13 @@ INGREDIENT_CATALOG: dict[str, tuple[str, float, str]] = {
     # spinaci e piselli hanno già la loro riga sopra. Il reparto lo sposta l'utente
     # dalla lista della spesa, che è l'unico posto da cui si vede il proprio negozio.
     "minestrone": ("verdura", 2.80, "kg"),
-    "filetti di merluzzo": ("pesce", 12.00, "kg"),
-    # I due nomi che la normalizzazione fabbrica unendo alimenti diversi (branzino e
-    # orata, parmigiano e grana): senza una riga qui resterebbero senza prezzo, e il
-    # totale della lista avrebbe due buchi proprio sulle voci più care.
+    # I nomi che la normalizzazione fabbrica unendo alimenti diversi: branzino, orata
+    # e merluzzo finiscono in "filetto di pesce magro", parmigiano e grana in
+    # "formaggio". Le loro righe qui sopra sono state tolte apposta — il catalogo
+    # semina l'anagrafica coi nomi così come sono scritti, e un nome che
+    # `normalize_name` non può produrre diventa una riga che nessuna ricetta userà mai.
     "filetto di pesce magro": ("pesce", 14.00, "kg"),
-    "formaggio grattugiato": ("latticini", 19.00, "kg"),
+    "formaggio": ("latticini", 19.00, "kg"),
 }
 
 # Ingredienti proposti come "di base" al primo avvio: quelli che chiunque ha in casa

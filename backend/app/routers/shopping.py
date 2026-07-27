@@ -14,10 +14,9 @@ from ..services.planner import refresh_week_statuses
 from ..utils.pricing import catalog_entry
 from ..utils.units import price_for, unit_price_from
 from ..services.shopping import (
-    active_shopping_week,
     complete_shopping,
+    current_list,
     export_text,
-    get_or_create_list,
     rebuild_shopping_list,
     serialize_shopping_list,
 )
@@ -25,27 +24,25 @@ from ..services.shopping import (
 router = APIRouter(prefix="/api/shopping", tags=["Spesa"])
 
 
-def _open_list(db: Session, user_id: int) -> tuple[WeekPlan, ShoppingList]:
-    """La spesa aperta: una sola, sulla prima settimana che ha ancora qualcosa da comprare."""
+def _open_list(db: Session, user_id: int) -> ShoppingList:
+    """La lista, ricalcolata: quello che il piano chiede da oggi e la dispensa non copre."""
     refresh_week_statuses(db, user_id)
-    week = active_shopping_week(db, user_id)
-    lst = rebuild_shopping_list(db, user_id, week)
+    lst = rebuild_shopping_list(db, user_id)
     db.commit()
-    return week, lst
+    return lst
 
 
 @router.get("/current")
 def get_current_list(
     user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
 ):
-    """La spesa da fare — "corrente" nel senso di aperta, non di questa settimana.
+    """La spesa da fare: quello che le ricette da oggi in avanti chiedono e in casa non c'è.
 
-    Una lista comprende tutte le settimane generate e non ancora comprate, quindi ce
-    n'è sempre e solo una: quando la spesa è fatta, la successiva parte da sé dalla
-    prima settimana rimasta scoperta.
+    Non ci sono liste "di questa settimana" o "della prossima": ce n'è una sola, che
+    comprende tutto il piano generato da oggi in poi. A spesa fatta si accorcia da sé,
+    perché quello che hai comprato è passato in dispensa.
     """
-    week, lst = _open_list(db, user_id)
-    return serialize_shopping_list(db, week, lst)
+    return serialize_shopping_list(db, user_id, _open_list(db, user_id))
 
 
 def _own_item(db: Session, user_id: int, item_id: int) -> tuple[ShoppingListItem, ShoppingList, WeekPlan]:
@@ -101,10 +98,7 @@ def set_bought_quantity(
 
     Segnare una quantità significa averlo preso, quindi la riga si spunta da sé.
     """
-    row, lst, week = _own_item(db, user_id, item_id)
-    if lst.is_completed:
-        raise HTTPException(409, "Questa spesa è già stata completata.")
-
+    row, lst, _week = _own_item(db, user_id, item_id)
     row.bought_quantity = body.quantity
     if body.quantity is not None:
         row.is_checked = True
@@ -113,7 +107,7 @@ def set_bought_quantity(
     _refresh_prices(db, lst)
     db.commit()
 
-    return serialize_shopping_list(db, week, lst)
+    return serialize_shopping_list(db, user_id, lst)
 
 
 def _refresh_prices(db: Session, lst: ShoppingList) -> None:
@@ -159,7 +153,7 @@ def set_paid_price(
     Si può fare anche a spesa fatta: lo scontrino si guarda a casa. `null` cancella il
     prezzo tuo e rimette quello del catalogo, se l'ingrediente ci sta dentro.
     """
-    row, lst, week = _own_item(db, user_id, item_id)
+    row, lst, _week = _own_item(db, user_id, item_id)
     ingredient = db.get(Ingredient, row.ingredient_id)
 
     if body.paid is None:
@@ -180,7 +174,7 @@ def set_paid_price(
 
     _refresh_prices(db, lst)
     db.commit()
-    return serialize_shopping_list(db, week, lst)
+    return serialize_shopping_list(db, user_id, lst)
 
 
 @router.post("/current/complete")
@@ -188,11 +182,15 @@ def complete(
     user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-    """"Ho fatto la spesa": blocca le settimane comprate e aggiorna la dispensa."""
+    """"Ho fatto la spesa": gli articoli spuntati passano in dispensa e la lista si svuota.
+
+    Non si blocca niente e non si chiude niente: la lista è quello che il piano chiede
+    e la dispensa non copre, quindi appena la roba è in dispensa la lista si accorcia
+    da sé. Quello che non hai spuntato resta, perché non l'hai comprato.
+    """
     refresh_week_statuses(db, user_id)
-    week = active_shopping_week(db, user_id)
-    lst = get_or_create_list(db, week)
-    return complete_shopping(db, user_id, week, lst)
+    _, lst = current_list(db, user_id)
+    return complete_shopping(db, user_id, lst)
 
 
 @router.get("/export", response_class=PlainTextResponse)
@@ -201,5 +199,4 @@ def export(
     db: Session = Depends(get_db),
 ):
     """Lista in testo semplice, da copiare o condividere."""
-    week, lst = _open_list(db, user_id)
-    return export_text(db, week, lst)
+    return export_text(db, user_id, _open_list(db, user_id))

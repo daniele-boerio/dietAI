@@ -26,10 +26,8 @@ export default function WeekGrid({
       {week.days.map((day, dayIndex) => {
         const column = dayIndex + 1;
         const isToday = day.date === today;
-        // I giorni passati li salta il piano da sé quando manca la spesa, e lì le
-        // ricette slittano invece di accodarsi: a mano si tocca solo da oggi in poi.
-        // A piano bloccato resta possibile: il cibo è comprato, ma se sei fuori a
-        // cena quel piatto lo cucini un altro giorno.
+        // Saltare una giornata accoda i suoi piatti più avanti: ha senso solo da
+        // oggi in poi. Un giorno già passato si racconta pasto per pasto.
         const canSkip = onToggleDaySkip && day.date >= today;
 
         return (
@@ -69,8 +67,6 @@ export default function WeekGrid({
               <MealCard
                 key={meal.id}
                 meal={meal}
-                locked={week.is_locked}
-                past={week.is_past}
                 skipped={day.is_skipped}
                 busy={busyMealId === meal.id || followingMealId === meal.id}
                 regenerating={busyMealId === meal.id}

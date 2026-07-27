@@ -134,10 +134,19 @@ def test_le_ricette_conservate_arrivano_al_modello_come_contesto(
     assert "Pranzo 1 v1" in spia.prompt  # il pranzo di martedì, che non è stato toccato
 
 
-def test_a_piano_bloccato_non_si_rigenera_niente(client, diet, fake_ai):
+def test_anche_a_spesa_fatta_si_rigenera(client, diet, fake_ai):
+    """La spesa fatta non chiude più niente: se una ricetta non va, si rifà.
+
+    Quello che era già stato comprato resta in dispensa e la lista lo sa, quindi la
+    ricetta nuova chiede solo quello che davvero manca.
+    """
     week = client.get("/api/planning/weeks/current").json()
     client.post(f"/api/planning/weeks/{week['id']}/generate")
+    lst = client.get("/api/shopping/current").json()
+    for c in lst["categories"]:
+        for i in c["items"]:
+            client.put(f"/api/shopping/items/{i['id']}/check", json={"is_checked": True})
     client.post("/api/shopping/current/complete")
 
     res = client.post(f"/api/planning/weeks/{week['id']}/generate?regenerate_all=true")
-    assert res.status_code == 409
+    assert res.status_code == 200, res.text

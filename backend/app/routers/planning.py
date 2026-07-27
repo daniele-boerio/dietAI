@@ -1,7 +1,7 @@
 """Piano settimanale: lettura della griglia, generazione e modifica dei singoli pasti."""
 
 import logging
-from datetime import date, datetime, timezone
+from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
@@ -14,7 +14,6 @@ from ..schemas import AssignMealRequest, FollowedRequest, RecurringRequest, Skip
 from ..services.planner import (
     current_week_start,
     ensure_not_skipped,
-    ensure_unlocked,
     generate_week,
     get_or_create_week,
     is_generating,
@@ -30,12 +29,8 @@ from ..services.planner import (
 )
 from ..services.recipes import create_recipe
 from ..services.shopping import (
-    bought_at,
-    complete_shopping,
     consume_from_pantry,
-    get_or_create_list,
-    lock_bought_week,
-    rebuild_lists_for,
+    rebuild_shopping_list,
     restore_to_pantry,
 )
 
@@ -128,9 +123,6 @@ def get_week_by_date(
                 "id": None,
                 "week_start_date": monday.isoformat(),
                 "status": "empty",
-                "is_locked": False,
-                "locked_at": None,
-                "lock_expires_at": None,
                 "is_current": False,
                 "is_past": True,
                 "is_generating": False,
@@ -188,57 +180,6 @@ def generation_progress(
     }
 
 
-@router.post("/weeks/{week_id}/lock")
-def lock_week(
-    week_id: int, user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
-):
-    """Rimette il blocco (di norma lo mette il completamento della spesa).
-
-    Serve dopo uno sblocco d'emergenza — quello che si fa per correggere una ricetta
-    a spesa già fatta: finita la correzione il piano va riprotetto, o resta
-    modificabile per errore con gli ingredienti in frigo.
-
-    I sette giorni ripartono dalla spesa, non da adesso: il cibo è stato comprato
-    quel giorno lì. Solo se quel blocco sarebbe già scaduto (o se una spesa non
-    risulta) si conta da oggi, altrimenti il blocco verrebbe tolto dalla prima
-    lettura del piano e il pulsante sembrerebbe non funzionare.
-    """
-    week = _get_week(db, user_id, week_id)
-    if week.is_locked:
-        raise HTTPException(409, "Piano già bloccato")
-
-    now = datetime.now(timezone.utc)
-    lock_bought_week(week, bought_at(db, week) or now)
-    if week.lock_expires_at <= now:
-        lock_bought_week(week, now)
-    db.commit()
-    return serialize_week(db, week)
-
-
-@router.post("/weeks/{week_id}/unlock")
-def unlock_week(
-    week_id: int, user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
-):
-    """Sblocco d'emergenza: la UI lo chiede con una conferma esplicita."""
-    week = _get_week(db, user_id, week_id)
-    week.is_locked = False
-    week.locked_at = None
-    week.lock_expires_at = None
-    week.status = "active" if week.week_start_date == current_week_start() else "draft"
-    db.commit()
-    return serialize_week(db, week)
-
-
-@router.post("/weeks/{week_id}/shopping-done")
-def shopping_done(
-    week_id: int, user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
-):
-    """Alias di /api/shopping/current/complete per la settimana indicata."""
-    week = _get_week(db, user_id, week_id)
-    lst = get_or_create_list(db, week)
-    return complete_shopping(db, user_id, week, lst)
-
-
 # ── Pasti ──────────────────────────────────────────────────────────────────────
 
 
@@ -274,7 +215,6 @@ def assign_meal(
 ):
     """Assegna al pasto una ricetta del ricettario o una scritta al momento."""
     meal, day, week = _get_meal(db, user.id, meal_id)
-    ensure_unlocked(week)
     ensure_not_skipped(day, meal)
 
     if body.recipe_id:
@@ -300,7 +240,7 @@ def assign_meal(
     meal.pantry_used = None
     db.commit()
 
-    rebuild_lists_for(db, user.id, week)
+    rebuild_shopping_list(db, user.id)
     db.commit()
 
     slot = db.get(MealSlot, meal.meal_slot_id)
@@ -313,7 +253,6 @@ def clear_meal(
 ):
     """Svuota la casella (la ricetta resta nel ricettario)."""
     meal, day, week = _get_meal(db, user_id, meal_id)
-    ensure_unlocked(week)
 
     meal.recipe_id = None
     meal.source = "ai_generated"
@@ -323,7 +262,7 @@ def clear_meal(
     meal.pantry_used = None
     db.commit()
 
-    rebuild_lists_for(db, user_id, week)
+    rebuild_shopping_list(db, user_id)
     db.commit()
 
     slot = db.get(MealSlot, meal.meal_slot_id)
@@ -380,27 +319,35 @@ def set_followed(
     meal.deviation_notes = body.deviation_notes
 
     pantry_used: list[dict] = []
+    pantry_skipped: list[dict] = []
     if body.is_followed:
         unskip_meal(db, user_id, meal, week)
         moved = {"moved_to": None}
         if meal.pantry_used is None:
-            pantry_used = consume_from_pantry(db, user_id, meal.recipe_id)
-            meal.pantry_used = pantry_used
+            pantry_used, pantry_skipped = consume_from_pantry(db, user_id, meal.recipe_id)
+            # Niente scalato, niente da ricordare: `pantry_used` risponde a "cosa ho
+            # tolto", ed è anche la guardia contro il doppio scalo. Segnarci una lista
+            # vuota vorrebbe dire "già fatto" per sempre, e un pasto segnato prima
+            # della spesa non si scalerebbe più nemmeno a dispensa piena.
+            meal.pantry_used = pantry_used or None
     else:
         moved = skip_meal(db, user_id, meal, day, week)
         restore_to_pantry(db, user_id, meal.pantry_used)
         meal.pantry_used = None
     db.commit()
 
-    rebuild_lists_for(db, user_id, week)
+    rebuild_shopping_list(db, user_id)
     db.commit()
 
     slot = db.get(MealSlot, meal.meal_slot_id)
     data = serialize_meal(db, day, meal, slot, full=True)
     data["moved_to"] = moved["moved_to"]
     # Quello che è appena uscito dalla dispensa: la pagina lo dice, altrimenti la
-    # scorta cala di nascosto e nessuno si fida più del numero.
+    # scorta cala di nascosto e nessuno si fida più del numero. E quello che non è
+    # uscito, col motivo: una dispensa che resta ferma senza spiegazioni sembra un
+    # pulsante che non funziona.
     data["pantry_used"] = pantry_used
+    data["pantry_skipped"] = pantry_skipped
     return data
 
 
@@ -429,6 +376,6 @@ def set_day_skipped(
     skip_day(db, user_id, day, week, body.is_skipped)
     db.commit()
 
-    rebuild_lists_for(db, user_id, week)
+    rebuild_shopping_list(db, user_id)
     db.commit()
     return serialize_week(db, week)

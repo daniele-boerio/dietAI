@@ -250,9 +250,6 @@ class WeekPlan(Base):
     )
     week_start_date = Column(Date, nullable=False)
     status = Column(String, nullable=False, default="draft", server_default="draft")
-    is_locked = Column(Boolean, nullable=False, default=False, server_default="false")
-    locked_at = Column(DateTime(timezone=True))
-    lock_expires_at = Column(DateTime(timezone=True))
     # Valorizzato mentre una generazione è in corso, NULL quando finisce. Sta nel
     # database e non nel browser perché deve sopravvivere a un cambio pagina e a un
     # ricaricamento: senza, si riparte a premere "Genera" e si paga due volte.
@@ -333,10 +330,6 @@ class PlannedMeal(Base):
     # memoria di cosa c'era in programma, ma non conta più da nessuna parte — spesa,
     # totali del giorno, tracking e generazione la saltano tutti.
     is_skipped = Column(Boolean, nullable=False, default=False, server_default="false")
-    # Ricetta arrivata qui traboccando dalla settimana precedente, che slittava. Se lo
-    # slittamento si ripete il giorno dopo, va rimessa in coda insieme alle altre:
-    # senza questo flag la ricetta di sabato le passerebbe davanti.
-    is_shifted = Column(Boolean, nullable=False, default=False, server_default="false")
 
     __table_args__ = (
         UniqueConstraint("day_plan_id", "meal_slot_id", name="uq_planned_meal"),
@@ -500,7 +493,9 @@ class ShoppingList(Base):
         unique=True,
         nullable=False,
     )
-    is_completed = Column(Boolean, nullable=False, default=False, server_default="false")
+    # Quando si è detto l'ultima volta "spesa fatta": la lista non si chiude mai — è
+    # sempre quello che il piano chiede e la dispensa non copre — ma sapere quand'è
+    # stato l'ultimo giro serve a leggere una lista corta senza sospettare un bug.
     completed_at = Column(DateTime(timezone=True))
     estimated_cost = Column(Float)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

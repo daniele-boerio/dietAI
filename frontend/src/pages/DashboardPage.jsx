@@ -4,7 +4,6 @@ import {
   CalendarDays,
   Check,
   ChefHat,
-  Lock,
   ShoppingCart,
   Sparkles,
   X,
@@ -13,7 +12,7 @@ import { api, formatDate, formatMoney } from '../api';
 import { useApp } from '../App';
 import EmptyState from '../components/EmptyState';
 import MacroBar from '../components/MacroBar';
-import { scalatiDallaDispensa } from '../lib/pantry';
+import { nonScalatiDallaDispensa, scalatiDallaDispensa } from '../lib/pantry';
 
 export default function DashboardPage() {
   const { addToast } = useApp();
@@ -42,7 +41,11 @@ export default function DashboardPage() {
             (updated.moved_to.next_week ? ' della settimana prossima' : '')
         );
       }
-      if (updated.pantry_used?.length) addToast(scalatiDallaDispensa(updated.pantry_used), 'info');
+      if (updated.pantry_used?.length) {
+        addToast(scalatiDallaDispensa(updated.pantry_used), 'info');
+      } else if (followed && updated.pantry_skipped?.length) {
+        addToast(nonScalatiDallaDispensa(updated.pantry_skipped), 'info');
+      }
       load();
     } catch (e) {
       addToast(e.message, 'error');
@@ -88,19 +91,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {week.is_locked && (
-        <div className="notice notice-lock">
-          <Lock />
-          <div>
-            <strong>Piano bloccato.</strong> Hai già fatto la spesa: le ricette di questa
-            settimana restano queste fino al{' '}
-            {week.lock_expires_at ? formatDate(week.lock_expires_at) : '—'}. Le modifiche
-            si fanno sulla <Link to="/plan/next">settimana prossima</Link>.
-          </div>
-        </div>
-      )}
-
-      {emptySlots > 0 && !week.is_locked && (
+      {emptySlots > 0 && (
         <div className="notice">
           <Sparkles />
           <div>

@@ -19,7 +19,7 @@ from ..services.planner import (
     serialize_week,
     week_meals,
 )
-from ..services.shopping import get_or_create_list
+from ..services.shopping import current_list
 from ..services.tracking import diet_targets, weekly_tracking, year_adherence
 
 router = APIRouter(prefix="/api/tracking", tags=["Tracking"])
@@ -81,7 +81,6 @@ def list_weeks(
             "id": w.id,
             "week_start_date": w.week_start_date.isoformat(),
             "status": w.status,
-            "is_locked": w.is_locked,
             "is_current": w.week_start_date == current_week_start(),
         }
         for w in rows
@@ -135,7 +134,7 @@ def dashboard(
             }
         )
 
-    lst = get_or_create_list(db, week)
+    _, lst = current_list(db, user_id)
     db.commit()
     items = (
         db.query(ShoppingListItem)
@@ -160,13 +159,11 @@ def dashboard(
             "id": week.id,
             "week_start_date": week.week_start_date.isoformat(),
             "status": week.status,
-            "is_locked": week.is_locked,
-            "lock_expires_at": week.lock_expires_at.isoformat() if week.lock_expires_at else None,
             "meals_total": week_data["meals_total"],
             "meals_filled": week_data["meals_filled"],
         },
         "shopping": {
-            "is_completed": lst.is_completed,
+            "completed_at": lst.completed_at.isoformat() if lst.completed_at else None,
             "estimated_cost": lst.estimated_cost,
             "total_items": len(items),
             "checked_items": sum(1 for i in items if i.is_checked),

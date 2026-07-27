@@ -11,8 +11,6 @@ import MacroBar from './MacroBar';
 // che invece si preme ogni sera.
 export default function MealCard({
   meal,
-  locked,
-  past,
   skipped,
   busy,
   regenerating,
@@ -50,8 +48,8 @@ export default function MealCard({
             />
           </>
         ) : off ? (
-          // Il giorno è passato senza spesa: non è una casella da riempire, è una
-          // casella che non tornerà. La ricetta che c'era è slittata più avanti.
+          // La giornata è saltata: la ricetta si è accodata più avanti, qui non
+          // c'è niente da riempire.
           <div className="meal-empty">Giorno saltato</div>
         ) : meal.self_managed ? (
           // Non è una casella vuota da riempire: è un pasto che l'utente ha già
@@ -89,14 +87,10 @@ export default function MealCard({
               : meal.is_skipped
                 ? 'Pasto saltato: la ricetta è stata rimandata più avanti'
                 : skipped
-                  ? 'Giorno saltato: è passato senza la spesa'
-                  : past
-                    ? 'Settimana passata: si consulta, non si rigenera'
-                    : locked
-                      ? 'Piano bloccato'
-                      : 'Rigenera'
+                  ? 'Giornata saltata: le sue ricette si sono accodate più avanti'
+                  : 'Rigenera'
           }
-          disabled={locked || past || off || busy || meal.self_managed}
+          disabled={off || busy || meal.self_managed}
           onClick={() => onRegenerate(meal)}
         >
           {/* Gira solo se sta davvero rigenerando: mentre si salva "l'ho seguito"
@@ -105,10 +99,9 @@ export default function MealCard({
         </button>
 
         {/* Com'è andata si segna da qui, senza aprire il pasto: è la cosa che si fa
-            ogni sera, di solito col telefono in mano. Restano premibili anche a
-            piano bloccato e sulle settimane passate — il tracking è proprio ciò per
-            cui ci si torna — e su un pasto già rimandato, dove "l'ho seguito" è il
-            modo di annullare il rinvio. */}
+            ogni sera, di solito col telefono in mano. Restano premibili anche sulle
+            settimane passate — il tracking è proprio ciò per cui ci si torna — e su
+            un pasto già rimandato, dove "l'ho seguito" annulla il rinvio. */}
         <button
           className={`meal-action ok ${meal.is_followed === true ? 'on' : ''}`}
           title="L'ho seguito"

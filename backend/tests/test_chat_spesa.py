@@ -241,21 +241,28 @@ def test_una_modifica_che_esplode_non_costa_la_conversazione(client, week, monke
 # ── A spesa fatta ──────────────────────────────────────────────────────────────
 
 
-def test_a_spesa_fatta_la_chat_non_modifica(client, week, monkeypatch):
+def test_anche_a_spesa_fatta_la_chat_cambia_le_ricette(client, week, monkeypatch):
+    """Niente più blocco: se al supermercato non trovi le zucchine, le cambi comunque.
+
+    Quello che era già stato comprato resta in dispensa e sarà l'utente a sistemarla
+    se serve: l'app non prova a indovinare cosa è rimasto nel frigo.
+    """
+    lst = client.get("/api/shopping/current").json()
+    for c in lst["categories"]:
+        for i in c["items"]:
+            client.put(f"/api/shopping/items/{i['id']}/check", json={"is_checked": True})
     client.post("/api/shopping/current/complete")
 
     mid = pranzo_id(week)
-    fake = use_chat(monkeypatch, _update_reply([mid]))
+    use_chat(monkeypatch, _update_reply([mid]))
     res = client.post(
         f"/api/chat/shopping/{week['id']}/messages", json={"content": "Cambia le zucchine"}
     ).json()
 
-    assert res["list_updated"] is False
-    assert "spesa è già fatta" in res["content"].lower()
-    # Il modello è avvisato del blocco.
-    assert "BLOCCATO" in fake.system
-    # La ricetta è rimasta quella di prima.
-    assert client.get(f"/api/planning/meals/{mid}").json()["recipe"]["title"] == "Pranzo 0"
+    assert res["list_updated"] is True
+    assert client.get(f"/api/planning/meals/{mid}").json()["recipe"]["title"] == (
+        "Pasta alle melanzane"
+    )
 
 
 # ── Storico ────────────────────────────────────────────────────────────────────

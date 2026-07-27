@@ -42,7 +42,7 @@ function useKeyboardInset() {
 // Chat "da supermercato": lavora sulla settimana intera, non su un pasto. Quando il
 // backend cambia delle ricette (`list_updated`) avvisa il genitore, che ricarica la
 // lista della spesa perché rifletta i nuovi ingredienti.
-export default function ShoppingChat({ weekId, locked, onClose, onListUpdated }) {
+export default function ShoppingChat({ weekId, onClose, onListUpdated }) {
   const { addToast } = useApp();
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState('');
@@ -131,9 +131,8 @@ export default function ShoppingChat({ weekId, locked, onClose, onListUpdated })
       <div className="chat-body" ref={bodyRef}>
         {messages.length === 0 && !sending && (
           <div className="chat-hint">
-            {locked
-              ? 'La spesa è già fatta: posso darti consigli, ma non cambiare le ricette (il cibo è comprato).'
-              : "Non trovi un ingrediente o vuoi cambiarlo? Dimmelo: lo cambio in tutte le ricette che lo usano e rifaccio la lista."}
+            Non trovi un ingrediente o vuoi cambiarlo? Dimmelo: lo cambio in tutte le
+            ricette che lo usano e rifaccio la lista.
             <div className="chat-suggestions">
               {SUGGESTIONS.map((s) => (
                 <button key={s} className="chat-suggestion" onClick={() => send(s)}>

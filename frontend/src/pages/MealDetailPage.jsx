@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
-  Archive,
   ArrowLeft,
   CalendarOff,
   Check,
   Heart,
-  Lock,
   Pin,
   RefreshCw,
   Trash2,
@@ -21,7 +19,7 @@ import MealChat from '../components/MealChat';
 import RecipeView from '../components/RecipeView';
 import StarRating from '../components/StarRating';
 import { useGoBack } from '../lib/navigation';
-import { scalatiDallaDispensa } from '../lib/pantry';
+import { nonScalatiDallaDispensa, scalatiDallaDispensa } from '../lib/pantry';
 
 export default function MealDetailPage() {
   const { mealId } = useParams();
@@ -118,7 +116,13 @@ export default function MealDetailPage() {
       } else if (value) {
         addToast('Rimessa al suo posto ✓');
       }
-      if (updated.pantry_used?.length) addToast(scalatiDallaDispensa(updated.pantry_used), 'info');
+      if (updated.pantry_used?.length) {
+        addToast(scalatiDallaDispensa(updated.pantry_used), 'info');
+      } else if (value && updated.pantry_skipped?.length) {
+        // Nessuna scorta toccata: il perché c'è sempre, e senza dirlo la dispensa
+        // ferma sembra un errore dell'app.
+        addToast(nonScalatiDallaDispensa(updated.pantry_skipped), 'info');
+      }
     } catch (e) {
       addToast(e.message, 'error');
     }
@@ -152,15 +156,10 @@ export default function MealDetailPage() {
 
   // Il `?.` non è pignoleria: questa pagina si ridisegna con la risposta dell'ultimo
   // pulsante premuto, e una risposta senza `week` non deve poter spegnere la schermata.
-  const locked = meal.week?.is_locked;
-  // Un giorno saltato è in sola lettura come un piano bloccato, ma per il motivo
-  // opposto: lì il cibo è già comprato, qui non lo è mai stato.
+  // L'unica sola lettura rimasta: una casella saltata, la cui ricetta si è accodata
+  // altrove. Tutto il resto — passato compreso — si modifica quando si vuole.
   const skipped = meal.day_is_skipped;
-  // Il piano si sfoglia all'indietro: da lì si arriva anche ai pasti delle settimane
-  // archiviate. Si rileggono, si votano e si può ancora segnare com'è andata — ma
-  // rigenerarli spenderebbe una chiamata al modello per un giorno già passato.
-  const past = meal.week?.is_past;
-  const frozen = locked || past || skipped || meal.is_skipped;
+  const frozen = skipped || meal.is_skipped;
 
   return (
     <>
@@ -212,34 +211,12 @@ export default function MealDetailPage() {
         </div>
       </div>
 
-      {past && (
-        <div className="notice notice-lock">
-          <Archive />
-          <div>
-            <strong>Settimana passata.</strong> Puoi ancora votare la ricetta e segnare
-            com'è andata — è il motivo per cui si torna indietro — ma il piatto non si
-            rigenera: quel giorno è già stato.
-          </div>
-        </div>
-      )}
-
-      {locked && !past && (
-        <div className="notice notice-lock">
-          <Lock />
-          <div>
-            <strong>Piano bloccato.</strong> Puoi votare la ricetta e chiedere consigli in
-            chat, ma non modificarla: gli ingredienti sono già stati comprati.
-          </div>
-        </div>
-      )}
-
-      {skipped && !locked && !past && (
+      {skipped && (
         <div className="notice notice-skip">
           <CalendarOff />
           <div>
-            <strong>Giorno saltato.</strong> È passato senza che la spesa fosse fatta:
-            quello che c'era in piano è slittato ai giorni successivi, e qui non c'è più
-            niente da cambiare.
+            <strong>Giornata saltata.</strong> Quello che c'era in programma si è
+            accodato alle prime caselle libere, e qui non c'è più niente da cambiare.
           </div>
         </div>
       )}

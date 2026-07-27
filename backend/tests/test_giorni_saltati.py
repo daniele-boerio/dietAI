@@ -1,10 +1,15 @@
-"""Giorni saltati: il piano segue la spesa, non il calendario.
+"""Cosa entra nella spesa: da oggi in avanti, tolto quello che non si cucinerà.
 
-La regola è quella che rende utile la lista della spesa: se lunedì non sei andato a
-fare la spesa, lunedì non hai cucinato quello che c'era in piano. Comprare mercoledì
-gli ingredienti di lunedì è spreco puro, quindi il giorno si salta e le ricette
-scalano in avanti — fino a traboccare sulla settimana dopo. Quando la spesa la fai,
-tutto si congela com'è.
+La lista è "quello che il piano chiede meno quello che c'è in casa", e la parte
+"quello che il piano chiede" ha tre esclusioni, tutte per lo stesso motivo — non
+comprare roba che non servirà:
+
+· i giorni già passati, perché per lunedì non si cucina più da mercoledì;
+· i pasti già segnati come seguiti, perché quel piatto è stato cucinato;
+· i giorni e i pasti saltati, che hanno già la loro ricetta accodata altrove.
+
+Il piano invece non si muove da solo: i giorni passati restano com'erano, con le loro
+ricette al loro posto. Quello che si è mangiato lo dice l'utente, pasto per pasto.
 """
 
 from datetime import date, timedelta
@@ -50,199 +55,125 @@ def titoli(week: dict, slot: str = "Pranzo") -> list:
     return out
 
 
-# ── Slittamento ────────────────────────────────────────────────────────────────
-
-
-def test_i_giorni_passati_senza_spesa_si_saltano(client, settimana_generata, oggi):
-    oggi(2)  # mercoledì, spesa mai fatta
-    week = client.get("/api/planning/weeks/current").json()
-
-    assert [d["is_skipped"] for d in week["days"]] == [True, True, False, False, False, False, False]
-    assert week["days_skipped"] == 2
-
-
-def test_le_ricette_slittano_in_avanti(client, settimana_generata, oggi):
-    assert titoli(settimana_generata) == [f"Pranzo {i}" for i in range(DAYS)]
-
-    oggi(2)
-    week = client.get("/api/planning/weeks/current").json()
-
-    # Quello che era di lunedì si mangia mercoledì, e a scalare fino a domenica.
-    assert titoli(week) == [None, None, "Pranzo 0", "Pranzo 1", "Pranzo 2", "Pranzo 3", "Pranzo 4"]
-
-
-def test_le_ricette_in_eccedenza_passano_alla_settimana_dopo(
-    client, settimana_generata, oggi
-):
-    oggi(2)
-    client.get("/api/planning/weeks/current")
-
-    nxt = client.get("/api/planning/weeks/next").json()
-    assert titoli(nxt)[:2] == ["Pranzo 5", "Pranzo 6"]
-    # Il resto della settimana prossima resta da generare: non si inventa niente.
-    assert titoli(nxt)[2:] == [None] * 5
-
-
-def test_slittare_due_giorni_di_fila_non_scambia_l_ordine(
-    client, settimana_generata, oggi
-):
-    """Il caso che il flag `is_shifted` esiste per risolvere.
-
-    Martedì "Pranzo 6" trabocca sul lunedì dopo. Mercoledì slitta di nuovo tutto: se
-    la ricetta già traboccata non rientrasse in fila, "Pranzo 5" le finirebbe davanti
-    e la settimana prossima si aprirebbe con i piatti in ordine inverso.
-    """
-    oggi(1)
-    client.get("/api/planning/weeks/current")
-    assert titoli(client.get("/api/planning/weeks/next").json())[:1] == ["Pranzo 6"]
-
-    oggi(2)
-    client.get("/api/planning/weeks/current")
-
-    nxt = client.get("/api/planning/weeks/next").json()
-    assert titoli(nxt)[:2] == ["Pranzo 5", "Pranzo 6"]
-
-
-def test_un_pasto_fisso_non_slitta(client, settimana_generata, oggi):
-    """La pizza del sabato è del sabato: non diventa la cena di giovedì."""
-    sabato = settimana_generata["days"][5]
-    cena = next(m for m in sabato["meals"] if m["slot_name"] == "Cena")
-    res = client.put(
-        f"/api/planning/meals/{cena['id']}/recurring",
-        json={"is_recurring": True, "recurring_rule": {"type": "weekly", "day": 5}},
+def quantita(lst: dict, nome: str) -> float:
+    return next(
+        (i["quantity"] for c in lst["categories"] for i in c["items"] if i["name"] == nome), 0
     )
-    assert res.status_code == 200
-
-    oggi(2)
-    week = client.get("/api/planning/weeks/current").json()
-
-    assert titoli(week, "Cena")[5] == "Cena 5"
-    # Le altre cene scalano scavalcandola: giovedì prende quella di martedì.
-    assert titoli(week, "Cena")[2:5] == ["Cena 0", "Cena 1", "Cena 2"]
-    assert titoli(week, "Cena")[6] == "Cena 3"
 
 
-def test_un_giorno_tracciato_non_si_salta(client, settimana_generata, oggi):
-    """Aver detto "l'ho seguito" vuol dire che quel giorno hai mangiato, spesa o no."""
-    for meal in settimana_generata["days"][0]["meals"]:
-        client.put(f"/api/planning/meals/{meal['id']}/followed", json={"is_followed": True})
-
-    oggi(2)
-    week = client.get("/api/planning/weeks/current").json()
-
-    assert [d["is_skipped"] for d in week["days"]][:2] == [False, True]
-    # Lunedì resta intatto, e non cede le sue ricette alla fila.
-    assert titoli(week)[0] == "Pranzo 0"
-    assert titoli(week)[2] == "Pranzo 1"
+# ── Il piano non si muove da solo ──────────────────────────────────────────────
 
 
-# ── Effetti sul resto dell'app ─────────────────────────────────────────────────
+def test_i_giorni_passati_restano_dove_sono(client, settimana_generata, oggi):
+    """Il piano segue il calendario: quello che era di lunedì resta di lunedì.
 
-
-def test_la_lista_segue_le_ricette_slittate(client, settimana_generata, oggi):
-    """I giorni saltati non si comprano, ma le loro ricette sì: sono slittate avanti.
-
-    La lista copre tutte le settimane con ricette non ancora comprate, quindi i due
-    pranzi traboccati sulla prossima restano nel conto — si cucineranno, e sono da
-    comprare. Quello che non si compra è il giorno saltato, non la ricetta.
+    Spostare i piatti in avanti da soli aveva senso quando la spesa bloccava la
+    settimana; adesso quello che non si è mangiato lo si sposta dicendolo ("ho
+    mangiato altro"), che è la stessa cosa ma decisa da chi ha cucinato.
     """
-    oggi(2)
-    lst = client.get("/api/shopping/current").json()
-    items = {i["name"]: i for cat in lst["categories"] for i in cat["items"]}
-
-    # Sette pranzi generati, sette da cucinare: cinque qui, due nella settimana dopo —
-    # e la lista è una sola, che comprende entrambe le settimane.
-    assert items["zucchine"]["quantity"] == pytest.approx(7 * 250)
-    assert len(lst["weeks_covered"]) == 2
-
-    nxt = client.get("/api/planning/weeks/next").json()
-    assert titoli(nxt)[:2] == ["Pranzo 5", "Pranzo 6"]
-
-    # La lista dice comunque da quando si comincia a cucinare.
-    assert lst["days_skipped"] == 2
-    assert lst["covers_from"] == (planner.monday_of(date.today()) + timedelta(days=2)).isoformat()
-
-
-def test_la_generazione_non_riempie_i_giorni_saltati(client, diet, fake_ai, oggi):
-    oggi(2)
+    oggi(2)  # mercoledì
     week = client.get("/api/planning/weeks/current").json()
-    assert week["meals_total"] == 5 * 3  # cinque giorni per tre pasti, non sette
+
+    assert [d["is_skipped"] for d in week["days"]] == [False] * 7
+    assert titoli(week) == [f"Pranzo {i}" for i in range(DAYS)]
+
+
+# ── Cosa esce dalla lista ──────────────────────────────────────────────────────
+
+
+def test_per_i_giorni_passati_non_si_compra_piu(client, settimana_generata, oggi):
+    lunedi = client.get("/api/shopping/current").json()
+    assert quantita(lunedi, "zucchine") == pytest.approx(7 * 250)
+
+    oggi(2)
+    mercoledi = client.get("/api/shopping/current").json()
+
+    # Restano i cinque pranzi da mercoledì a domenica.
+    assert quantita(mercoledi, "zucchine") == pytest.approx(5 * 250)
+    assert mercoledi["covers_from"] == (planner.monday_of(date.today()) + timedelta(days=2)).isoformat()
+
+
+def test_un_pasto_gia_seguito_esce_dalla_lista(client, settimana_generata):
+    """L'hai cucinato: ricomprarlo sarebbe comprare due volte la stessa cena."""
+    pranzo = next(
+        m for m in settimana_generata["days"][0]["meals"] if m["slot_name"] == "Pranzo"
+    )
+    client.put(f"/api/planning/meals/{pranzo['id']}/followed", json={"is_followed": True})
+
+    lst = client.get("/api/shopping/current").json()
+    # 250 g al giorno fra pranzo (150) e cena (100): sparisce solo il pranzo di lunedì.
+    assert quantita(lst, "zucchine") == pytest.approx(7 * 250 - 150)
+
+
+def test_il_pasto_saltato_non_esce_dalla_spesa_ma_si_sposta(client, settimana_generata):
+    """"Ho mangiato altro" rimanda il piatto, non lo cancella: si cucinerà, va comprato."""
+    pranzo = next(
+        m for m in settimana_generata["days"][0]["meals"] if m["slot_name"] == "Pranzo"
+    )
+    res = client.put(f"/api/planning/meals/{pranzo['id']}/followed", json={"is_followed": False})
+    assert res.json()["moved_to"]["next_week"] is True
+
+    lst = client.get("/api/shopping/current").json()
+    assert quantita(lst, "zucchine") == pytest.approx(7 * 250)
+
+
+# ── Giornate saltate a mano ────────────────────────────────────────────────────
+
+
+def test_saltare_una_giornata_accoda_le_sue_ricette(client, settimana_generata):
+    """Weekend fuori: i piatti di giovedì si spostano, quindi restano da comprare."""
+    giovedi = settimana_generata["days"][3]
+    res = client.put(f"/api/planning/days/{giovedi['id']}/skip", json={"is_skipped": True})
+    assert res.status_code == 200, res.text
+
+    week = client.get("/api/planning/weeks/current").json()
+    assert week["days"][3]["is_skipped"] is True
+    # La casella tiene la ricetta per memoria, ma non conta più da nessuna parte.
+    assert all(m["is_skipped"] for m in week["days"][3]["meals"])
+
+    # Il piatto si cucinerà un altro giorno, quindi si compra lo stesso.
+    lst = client.get("/api/shopping/current").json()
+    assert quantita(lst, "zucchine") == pytest.approx(7 * 250)
+    assert titoli(client.get("/api/planning/weeks/next").json())[0] == "Pranzo 3"
+
+
+def test_la_generazione_non_riempie_i_giorni_saltati(client, diet, fake_ai):
+    week = client.get("/api/planning/weeks/current").json()
+    client.put(f"/api/planning/days/{week['days'][3]['id']}/skip", json={"is_skipped": True})
+
+    week = client.get("/api/planning/weeks/current").json()
+    assert week["meals_total"] == 6 * 3  # sei giorni per tre pasti, non sette
 
     res = client.post(f"/api/planning/weeks/{week['id']}/generate")
     assert res.status_code == 200, res.text
-    assert res.json()["generation"]["filled"] == 5 * 3
+    assert res.json()["generation"]["filled"] == 6 * 3
+    assert titoli(res.json())[3] is None
 
-    assert titoli(res.json())[:2] == [None, None]
 
+def test_il_tracking_non_conta_i_giorni_saltati(client, settimana_generata):
+    giovedi = settimana_generata["days"][3]
+    client.put(f"/api/planning/days/{giovedi['id']}/skip", json={"is_skipped": True})
 
-def test_il_tracking_non_conta_i_giorni_saltati(client, settimana_generata, oggi):
-    oggi(2)
     tracking = client.get("/api/tracking/weekly").json()
 
-    assert [d["is_skipped"] for d in tracking["days"]][:2] == [True, True]
-
+    assert [d["is_skipped"] for d in tracking["days"]][3] is True
     summary = tracking["weekly_summary"]
-    assert summary["days_skipped"] == 2
+    assert summary["days_skipped"] == 1
     # Un giorno saltato non è un giorno andato male: media e aderenza restano piene.
     assert summary["avg_daily_calories_planned"] == 1700
     assert summary["compliance_pct"] == 100.0
-    assert summary["meals_planned"] == 5 * 3
+    assert summary["meals_planned"] == 6 * 3
 
 
-def test_su_un_giorno_saltato_non_si_tocca_niente(client, settimana_generata, oggi):
-    colazione = settimana_generata["days"][0]["meals"][0]
-
-    oggi(2)
-    client.get("/api/planning/weeks/current")
+def test_su_un_giorno_saltato_non_si_tocca_niente(client, settimana_generata):
+    giovedi = settimana_generata["days"][3]
+    colazione = giovedi["meals"][0]
+    client.put(f"/api/planning/days/{giovedi['id']}/skip", json={"is_skipped": True})
 
     assert client.post(f"/api/planning/meals/{colazione['id']}/regenerate").status_code == 409
     res = client.put(
         f"/api/planning/meals/{colazione['id']}/assign",
-        json={"recipe_id": settimana_generata["days"][3]["meals"][0]["recipe"]["id"]},
+        json={"recipe_id": settimana_generata["days"][0]["meals"][0]["recipe"]["id"]},
     )
     assert res.status_code == 409
-    assert "saltato" in res.json()["detail"]
-
-
-# ── La spesa fatta congela tutto ───────────────────────────────────────────────
-
-
-def test_la_spesa_fatta_ferma_lo_slittamento(client, settimana_generata, oggi):
-    assert client.post("/api/shopping/current/complete").status_code == 200
-
-    oggi(4)  # passano tre giorni: a piano bloccato non si salta più niente
-    week = client.get("/api/planning/weeks/current").json()
-
-    assert week["is_locked"] is True
-    assert week["days_skipped"] == 0
-    assert titoli(week) == [f"Pranzo {i}" for i in range(DAYS)]
-
-
-def test_dopo_lo_sblocco_d_emergenza_non_si_slitta_lo_stesso(
-    client, settimana_generata, oggi
-):
-    """Sbloccare non disfa la spesa: il cibo è in casa, i piatti restano dove sono."""
-    client.post("/api/shopping/current/complete")
-    assert client.post(f"/api/planning/weeks/{settimana_generata['id']}/unlock").status_code == 200
-
-    oggi(3)
-    week = client.get("/api/planning/weeks/current").json()
-
-    assert week["is_locked"] is False
-    assert week["days_skipped"] == 0
-    assert titoli(week) == [f"Pranzo {i}" for i in range(DAYS)]
-
-
-def test_la_spesa_fatta_a_meta_settimana_congela_i_giorni_gia_saltati(
-    client, settimana_generata, oggi
-):
-    """Spesa di mercoledì: lunedì e martedì restano saltati, il resto si blocca."""
-    oggi(2)
-    client.get("/api/planning/weeks/current")
-    assert client.post("/api/shopping/current/complete").status_code == 200
-
-    oggi(4)
-    week = client.get("/api/planning/weeks/current").json()
-
-    assert week["days_skipped"] == 2
-    assert titoli(week)[2:] == ["Pranzo 0", "Pranzo 1", "Pranzo 2", "Pranzo 3", "Pranzo 4"]
+    assert "saltat" in res.json()["detail"]

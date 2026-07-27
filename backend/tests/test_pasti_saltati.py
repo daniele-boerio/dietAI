@@ -121,8 +121,12 @@ def test_un_pasto_fisso_non_si_accoda(client, settimana_generata):
 # ── A spesa fatta ──────────────────────────────────────────────────────────────
 
 
-def test_funziona_anche_a_piano_bloccato(client, settimana_generata):
+def test_funziona_anche_a_spesa_fatta(client, settimana_generata):
     """È il caso per cui esiste: il cibo è comprato, il piatto si sposta e basta."""
+    lst = client.get("/api/shopping/current").json()
+    for c in lst["categories"]:
+        for i in c["items"]:
+            client.put(f"/api/shopping/items/{i['id']}/check", json={"is_checked": True})
     assert client.post("/api/shopping/current/complete").status_code == 200
 
     cena = pasto(settimana_generata, 0, "Cena")
@@ -131,7 +135,6 @@ def test_funziona_anche_a_piano_bloccato(client, settimana_generata):
     assert res.json()["moved_to"]["next_week"] is True
 
     week = client.get("/api/planning/weeks/current").json()
-    assert week["is_locked"] is True
     assert titoli(week)[1:] == [f"Cena {i}" for i in range(1, DAYS)]
 
 
@@ -162,7 +165,9 @@ def test_il_pasto_saltato_si_compra_dove_si_è_accodato(client, settimana_genera
     # è la settimana prossima, che la stessa lista comprende.
     nxt = client.get("/api/planning/weeks/next").json()
     assert pasto(nxt, 0, "Cena")["recipe"]["title"] == "Cena 0"
-    assert len(client.get("/api/shopping/current").json()["weeks_covered"]) == 2
+    # La lista è una sola e arriva fin dove arrivano le ricette da cucinare.
+    lst = client.get("/api/shopping/current").json()
+    assert lst["covers_to"] >= nxt["days"][0]["date"]
 
 
 def test_i_totali_del_giorno_scendono_col_pasto_saltato(client, settimana_generata):

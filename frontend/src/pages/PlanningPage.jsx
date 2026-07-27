@@ -6,10 +6,8 @@ import {
   CalendarOff,
   ChevronLeft,
   ChevronRight,
-  Lock,
   RefreshCw,
   Sparkles,
-  Unlock,
 } from 'lucide-react';
 import { api, formatDate } from '../api';
 import { useApp } from '../App';
@@ -18,7 +16,7 @@ import EmptyState from '../components/EmptyState';
 import GenerationLog from '../components/GenerationLog';
 import LoadError from '../components/LoadError';
 import WeekGrid from '../components/WeekGrid';
-import { scalatiDallaDispensa } from '../lib/pantry';
+import { nonScalatiDallaDispensa, scalatiDallaDispensa } from '../lib/pantry';
 
 const GIORNO_MS = 86400000;
 
@@ -38,8 +36,6 @@ const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + 
 
 const mondayOf = (d) => addDays(d, -((d.getDay() + 6) % 7));
 
-const todayIso = () => isoOf(new Date());
-
 // "Lunedì e martedì", con le maiuscole al posto giusto per stare in mezzo a una frase.
 function elencaGiorni(nomi) {
   const [primo, ...resto] = nomi.map((n, i) => (i === 0 ? n : n.toLowerCase()));
@@ -57,8 +53,9 @@ function etichettaSettimana(offset) {
 
 // Una sola pagina per tutte le settimane: cambia solo il lunedì che si chiede.
 // Il piano si sfoglia in tutte e due le direzioni — indietro per rivedere cos'è
-// stato (e segnare com'è andata), avanti quanto si vuole pianificare. La settimana
-// prossima resta modificabile anche quando quella corrente è bloccata.
+// stato (e segnare com'è andata), avanti quanto si vuole pianificare — e si modifica
+// sempre, passato compreso: quello che è stato comprato sta in dispensa, e la
+// dispensa la corregge chi apre il frigo.
 export default function PlanningPage() {
   const { addToast } = useApp();
   const navigate = useNavigate();
@@ -72,7 +69,6 @@ export default function PlanningPage() {
   // che gira è quella della rigenerazione e solo lì ha senso.
   const [followingMealId, setFollowingMealId] = useState(null);
   const [busyDayId, setBusyDayId] = useState(null);
-  const [confirmUnlock, setConfirmUnlock] = useState(false);
   const [confirmRegenerate, setConfirmRegenerate] = useState(false);
   // Serve a distinguere "non sta generando" da "ha appena finito", per il messaggio.
   const wasGenerating = useRef(false);
@@ -196,9 +192,11 @@ export default function PlanningPage() {
         addToast(value ? 'Segnato: seguito ✓' : 'Segnato: hai mangiato altro');
       }
       // La dispensa si scala mangiando: se cala di nascosto, del numero non si fida
-      // più nessuno.
+      // più nessuno — e se non cala affatto va detto perché, o sembra un pulsante rotto.
       if (updated.pantry_used?.length) {
         addToast(scalatiDallaDispensa(updated.pantry_used), 'info');
+      } else if (value && updated.pantry_skipped?.length) {
+        addToast(nonScalatiDallaDispensa(updated.pantry_skipped), 'info');
       }
     } catch (e) {
       addToast(e.message, 'error');
@@ -223,36 +221,13 @@ export default function PlanningPage() {
     }
   };
 
-  // Il ritorno dallo sblocco d'emergenza: corretto quel che c'era da correggere, il
-  // piano va riprotetto — il cibo è comprato lo stesso.
-  const relock = async () => {
-    try {
-      setWeek(await api.lockWeek(week.id));
-      addToast('Piano di nuovo bloccato ✓');
-    } catch (e) {
-      addToast(e.message, 'error');
-    }
-  };
-
-  const unlock = async () => {
-    try {
-      const data = await api.unlockWeek(week.id);
-      setWeek(data);
-      setConfirmUnlock(false);
-      addToast('Piano sbloccato');
-    } catch (e) {
-      addToast(e.message, 'error');
-    }
-  };
-
   if (loading) return <div className="spinner" />;
   if (!week) return <LoadError message={error} onRetry={load} />;
 
   const emptySlots = week.meals_total - week.meals_filled;
-  // Solo i giorni saltati perché la spesa non è arrivata in tempo, cioè quelli già
-  // passati: le giornate saltate a mano sono da oggi in avanti e non c'entrano con
-  // questo avviso, che parla di spesa.
-  const skipped = week.days.filter((d) => d.is_skipped && d.date < todayIso());
+  // Le giornate saltate: le loro ricette si sono accodate altrove, e va detto o la
+  // settimana sembra rimescolata senza motivo.
+  const skipped = week.days.filter((d) => d.is_skipped);
   // `generating` è la richiesta partita da qui; `is_generating` è quella che il
   // server sa essere in corso — comprese quelle avviate prima di ricaricare.
   const busy = generating || week.is_generating;
@@ -273,51 +248,27 @@ export default function PlanningPage() {
           </p>
         </div>
 
-        {/* Il passato si consulta: niente pulsanti che spendono una chiamata al
-            modello per rifare giorni già passati. */}
-        {!week.is_past && (
-          <div className="page-actions">
-            {week.is_locked ? (
-              <button className="btn btn-secondary" onClick={() => setConfirmUnlock(true)}>
-                <Unlock size={16} /> Sblocca
-              </button>
-            ) : (
-              <>
-                {/* Spesa fatta e piano sbloccato: è uno sblocco d'emergenza rimasto
-                    aperto. Il blocco si rimette da qui, con i giorni che ripartono
-                    dalla spesa. */}
-                {week.shopping_done && (
-                  <button className="btn btn-secondary" onClick={relock}>
-                    <Lock size={16} /> Riblocca
-                  </button>
-                )}
-                {/* Rifare tutto costa una chiamata al modello su tutta la settimana:
-                    sta in secondo piano e passa da una conferma. */}
-                {week.meals_filled > 0 && (
-                  <button
-                    className="btn btn-secondary"
-                    onClick={() => setConfirmRegenerate(true)}
-                    disabled={busy}
-                  >
-                    <RefreshCw size={16} /> Rigenera tutto
-                  </button>
-                )}
-                {emptySlots > 0 && (
-                  <button
-                    className="btn btn-primary"
-                    onClick={() => generate(false)}
-                    disabled={busy}
-                  >
-                    {busy ? <span className="spinner-inline" /> : <Sparkles size={16} />}
-                    {emptySlots === week.meals_total
-                      ? 'Genera la settimana'
-                      : `Riempi i ${emptySlots} vuoti`}
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-        )}
+        <div className="page-actions">
+          {/* Rifare tutto costa una chiamata al modello su tutta la settimana:
+              sta in secondo piano e passa da una conferma. */}
+          {week.meals_filled > 0 && (
+            <button
+              className="btn btn-secondary"
+              onClick={() => setConfirmRegenerate(true)}
+              disabled={busy}
+            >
+              <RefreshCw size={16} /> Rigenera tutto
+            </button>
+          )}
+          {emptySlots > 0 && (
+            <button className="btn btn-primary" onClick={() => generate(false)} disabled={busy}>
+              {busy ? <span className="spinner-inline" /> : <Sparkles size={16} />}
+              {emptySlots === week.meals_total
+                ? 'Genera la settimana'
+                : `Riempi i ${emptySlots} vuoti`}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Il piano si sfoglia una settimana alla volta, indietro e avanti senza
@@ -362,58 +313,27 @@ export default function PlanningPage() {
       </div>
 
       {week.is_past && !mai && (
-        <div className="notice notice-lock">
+        <div className="notice">
           <Archive />
           <div>
-            <strong>Settimana passata.</strong> È archiviata: le ricette si rileggono e
-            si possono ancora votare o segnare come seguite dal dettaglio del pasto, ma
-            il piano non si rigenera — quei giorni sono già stati.
+            <strong>Settimana passata.</strong> La si legge, si segna com'è andata e si
+            corregge come tutte le altre: quello che cambi qui però non entra nella
+            lista della spesa, che guarda da oggi in avanti.
           </div>
         </div>
       )}
 
-      {/* Il piano segue la spesa, non il calendario: i giorni passati senza spesa
-          sono già stati saltati e le loro ricette scalate in avanti. Va detto, o
-          l'utente si ritrova la settimana rimescolata senza sapere perché. */}
-      {!week.is_past && !week.is_locked && skipped.length > 0 && (
+      {skipped.length > 0 && (
         <div className="notice notice-skip">
           <CalendarOff />
           <div>
             <strong>
               {elencaGiorni(skipped.map((d) => d.day_name))}{' '}
-              {skipped.length === 1 ? 'saltato' : 'saltati'}: la spesa non risulta fatta.
+              {skipped.length === 1 ? 'saltato' : 'saltati'}.
             </strong>{' '}
-            Le ricette sono slittate in avanti — quelle che non ci stavano più sono
-            passate alla <Link to="/plan/next">settimana prossima</Link> — e quei giorni
-            non entrano nella lista della spesa. Quando vai a fare la spesa segnalalo
-            dalla <Link to="/shopping">lista</Link>: da lì il piano si blocca com'è.
-          </div>
-        </div>
-      )}
-
-      {!week.is_past && week.is_locked && (
-        <div className="notice notice-lock">
-          <Lock />
-          <div>
-            <strong>Piano bloccato fino al {formatDate(week.lock_expires_at)}.</strong> La
-            spesa è fatta: cambiare le ricette adesso vorrebbe dire buttare il cibo. Se ti
-            serve modificare qualcosa, lavora sulla{' '}
-            <Link to="/plan/next">settimana prossima</Link>.
-          </div>
-        </div>
-      )}
-
-      {/* Spesa fatta e piano aperto: succede solo dopo uno sblocco d'emergenza, e
-          dimenticarselo aperto è facile — a schermo non c'era niente che lo dicesse. */}
-      {!week.is_past && !week.is_locked && week.shopping_done && (
-        <div className="notice">
-          <Unlock />
-          <div>
-            <strong>Piano sbloccato con la spesa già fatta.</strong> Gli ingredienti
-            sono comprati: finite le correzioni conviene rimettere il blocco con{' '}
-            <em>Riblocca</em>, o le ricette restano cambiabili per sbaglio e la{' '}
-            <Link to="/shopping">lista della spesa</Link> continua a puntare su questa
-            settimana invece che sulla prossima.
+            Le ricette di quelle giornate si sono accodate alle prime caselle libere —
+            anche sulla <Link to="/plan/next">settimana prossima</Link>, se qui non ce
+            n'erano più — e la spesa le compra dove sono finite.
           </div>
         </div>
       )}
@@ -422,7 +342,7 @@ export default function PlanningPage() {
         <EmptyState
           icon={CalendarOff}
           title="Nessun piano per questa settimana"
-          text="In questi giorni non hai pianificato niente — o l'app non c'era ancora. Le settimane passate restano come sono: si sfogliano, non si riempiono."
+          text="In questi giorni non hai pianificato niente — o l'app non c'era ancora. Una settimana passata la si sfoglia com'è: non ne nasce una nuova solo perché la guardi."
           action={
             <button className="btn btn-secondary" onClick={() => navigate('/plan')}>
               <CalendarDays size={16} /> Torna a questa settimana
@@ -468,16 +388,6 @@ export default function PlanningPage() {
         />
       )}
 
-      {confirmUnlock && (
-        <ConfirmDialog
-          title="Sbloccare il piano?"
-          text="Il blocco esiste perché la spesa è già stata fatta: sbloccando potresti ritrovarti con ingredienti comprati e mai usati. Di solito conviene modificare la settimana prossima."
-          confirmLabel="Sblocca comunque"
-          danger
-          onConfirm={unlock}
-          onCancel={() => setConfirmUnlock(false)}
-        />
-      )}
     </>
   );
 }

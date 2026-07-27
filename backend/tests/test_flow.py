@@ -1,8 +1,8 @@
-"""Il percorso completo: dieta → piano generato → lista della spesa → blocco.
+"""Il percorso completo: dieta → piano generato → lista della spesa → spesa fatta.
 
 Claude è sostituito da una finta risposta: qui si verifica la logica nostra
-(struttura della settimana, aggregazione della spesa, regole di blocco), non la
-qualità delle ricette.
+(struttura della settimana, aggregazione della spesa, dispensa), non la qualità delle
+ricette.
 """
 
 import pytest
@@ -192,85 +192,68 @@ def test_la_dispensa_scala_le_quantita(client, diet, fake_ai):
     assert items["zucchine"]["quantity"] == pytest.approx(750)
 
 
-# ── Blocco settimanale ─────────────────────────────────────────────────────────
+# ── Spesa fatta ───────────────────────────────────────────────────────────────
 
 
-def test_la_spesa_completata_blocca_il_piano(client, diet, fake_ai):
+def test_la_spesa_fatta_riempie_la_dispensa_e_svuota_la_lista(client, diet, fake_ai):
+    """Il giro completo: si spunta, si conferma, la roba passa in dispensa.
+
+    Non si blocca niente: la lista si accorcia perché quello che chiedeva adesso è in
+    casa, ed è la stessa regola che la fa riempire quando generi una ricetta nuova.
+    """
     week = client.get("/api/planning/weeks/current").json()
     client.post(f"/api/planning/weeks/{week['id']}/generate")
 
     lst = client.get("/api/shopping/current").json()
-    first = lst["categories"][0]["items"][0]
-    assert client.put(f"/api/shopping/items/{first['id']}/check", json={"is_checked": True}).status_code == 200
+    items = [i for c in lst["categories"] for i in c["items"]]
+    for item in items:
+        assert client.put(
+            f"/api/shopping/items/{item['id']}/check", json={"is_checked": True}
+        ).status_code == 200
 
     res = client.post("/api/shopping/current/complete")
     assert res.status_code == 200, res.text
-    assert "week_locked_until" in res.json()
+    assert res.json()["items_stored"] == len(items)
 
-    locked = client.get("/api/planning/weeks/current").json()
-    assert locked["is_locked"] is True
-    assert locked["status"] == "locked"
+    # Gli articoli spuntati sono finiti in dispensa…
+    pantry = {p["name"] for p in client.get("/api/config/pantry").json()}
+    assert {i["name"] for i in items} <= pantry
+    # …e la lista, che è "quello che manca", adesso è vuota.
+    assert client.get("/api/shopping/current").json()["total_items"] == 0
 
-    # A piano bloccato non si rigenera niente.
-    meal_id = locked["days"][0]["meals"][0]["id"]
-    assert client.post(f"/api/planning/meals/{meal_id}/regenerate").status_code == 409
-    assert client.post(f"/api/planning/weeks/{locked['id']}/generate").status_code == 409
 
-    # Gli articoli spuntati sono finiti in dispensa.
-    pantry = client.get("/api/config/pantry").json()
-    assert any(p["name"] == first["name"] for p in pantry)
+def test_a_spesa_fatta_il_piano_resta_modificabile(client, diet, fake_ai):
+    """Il blocco non c'è più: se una ricetta non convince, si rifà quando si vuole."""
+    week = client.get("/api/planning/weeks/current").json()
+    client.post(f"/api/planning/weeks/{week['id']}/generate")
 
-    # Ma il tracking (dire "l'ho seguito") resta possibile.
+    lst = client.get("/api/shopping/current").json()
+    for item in [i for c in lst["categories"] for i in c["items"]]:
+        client.put(f"/api/shopping/items/{item['id']}/check", json={"is_checked": True})
+    client.post("/api/shopping/current/complete")
+
+    week = client.get("/api/planning/weeks/current").json()
+    assert week["status"] == "active"
+
+    # Un pasto singolo si riassegna…
+    meal = week["days"][0]["meals"][0]
+    altra = week["days"][1]["meals"][0]["recipe"]["id"]
     assert client.put(
-        f"/api/planning/meals/{meal_id}/followed", json={"is_followed": True}
+        f"/api/planning/meals/{meal['id']}/assign", json={"recipe_id": altra}
+    ).status_code == 200
+    # …e la settimana intera si rifà.
+    assert client.post(f"/api/planning/weeks/{week['id']}/generate?regenerate_all=true").status_code == 200
+    assert client.put(
+        f"/api/planning/meals/{meal['id']}/followed", json={"is_followed": True}
     ).status_code == 200
 
 
-def test_la_settimana_prossima_resta_modificabile(client, diet, fake_ai):
+def test_la_settimana_prossima_si_genera_come_sempre(client, diet, fake_ai):
     week = client.get("/api/planning/weeks/current").json()
     client.post(f"/api/planning/weeks/{week['id']}/generate")
-    client.post("/api/shopping/current/complete")
 
     nxt = client.get("/api/planning/weeks/next").json()
-    assert nxt["is_locked"] is False
     assert client.post(f"/api/planning/weeks/{nxt['id']}/generate").status_code == 200
-
-
-def test_lo_sblocco_manuale_riapre_il_piano(client, diet, fake_ai):
-    week = client.get("/api/planning/weeks/current").json()
-    client.post(f"/api/planning/weeks/{week['id']}/generate")
-    client.post("/api/shopping/current/complete")
-
-    res = client.post(f"/api/planning/weeks/{week['id']}/unlock")
-    assert res.status_code == 200
-    assert res.json()["is_locked"] is False
-
-
-def test_dopo_lo_sblocco_il_blocco_si_rimette(client, diet, fake_ai):
-    """Lo sblocco serve a correggere, non a rinunciare al blocco: si torna indietro.
-
-    E i sette giorni ripartono dalla spesa, non da quando si ripreme il pulsante: il
-    cibo è stato comprato quel giorno lì, non oggi.
-    """
-    week = client.get("/api/planning/weeks/current").json()
-    client.post(f"/api/planning/weeks/{week['id']}/generate")
-    client.post("/api/shopping/current/complete")
-    scadenza = client.get("/api/planning/weeks/current").json()["lock_expires_at"]
-
-    client.post(f"/api/planning/weeks/{week['id']}/unlock")
-    aperta = client.get("/api/planning/weeks/current").json()
-    # La spesa risulta fatta anche a piano aperto: è ciò che fa comparire "Riblocca".
-    assert aperta["is_locked"] is False
-    assert aperta["shopping_done"] is True
-
-    res = client.post(f"/api/planning/weeks/{week['id']}/lock")
-    assert res.status_code == 200, res.text
-    assert res.json()["is_locked"] is True
-    assert res.json()["lock_expires_at"] == scadenza
-    # E la risposta è la settimana intera, come da ogni altra rotta che la modifica.
-    assert len(res.json()["days"]) == 7
-
-    assert client.post(f"/api/planning/weeks/{week['id']}/lock").status_code == 409
 
 
 # ── Pasti fissi e ricettario ───────────────────────────────────────────────────

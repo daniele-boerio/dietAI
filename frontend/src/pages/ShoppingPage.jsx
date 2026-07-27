@@ -1,16 +1,28 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   CalendarCheck,
-  CalendarOff,
   Check,
   ChevronDown,
   ChevronRight,
   Copy,
   FolderInput,
-  Lock,
   MessageSquare,
   ShoppingCart,
 } from 'lucide-react';
+
+// La domenica di questa settimana, in ISO locale: oltre quel giorno la lista sta
+// comprando anche per le settimane generate dopo.
+function domenicaCorrente() {
+  const oggi = new Date();
+  const domenica = new Date(
+    oggi.getFullYear(),
+    oggi.getMonth(),
+    oggi.getDate() + (7 - ((oggi.getDay() + 6) % 7) - 1)
+  );
+  return `${domenica.getFullYear()}-${String(domenica.getMonth() + 1).padStart(2, '0')}-${String(
+    domenica.getDate()
+  ).padStart(2, '0')}`;
+}
 import { api, formatDate, formatMoney } from '../api';
 import { useApp } from '../App';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -245,13 +257,14 @@ export default function ShoppingPage() {
   if (loading) return <div className="spinner" />;
   if (!list) return <LoadError message={error} onRetry={load} />;
 
-  // La spesa segue il piano, non il calendario: copre tutte le settimane generate di
-  // cui non si è ancora fatta la spesa, quindi il periodo va detto.
-  const settimane = list.weeks_covered?.length || 0;
-  const periodo =
-    settimane > 1
-      ? `Dal ${formatDate(list.week_start_date)} al ${formatDate(list.covers_to)}`
-      : `Settimana del ${formatDate(list.week_start_date)}`;
+  // La lista non è "di" una settimana: comprende tutte le ricette da cucinare da oggi
+  // in avanti, quindi il periodo lo dicono i giorni coperti.
+  const periodo = list.covers_from
+    ? `Dal ${formatDate(list.covers_from)} al ${formatDate(list.covers_to)}`
+    : 'Niente da comprare';
+  // La spesa arriva oltre la domenica di questa settimana: sono le settimane
+  // successive che hai già generato, comprate nello stesso giro.
+  const oltre = list.covers_to && list.covers_to > domenicaCorrente();
 
   return (
     <>
@@ -272,55 +285,26 @@ export default function ShoppingPage() {
         </div>
       </div>
 
-      {list.is_completed && (
-        <div className="notice notice-lock">
-          <Lock />
-          <div>
-            <strong>Spesa già fatta</strong>
-            {list.completed_at ? ` il ${formatDate(list.completed_at)}` : ''}. Gli articoli
-            spuntati sono finiti in dispensa e il piano che copriva è bloccato. La
-            prossima lista comparirà qui appena generi una settimana ancora da comprare.
-          </div>
-        </div>
-      )}
-
-      {/* La lista è saltata avanti perché questa settimana è già in frigo. */}
-      {!list.is_completed && list.starts_ahead && (
-        <div className="notice notice-skip">
-          <CalendarCheck />
-          <div>
-            <strong>Questa settimana è già comprata</strong>: la spesa riparte dal{' '}
-            {formatDate(list.week_start_date)}, con le ricette che hai generato dopo.
-          </div>
-        </div>
-      )}
-
-      {/* La spesa copre più di una settimana perché sono già state generate: dirlo
+      {/* La lista arriva più in là di domenica perché hai già generato oltre: dirlo
           evita che il totale alto sembri un errore di conto. */}
-      {!list.is_completed && settimane > 1 && (
+      {oltre && (
         <div className="notice notice-skip">
           <CalendarCheck />
           <div>
-            <strong>Spesa per {settimane} settimane</strong>, fino al{' '}
-            {formatDate(list.covers_to)}: la lista comprende tutte le ricette che hai
-            generato e non ancora comprato. A spesa fatta si bloccano tutte.
+            <strong>Spesa fino al {formatDate(list.covers_to)}</strong>: la lista
+            comprende tutte le ricette che hai generato, anche quelle delle settimane
+            successive. Una confezione sola invece di due mezze.
           </div>
         </div>
       )}
 
-      {/* La lista non parte da lunedì perché dei giorni sono passati senza spesa. */}
-      {!list.is_completed && list.days_skipped > 0 && (
-        <div className="notice notice-skip">
-          <CalendarOff />
+      {list.completed_at && (
+        <div className="notice">
+          <CalendarCheck />
           <div>
-            <strong>
-              {list.days_skipped === 1
-                ? 'Un giorno è già passato'
-                : `${list.days_skipped} giorni sono già passati`}{' '}
-              senza spesa.
-            </strong>{' '}
-            Si comincia a cucinare da {formatDate(list.covers_from)}: i giorni saltati non
-            si comprano, ma le loro ricette sono slittate in avanti e restano in lista.
+            <strong>Ultima spesa {formatDate(list.completed_at)}</strong>: quello che
+            avevi spuntato è passato in dispensa, ed è per questo che non compare più
+            qui. Quello che resta è quello che manca ancora.
           </div>
         </div>
       )}
@@ -328,12 +312,8 @@ export default function ShoppingPage() {
       {list.categories.length === 0 ? (
         <EmptyState
           icon={ShoppingCart}
-          title="Lista vuota"
-          text={
-            list.is_locked
-              ? 'Il cibo di questo piano è già stato comprato: non c’è niente da mettere nel carrello.'
-              : 'La lista si compila da sola dalle ricette che generi — anche più settimane insieme, se le hai già generate.'
-          }
+          title="Non manca niente"
+          text="Tutto quello che il piano chiede da oggi in avanti è già in dispensa. Genera altre ricette e qui comparirà quello che serve comprare."
         />
       ) : (
         <>
@@ -367,7 +347,6 @@ export default function ShoppingPage() {
                       <button
                         className="shopping-tick"
                         onClick={() => toggleItem(item)}
-                        disabled={list.is_completed}
                       >
                         <span className="shopping-check">
                           <Check size={13} strokeWidth={3} />
@@ -388,7 +367,6 @@ export default function ShoppingPage() {
                         <button
                           className={`shopping-qty ${item.bought_quantity ? 'bought' : ''}`}
                           onClick={() => setQuantityOf(item.id)}
-                          disabled={list.is_completed}
                           title="Quanto ne hai preso?"
                         >
                           {item.bought_label || item.label}
@@ -450,15 +428,13 @@ export default function ShoppingPage() {
                     : `${list.priced_items} di ${list.total_items} articoli a prezzo tuo`}
               </small>
             </div>
-            {!list.is_completed && (
-              <button
-                className="btn btn-primary"
-                style={{ marginLeft: 'auto' }}
-                onClick={() => setConfirmDone(true)}
-              >
-                <Check size={16} /> Ho fatto la spesa
-              </button>
-            )}
+            <button
+              className="btn btn-primary"
+              style={{ marginLeft: 'auto' }}
+              onClick={() => setConfirmDone(true)}
+            >
+              <Check size={16} /> Ho fatto la spesa
+            </button>
           </div>
         </>
       )}
@@ -496,11 +472,9 @@ export default function ShoppingPage() {
         <ConfirmDialog
           title="Hai fatto la spesa?"
           text={
-            `Gli articoli spuntati finiranno in dispensa e ${
-              settimane > 1
-                ? `il piano di tutte e ${settimane} le settimane coperte verrà bloccato`
-                : 'il piano di questa settimana verrà bloccato per 7 giorni'
-            }: le ricette non si potranno più cambiare. È il modo per non buttare il cibo appena comprato.`
+            `I ${list.checked_items} articoli spuntati passano in dispensa, e da lì ` +
+            `spariscono dalla lista: quello che resta è quello che non hai preso. Il ` +
+            `piano resta modificabile — se cambi una ricetta, la scorta la sistemi tu.`
           }
           confirmLabel="Sì, spesa fatta"
           busy={busy}
@@ -515,7 +489,6 @@ export default function ShoppingPage() {
           <ShoppingChat
             key={list.week_plan_id}
             weekId={list.week_plan_id}
-            locked={list.is_locked}
             onClose={() => setChatOpen(false)}
             onListUpdated={(updated) => updated && setList(updated)}
           />

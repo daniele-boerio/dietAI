@@ -22,14 +22,14 @@ from ..rate_limit import AI_LIMIT, limiter
 from ..schemas import ChatMessageRequest
 from ..services import prompts
 from ..services.ai_client import _extract_json, get_client
-from ..services.planner import DAY_NAMES, build_context, meal_context_for_chat, week_meals
+from ..services.planner import DAY_NAMES, build_context, meal_context_for_chat
 from ..services.recipes import ingredients_of, serialize_recipe, update_recipe_from_ai
 from ..services.shopping import (
-    get_or_create_list,
-    rebuild_lists_for,
+    current_list,
+    meals_to_buy,
+    rebuild_shopping_list,
     serialize_shopping_list,
     shopping_list_summary,
-    weeks_covered,
 )
 
 logger = logging.getLogger(__name__)
@@ -139,27 +139,22 @@ def send_message(
     """Manda un messaggio a DietAI a proposito di questo pasto.
 
     Se la risposta contiene una ricetta aggiornata (marcatore [RECIPE_UPDATE]) la
-    ricetta viene riscritta e la lista della spesa ricalcolata — ma solo se la
-    settimana non è bloccata: a spesa fatta la chat resta informativa.
+    ricetta viene riscritta e la lista della spesa ricalcolata. L'unico caso in cui
+    non si applica niente è una giornata saltata: quel piatto si è già accodato
+    altrove, e riscriverlo qui non cambierebbe nulla di quello che si cucina.
     """
     meal, day, week = _get_meal(db, user.id, meal_id)
     ctx = meal_context_for_chat(db, meal)
     slot = ctx["slot"]
     recipe = ctx["recipe"]
 
-    # Un giorno saltato è passato senza spesa: come a piano bloccato, la chat può
-    # commentare ma non riscrivere niente.
-    frozen = week.is_locked or day.is_skipped
-    if week.is_locked:
+    # Una giornata saltata è l'unica casella in sola lettura rimasta: la sua ricetta
+    # si è accodata altrove, qui la chat può commentare ma non riscrivere niente.
+    frozen = day.is_skipped or meal.is_skipped
+    if frozen:
         lock_note = (
-            "- IMPORTANTE: il piano di questa settimana è BLOCCATO (spesa già fatta). "
-            "Non proporre modifiche alla ricetta: dai consigli su come cucinarla con quello "
-            "che è già stato comprato."
-        )
-    elif day.is_skipped:
-        lock_note = (
-            "- IMPORTANTE: questo giorno è già passato senza che la spesa fosse fatta. "
-            "Non proporre modifiche alla ricetta: non verrebbero applicate."
+            "- IMPORTANTE: questo pasto è stato saltato e la sua ricetta si è spostata "
+            "su un altro giorno. Non proporre modifiche: non verrebbero applicate."
         )
     else:
         lock_note = (
@@ -206,11 +201,7 @@ def send_message(
         head, _, tail = answer.partition(UPDATE_MARKER)
         visible = head.strip() or "Ho aggiornato la ricetta."
         if frozen:
-            visible += (
-                "\n\n(Il piano è bloccato: la modifica non è stata applicata.)"
-                if week.is_locked
-                else "\n\n(Giorno già passato: la modifica non è stata applicata.)"
-            )
+            visible += "\n\n(Pasto saltato: la modifica non è stata applicata.)"
         elif not recipe:
             visible += "\n\n(Non c'è ancora una ricetta da aggiornare per questo pasto.)"
         else:
@@ -236,7 +227,7 @@ def send_message(
     db.commit()
 
     if recipe_updated:
-        rebuild_lists_for(db, user.id, week)
+        rebuild_shopping_list(db, user.id)
         db.commit()
 
     return {
@@ -277,20 +268,18 @@ def _meal_label(day: DayPlan, slot: MealSlot) -> str:
 
 
 def _editable_meals(
-    db: Session, user_id: int, week: WeekPlan
+    db: Session, user_id: int
 ) -> dict[int, tuple[PlannedMeal, DayPlan, MealSlot]]:
-    """I pasti che la chat può toccare: quelli con una ricetta, non su un giorno
-    saltato e non saltati a mano — cioè esattamente quelli che pesano sulla lista.
+    """I pasti che la chat della spesa può toccare: esattamente quelli che pesano sulla lista.
 
-    Non solo quelli della settimana della lista: la spesa copre anche le settimane
-    generate più avanti, e se le zucchine non si trovano vanno tolte da tutte le
-    ricette comprate in quel giro, altrimenti restano in lista.
+    Non solo quelli di questa settimana: la lista comprende tutto il piano da oggi in
+    avanti, e se le zucchine non si trovano vanno tolte da tutte le ricette che le
+    usano, altrimenti restano in lista.
     """
     out = {}
-    for source in weeks_covered(db, user_id, week) or [week]:
-        for day, meal, slot in week_meals(db, source):
-            if meal.recipe_id and not day.is_skipped and not meal.is_skipped:
-                out[meal.id] = (meal, day, slot)
+    for day, meal in meals_to_buy(db, user_id):
+        slot = db.get(MealSlot, meal.meal_slot_id)
+        out[meal.id] = (meal, day, slot)
     return out
 
 
@@ -370,20 +359,13 @@ def send_shopping_message(
     """Chat "da supermercato": cambia un ingrediente in tutte le ricette che lo usano.
 
     Se la risposta contiene ricette aggiornate (marcatore [RECIPES_UPDATE]) vengono
-    riscritte e la lista della spesa ricalcolata — ma solo se la spesa non è già stata
-    fatta: a piano bloccato il cibo è comprato e la chat resta informativa.
+    riscritte e la lista della spesa ricalcolata.
     """
     week = _get_week(db, user.id, week_id)
-    meals = _editable_meals(db, user.id, week)
-    lst = get_or_create_list(db, week)
+    meals = _editable_meals(db, user.id)
+    _, lst = current_list(db, user.id)
 
-    lock_note = (
-        "- IMPORTANTE: la spesa di questa settimana è già stata fatta e il piano è "
-        "BLOCCATO. Non cambiare le ricette: il cibo è già comprato. Puoi solo dare "
-        "consigli su come arrangiarsi con quello che c'è."
-        if week.is_locked
-        else "- Il piano è modificabile: applica pure i cambi richiesti."
-    )
+    lock_note = "- Il piano è modificabile: applica pure i cambi richiesti."
 
     system = prompts.render(
         prompts.SHOPPING_CHAT_SYSTEM,
@@ -410,7 +392,7 @@ def send_shopping_message(
     # Budget più largo della chat sul pasto: qui una risposta può contenere più ricette
     # complete in una volta.
     answer = client.chat(system, messages, max_tokens=16000)
-    if not week.is_locked and _needs_marker_retry(answer, RECIPES_UPDATE_MARKER):
+    if _needs_marker_retry(answer, RECIPES_UPDATE_MARKER):
         answer = _retry_for_marker(
             client, system, messages, answer, RECIPES_UPDATE_MARKER, 16000
         )
@@ -421,34 +403,31 @@ def send_shopping_message(
     if RECIPES_UPDATE_MARKER in answer:
         head, _, tail = answer.partition(RECIPES_UPDATE_MARKER)
         visible = head.strip() or "Ho aggiornato le ricette."
-        if week.is_locked:
-            visible += "\n\n(La spesa è già fatta: le modifiche non sono state applicate.)"
-        else:
-            try:
-                data = _extract_json(tail)
-                if isinstance(data, dict):
-                    changed = _apply_recipes_update(db, user, meals, data)
-            except ValueError:
-                logger.warning("Chat spesa: [RECIPES_UPDATE] senza JSON valido (settimana %s)", week_id)
-                visible += "\n\n(Non sono riuscito ad applicare le modifiche, riprova.)"
-            except Exception:
-                # Un JSON sintatticamente valido ma fatto in un modo imprevisto non deve
-                # costare la risposta: si annulla la modifica a metà, si tiene la
-                # conversazione (la chiamata è già stata pagata) e lo si dice all'utente.
-                logger.exception("Chat spesa: ricette non applicabili (settimana %s)", week_id)
-                db.rollback()
-                db.add(
-                    ShoppingChatMessage(week_plan_id=week_id, role="user", content=body.content)
-                )
-                visible += "\n\n(Non sono riuscito ad applicare le modifiche, riprova.)"
-            if not changed and RECIPES_UPDATE_MARKER in answer and "non sono riuscito" not in visible.lower():
-                visible += "\n\n(Nessuna ricetta corrispondeva: non ho cambiato niente.)"
+        try:
+            data = _extract_json(tail)
+            if isinstance(data, dict):
+                changed = _apply_recipes_update(db, user, meals, data)
+        except ValueError:
+            logger.warning("Chat spesa: [RECIPES_UPDATE] senza JSON valido (settimana %s)", week_id)
+            visible += "\n\n(Non sono riuscito ad applicare le modifiche, riprova.)"
+        except Exception:
+            # Un JSON sintatticamente valido ma fatto in un modo imprevisto non deve
+            # costare la risposta: si annulla la modifica a metà, si tiene la
+            # conversazione (la chiamata è già stata pagata) e lo si dice all'utente.
+            logger.exception("Chat spesa: ricette non applicabili (settimana %s)", week_id)
+            db.rollback()
+            db.add(
+                ShoppingChatMessage(week_plan_id=week_id, role="user", content=body.content)
+            )
+            visible += "\n\n(Non sono riuscito ad applicare le modifiche, riprova.)"
+        if not changed and "non sono riuscito" not in visible.lower():
+            visible += "\n\n(Nessuna ricetta corrispondeva: non ho cambiato niente.)"
 
     db.add(ShoppingChatMessage(week_plan_id=week_id, role="assistant", content=visible))
     db.commit()
 
     if changed:
-        rebuild_lists_for(db, user.id, week)
+        rebuild_shopping_list(db, user.id)
         db.commit()
 
     return {
@@ -456,7 +435,7 @@ def send_shopping_message(
         "content": visible,
         "changed_meals": changed,
         "list_updated": bool(changed),
-        "shopping_list": serialize_shopping_list(db, week, lst) if changed else None,
+        "shopping_list": serialize_shopping_list(db, user.id, lst) if changed else None,
     }
 
 

@@ -249,9 +249,9 @@ def test_se_sbaglia_due_volte_la_risposta_non_si_perde(client, meal_id, monkeypa
     assert "Yogurt greco" in res["content"]  # meglio una risposta brutta che nessuna
 
 
-def test_a_piano_bloccato_non_si_ritenta(client, meal_id, monkeypatch):
+def test_su_un_pasto_saltato_non_si_ritenta(client, meal_id, monkeypatch):
     """Non c'è niente da applicare: chiedere di nuovo sarebbe una chiamata buttata."""
-    client.post("/api/shopping/current/complete")
+    client.put(f"/api/planning/meals/{meal_id}/followed", json={"is_followed": False})
     fake = use_chat_sequence(monkeypatch, RISPOSTA_SBAGLIATA, _risposta_con_ricetta())
 
     client.post(f"/api/chat/meals/{meal_id}/messages", json={"content": "Cambiala"})
@@ -259,11 +259,12 @@ def test_a_piano_bloccato_non_si_ritenta(client, meal_id, monkeypatch):
     assert len(fake.calls) == 1
 
 
-# ── Piano bloccato ─────────────────────────────────────────────────────────────
+# ── Pasto saltato ──────────────────────────────────────────────────────────────
 
 
-def test_a_piano_bloccato_la_chat_risponde_ma_non_modifica(client, meal_id, monkeypatch):
-    client.post("/api/shopping/current/complete")
+def test_su_un_pasto_saltato_la_chat_risponde_ma_non_modifica(client, meal_id, monkeypatch):
+    """L'unica casella rimasta in sola lettura: la ricetta si è accodata altrove."""
+    client.put(f"/api/planning/meals/{meal_id}/followed", json={"is_followed": False})
 
     fake = use_chat(monkeypatch, _risposta_con_ricetta())
     res = client.post(
@@ -271,9 +272,9 @@ def test_a_piano_bloccato_la_chat_risponde_ma_non_modifica(client, meal_id, monk
     ).json()
 
     assert res["recipe_updated"] is False
-    assert "bloccato" in res["content"]
-    # Il modello viene avvisato del blocco, così non propone modifiche a vuoto.
-    assert "BLOCCATO" in fake.system
+    assert "saltato" in res["content"].lower()
+    # Il modello viene avvisato, così non propone modifiche a vuoto.
+    assert "IMPORTANTE" in fake.system
 
 
 # ── Storico ────────────────────────────────────────────────────────────────────

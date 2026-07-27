@@ -4,8 +4,9 @@
 
 Webapp **single-user** che prende la dieta del nutrizionista (PDF), la fa leggere a un
 modello linguistico e genera ogni settimana un piano di ricette che rispetta i macro, con la lista
-della spesa già compilata. Quando l'utente fa la spesa il piano si **blocca per 7
-giorni**: il cibo è comprato, cambiare le ricette vorrebbe dire buttarlo.
+della spesa già compilata. La lista dice sempre **quello che il piano chiede da oggi
+in avanti e che in dispensa non c'è**: quando la spesa è fatta si svuota da sé (la
+roba è passata in dispensa) e si riempie di nuovo appena generi altre ricette.
 
 Spec di riferimento: `.claude/DietAI_Technical_Spec.md`.
 
@@ -63,7 +64,7 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
 │       │   ├── planner.py      # settimane, generazione, ricorrenti, contesto
 │       │   ├── recipes.py      # creazione/serializzazione ricette
 │       │   ├── ingredients.py  # normalizzazione nomi, anagrafica
-│       │   ├── shopping.py     # aggregazione lista, costo, blocco
+│       │   ├── shopping.py     # aggregazione lista, costo, spesa fatta
 │       │   └── tracking.py     # pianificato vs target
 │       └── utils/
 │           ├── units.py        # conversione unità (g/ml/unità)
@@ -95,34 +96,27 @@ la settimana nasce appena la si apre, e quanto pianificare lo decide l'utente, c
 per la spesa. Indietro no: una settimana passata che non c'è **non** viene creata
 adesso (arriverebbe con i pasti fissi ricopiati in giorni già passati, e l'archivio
 si riempirebbe di settimane mai vissute), quindi l'endpoint risponde con una
-settimana vuota, `id` a `None` e la stessa forma delle altre. Su ciò che invece c'è
-davvero, `is_past` mette la settimana in consultazione: `ensure_not_past` rifiuta con
-**409** generazione e rigenerazione — pagare una chiamata al modello per rifare
-giovedì scorso è la spesa più inutile dell'app — mentre voti, preferiti e "l'ho
-seguito" restano, che è il motivo per cui si torna indietro.
+settimana vuota, `id` a `None` e la stessa forma delle altre. `is_past` dice
+soltanto dove ci si trova mentre si sfoglia: una settimana archiviata si modifica come
+tutte le altre, e quello che ci cambi non tocca la spesa — che guarda da oggi in
+avanti.
 
-**La spesa copre tutte le settimane generate, non solo quella corrente.**
-`weeks_covered` prende, dalla settimana della lista in avanti, tutte quelle per cui la
-spesa non risulta ancora fatta (`is_locked` significa "già comprata", quindi resta
-fuori: quel cibo è in frigo, non nel carrello). Chi decide quanto avanti spingersi è
-l'utente, generando o non generando le settimane successive — l'app non mette un
-tetto. È l'anti-spreco portato oltre il lunedì: una confezione sola invece di due
-mezze. La conseguenza è che una lista non è più "di" una settimana, e chi tocca il
-piano deve chiamare `rebuild_lists_for` (tutte le liste aperte che comprendono quella
-settimana) e non `rebuild_shopping_list` su una sola: generare la prossima cambia la
-spesa di questa, e la dashboard legge la lista senza ricostruirla.
+**La lista della spesa è una funzione, non un documento.** Dice sempre la stessa cosa
+— *quello che le ricette da oggi in avanti chiedono e che in dispensa non c'è* — e da
+quella frase discende tutto il resto senza regole aggiuntive: "ho fatto la spesa"
+sposta gli articoli spuntati in dispensa e la lista si svuota da sé; una ricetta nuova
+aggiunge quello che le serve, perché in dispensa non c'è; quello che non hai spuntato
+resta, perché non l'hai comprato.
 
-**Di lista aperta ce n'è una sola.** Se una lista comprende già tutte le settimane
-non comprate, "la spesa della settimana prossima" non esiste più come cosa a sé: o è
-dentro questa, o è quella che si farà dopo aver comprato questa. Perciò niente schede
-current/next in pagina e un solo endpoint (`GET /api/shopping/current`, dove
-"corrente" vuol dire *aperta*): `active_shopping_week` la ancora alla prima settimana
-che ha qualcosa da comprare — cioè `weeks_covered[0]` — così a spesa fatta la lista si
-sposta da sola sulla prossima, appena la generi. Se non c'è più niente da comprare si
-mostra la settimana corrente, la cui lista è la spesa appena fatta (`starts_ahead`
-dice alla UI che la lista parte più in là perché questa settimana è già in frigo). Una
-settimana solo aperta e mai generata non fa da àncora: mostrerebbe una lista vuota al
-posto della conferma della spesa.
+`meals_to_buy` è il cuore: pasti con una ricetta, da oggi in avanti, non su un giorno
+saltato, non saltati e **non già segnati come seguiti** — quel piatto è stato
+cucinato, ricomprarlo sarebbe comprarlo due volte. Nessun tetto in avanti: se hai
+generato tre settimane la spesa le comprende tutte, ed è l'anti-spreco portato oltre
+il lunedì (una confezione sola invece di due mezze). Di liste ce n'è una sola
+(`current_list`, agganciata alla settimana corrente solo perché la riga deve stare da
+qualche parte) e non si chiude mai: `completed_at` dice quand'è stato l'ultimo giro.
+Chi tocca il piano chiama `rebuild_shopping_list(db, user_id)` — la dashboard legge la
+lista senza ricostruirla.
 
 **I prezzi veri battono il catalogo.** `utils/pricing.py` porta medie nazionali: nel
 negozio dove l'utente fa la spesa valgono poco, ed è per questo che un totale stimato
@@ -143,55 +137,41 @@ ogni avvio del container** e riallinea l'anagrafica al catalogo — se la ripren
 al primo deploy. Il raggruppamento avviene alla lettura (`serialize_shopping_list`),
 quindi non serve ricostruire niente.
 
-**Il blocco è la regola di business centrale.** `POST /api/shopping/current/complete`
-sposta gli articoli spuntati in dispensa e blocca **tutte** le settimane che la lista
-copriva, non solo la prima: se la spesa comprendeva anche la prossima, anche quelle
-ricette sono pagate. Il blocco dura 7 giorni ma per una settimana futura partono dal
-suo lunedì (`lock_bought_week`), altrimenti scadrebbe prima ancora di cominciare. Da
-lì: lettura sì, `regenerate`/`assign`/`generate` → **409**; voti, preferiti e tracking
-restano permessi; la chat diventa informativa (non aggiorna la ricetta).
-`refresh_week_statuses` archivia le settimane scadute a ogni lettura, senza scheduler.
-Lo sblocco d'emergenza si disfa: `POST /weeks/{id}/lock` rimette il blocco, e i sette
-giorni **ripartono dalla spesa** (`bought_at`, dalla lista completata) e non da quando
-si ripreme il pulsante — solo se quel blocco sarebbe già scaduto si conta da oggi,
-altrimenti `refresh_week_statuses` lo toglierebbe alla lettura successiva e il
-pulsante sembrerebbe rotto. In pagina compare solo con `shopping_done` a vero:
-bloccare una settimana per cui non hai comprato niente non vorrebbe dire nulla.
+**"Ho fatto la spesa" non blocca niente: riempie la dispensa.**
+`POST /api/shopping/current/complete` prende gli articoli **spuntati** (senza nemmeno
+uno risponde 400: confermare a vuoto svuoterebbe la lista senza mettere niente in
+casa), li mette in dispensa nella quantità presa davvero e rifà la lista, che si
+accorcia da sé perché adesso la dispensa copre il piano.
 
-**Il piano segue la spesa, non il calendario.** Finché la spesa non risulta fatta,
-ogni giorno che passa viene marcato `DayPlan.is_skipped` e le ricette scalano tutte in
-avanti di un posto: quello che era di lunedì si mangia mercoledì, e ciò che non entra
-più in settimana trabocca su quella dopo (`PlannedMeal.is_shifted`, che serve a
-rimetterlo in fila se lo slittamento si ripete il giorno dopo, invece di far passare
-avanti la ricetta di oggi). Un giorno saltato esce dalla lista della spesa, dalla
-generazione e dalle medie del tracking — comprare mercoledì gli ingredienti di lunedì
-è esattamente lo spreco che l'app esiste per evitare, e contare quel giorno come
-"andato male" sarebbe falso: non c'è proprio stato. Attenzione: esce il *giorno*, non
-la ricetta. Quella è slittata avanti e la spesa la compra dov'è finita, anche se è
-traboccata sulla settimana dopo — che ora la lista comprende. Succede da solo dentro
-`get_or_create_week`, cioè a ogni lettura del piano, senza pulsanti. Non slittano i
-pasti fissi (la pizza del sabato è del sabato) né i giorni già tracciati, e non slitta
-niente se la spesa è fatta — nemmeno dopo uno sblocco d'emergenza, perché il cibo
-resta comprato. Vedi `shift_past_days` e `_reflow_recipes`.
+Il piano resta modificabile sempre: passato, presente e futuro, spesa fatta o no. Se
+cambi una ricetta già comprata l'app **non tocca la dispensa** — quello che è in casa
+resta in casa, e la scorta la corregge chi apre il frigo. È una scelta esplicita:
+indovinare cosa è rimasto sarebbe peggio che lasciar fare all'utente.
+`refresh_week_statuses` archivia le settimane passate a ogni lettura, senza scheduler,
+ma "archiviata" è un'etichetta, non un lucchetto.
 
-**"Ho mangiato altro" accoda il piatto, non lo perde.** È il caso simmetrico e vale
-soprattutto a spesa fatta: `is_followed = False` su un pasto (dalla home, dalla
+**Il piano segue il calendario, la spesa segue il piano.** I giorni che passano non si
+saltano da soli e le ricette non slittano: quello che era di lunedì resta di lunedì. A
+dire cos'è successo è l'utente, pasto per pasto — "l'ho seguito" (che scala la
+dispensa e toglie quel pasto dalla lista) oppure "ho mangiato altro" (che accoda il
+piatto più avanti). Dalla spesa esce il *giorno passato*, non la ricetta: se il piatto
+si è accodato, si compra dove è finito.
+
+**"Ho mangiato altro" accoda il piatto, non lo perde.** `is_followed = False` su un pasto (dalla home, dalla
 griglia della settimana, dal dettaglio o dalla chat) mette `PlannedMeal.is_skipped` e sposta la sua ricetta sulla prima casella
 libera di quello stesso pasto — più avanti in settimana, o sulla prossima se la
-settimana è piena (`skip_meal`). Nessuno slittamento a catena: gli altri giorni non si
-muovono. La casella saltata **conserva la `recipe_id` come memoria** di cosa c'era in
+settimana è piena (`skip_meal`). Non si sposta nient'altro: gli altri giorni restano
+dove sono. La casella saltata **conserva la `recipe_id` come memoria** di cosa c'era in
 programma, ma smette di contare ovunque — spesa, totali del giorno (cala anche il
 target, non è un buco da colmare), tracking e generazione la filtrano tutti su
 `is_skipped`. Il totale della spesa però non cala: la ricetta si compra dove si è
-accodata, che è il punto (il piatto si cucina lo stesso, un altro giorno). `is_followed = True` annulla il rinvio (`unskip_meal`): la ricetta torna e
-la casella dove si era accodata si svuota. `skip_day` fa lo stesso per l'intera giornata
-(weekend fuori), un pasto alla volta, e solo da oggi in avanti — i giorni passati sono
-competenza di `shift_past_days`, che è un'altra cosa. **Attenzione a non confondere i
-tre flag:** `DayPlan.is_skipped` (giorno intero, per mancata spesa o salto a mano),
-`PlannedMeal.is_skipped` (singolo pasto accodato) e `PlannedMeal.is_shifted` (ricetta
-traboccata sulla settimana dopo dallo slittamento). `_eaten` guarda solo `is_followed is
-True`, così un "ho mangiato altro" non impedisce a `shift_past_days` di dare il giorno
-per saltato.
+accodata, che è il punto (il piatto si cucina lo stesso, un altro giorno).
+`is_followed = True` annulla il rinvio (`unskip_meal`): la ricetta torna e la casella
+dove si era accodata si svuota. `skip_day` fa lo stesso per l'intera giornata (weekend
+fuori), un pasto alla volta, e solo da oggi in avanti: un giorno già passato lo si
+racconta pasto per pasto. **Due flag da non confondere:** `DayPlan.is_skipped`
+(giornata intera saltata a mano) e `PlannedMeal.is_skipped` (singolo pasto accodato
+altrove).
 
 **La dispensa si riempie con la spesa e si svuota mangiando.** La prima metà la fa
 `complete_shopping` (gli articoli spuntati diventano scorta, nella quantità presa
@@ -206,6 +186,15 @@ salterebbe mezzo carrello. `PlannedMeal.pantry_used` ricorda **cosa** è stato t
 a rimettere l'esatta quantità se il pasto viene corretto in "ho mangiato altro" —
 c'erano 40 g e la ricetta ne voleva 100, tornano 40, altrimenti l'app inventerebbe
 del cibo. Le scorte senza quantità ("ce l'ho ma non so quanto") non si toccano.
+Quando non si scala niente `pantry_used` resta **NULL, non lista vuota**: è la stessa
+colonna a fare da guardia contro il doppio scalo, e segnarci `[]` vorrebbe dire "già
+fatto" per sempre — un pasto spuntato prima della spesa non si scalerebbe più nemmeno
+a dispensa piena. E il perché si dice: `consume_from_pantry` restituisce anche gli
+scartati col motivo (`assente`, `senza_quantita`, `unita`, `quantita_ricetta`) e la
+risposta li porta in `pantry_skipped`, che il frontend rende con
+`nonScalatiDallaDispensa`. Una dispensa che resta ferma senza spiegazioni sembra un
+pulsante rotto, mentre il motivo è quasi sempre correggibile in dieci secondi — di
+solito lo yogurt contato a vasetti contro una ricetta che pesa in grammi.
 
 **L'aderenza dell'anno è un calendario a colpo d'occhio.** `GET /api/tracking/year`
 (`year_adherence`) classifica ogni giorno da `PlannedMeal.is_followed`: tutti "sì" →
@@ -238,8 +227,7 @@ modificabili (`_editable_meals`: quelli con ricetta, non su giorno/pasto saltato
 quelli che pesano sulla spesa, su tutte le settimane che la spesa copre) con i loro
 `meal_id`, e applica solo gli aggiornamenti che citano un `meal_id` valido. Le
 etichette dei pasti portano la data proprio perché "Lunedì / Pranzo" con due settimane
-in lista sarebbe ambiguo. A spesa fatta (`is_locked`) resta informativa, come la
-chat sul pasto. Il prompt (`SHOPPING_CHAT_SYSTEM`) sta in `prompts.py` con gli altri.
+in lista sarebbe ambiguo. Il prompt (`SHOPPING_CHAT_SYSTEM`) sta in `prompts.py` con gli altri.
 
 **In chat la ricetta va dopo il marcatore, mai dentro il messaggio.** `[RECIPE_UPDATE]`
 (o `[RECIPES_UPDATE]`) è l'unico modo che ha il backend di sapere che c'è una modifica
@@ -249,8 +237,8 @@ peggiore: l'utente legge un piatto pronto e nel piano non è cambiato niente. I 
 lo vietano esplicitamente ("il messaggio che legge l'utente è solo prosa") con un
 esempio di risposta corretta, e `_needs_marker_retry` riconosce il caso (pezzi di JSON
 o nomi di campi nel testo) e richiede la risposta una volta sola, spiegando l'errore:
-la prima chiamata è già pagata, la seconda costa meno che perderla. Non si ritenta a
-piano bloccato, dove non ci sarebbe niente da applicare. Le bolle passano da
+la prima chiamata è già pagata, la seconda costa meno che perderla. Non si ritenta su
+un pasto saltato, dove non ci sarebbe niente da applicare. Le bolle passano da
 `ChatText`, che rende il minimo di markdown che i modelli usano davvero (grassetto,
 elenchi, paragrafi) costruendo elementi React — nessuna libreria, nessun HTML grezzo.
 

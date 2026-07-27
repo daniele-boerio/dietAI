@@ -11,6 +11,13 @@ import pytest
 
 from app.models import WeekPlan
 from app.services import planner
+from tests.test_flow import FakeModel
+
+
+@pytest.fixture()
+def fake_ai(monkeypatch, client):
+    monkeypatch.setattr(planner, "get_client", lambda db, user, role: FakeModel(user))
+    client.put("/api/auth/api-key", json={"api_key": "sk-or-chiave-finta-per-i-test"})
 
 
 @pytest.fixture()
@@ -72,19 +79,25 @@ def test_la_settimana_scorsa_si_rilegge_intera(client, diet, oggi):
     assert len(passata["days"]) == 7
 
 
-def test_il_passato_non_si_rigenera(client, diet, oggi):
-    """Né tutta la settimana né un pasto solo: si pagherebbe un giorno già passato."""
-    prima = client.get("/api/planning/weeks/current").json()
-    meal_id = prima["days"][0]["meals"][0]["id"]
+def test_anche_il_passato_si_modifica(client, diet, oggi, fake_ai):
+    """Le ricette si cambiano quando si vuole, anche quelle di una settimana finita.
+
+    La spesa non ne risente: la lista guarda da oggi in avanti, quindi rifare la
+    settimana scorsa non rimette niente nel carrello.
+    """
+    prima = client.post(
+        f"/api/planning/weeks/{client.get('/api/planning/weeks/current').json()['id']}/generate"
+    ).json()
+    meal = prima["days"][0]["meals"][0]
+    altra = prima["days"][1]["meals"][0]["recipe"]["id"]
     oggi(7)
 
-    res = client.post(f"/api/planning/weeks/{prima['id']}/generate")
-    assert res.status_code == 409
-    assert "passata" in res.json()["detail"]
-
-    res = client.post(f"/api/planning/meals/{meal_id}/regenerate")
-    assert res.status_code == 409
-    assert "passata" in res.json()["detail"]
+    assert client.put(
+        f"/api/planning/meals/{meal['id']}/assign", json={"recipe_id": altra}
+    ).status_code == 200
+    assert client.post(f"/api/planning/weeks/{prima['id']}/generate?regenerate_all=true").status_code == 200
+    # E la spesa non ne risente: guarda da oggi in avanti, e quella settimana è finita.
+    assert client.get("/api/shopping/current").json()["total_items"] == 0
 
 
 def test_il_pasto_passato_si_puo_ancora_tracciare(client, diet, oggi):

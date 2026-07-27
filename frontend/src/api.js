@@ -161,10 +161,6 @@ export const api = {
   // Cosa sta scrivendo il modello adesso: si chiede solo mentre genera.
   getGenerationProgress: (weekId) => request(`/planning/weeks/${weekId}/progress`),
 
-  lockWeek: (weekId) => request(`/planning/weeks/${weekId}/lock`, { method: 'POST' }),
-
-  unlockWeek: (weekId) => request(`/planning/weeks/${weekId}/unlock`, { method: 'POST' }),
-
   getMeal: (mealId) => request(`/planning/meals/${mealId}`),
 
   regenerateMeal: (mealId) =>

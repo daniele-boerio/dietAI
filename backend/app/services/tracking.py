@@ -164,7 +164,6 @@ def weekly_tracking(db: Session, week: WeekPlan) -> dict:
     return {
         "week_start_date": week.week_start_date.isoformat(),
         "status": week.status,
-        "is_locked": week.is_locked,
         "days": ordered,
         "weekly_summary": {
             "avg_daily_calories_planned": round(avg_planned),

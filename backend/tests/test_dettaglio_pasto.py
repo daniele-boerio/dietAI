@@ -15,11 +15,10 @@ from tests.test_flow import FakeModel, _fake_recipe
 CHIAVI_SETTIMANA = {
     "id",
     "week_start_date",
-    "is_locked",
     "status",
     "is_current",
-    # Il piano si sfoglia all'indietro: da lì si arriva a pasti di settimane
-    # archiviate, e la pagina deve sapere che non si rigenerano più.
+    # Serve solo a dire dove ci si trova sfogliando il piano: passata o no, la
+    # settimana si modifica allo stesso modo.
     "is_past",
 }
 
@@ -82,16 +81,14 @@ def test_ogni_risposta_porta_la_settimana(client, pasto, nome):
     assert {"target", "slot_name", "day_name", "is_followed"} <= set(body)
 
 
-def test_la_settimana_dice_se_e_bloccata(client, pasto):
-    """Il campo che serve davvero: da lì la pagina decide cosa si può ancora toccare."""
+def test_la_settimana_dice_dove_ci_si_trova(client, pasto):
+    """Serve alla pagina per dire "questa settimana" o "settimana scorsa", non a
+    decidere cosa si può toccare: si può toccare tutto."""
     prima = client.get(f"/api/planning/meals/{pasto['id']}").json()
-    assert prima["week"]["is_locked"] is False
     assert prima["week"]["is_current"] is True
-
-    client.post("/api/shopping/current/complete")
+    assert prima["week"]["is_past"] is False
 
     dopo = client.put(
         f"/api/planning/meals/{pasto['id']}/followed", json={"is_followed": True}
     ).json()
-    # Il tracking funziona anche a piano bloccato, e la risposta lo dice.
-    assert dopo["week"]["is_locked"] is True
+    assert dopo["week"]["is_current"] is True

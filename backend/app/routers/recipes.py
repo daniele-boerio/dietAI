@@ -16,7 +16,7 @@ from ..services.ai_client import AIError, get_client
 from ..services.ingredients import get_or_create_ingredient, normalize_name
 from ..services.planner import DAY_NAMES, build_context
 from ..services.recipes import create_recipe, ingredients_of, recipe_for_prompt, serialize_recipe
-from ..services.shopping import rebuild_lists_for
+from ..services.shopping import rebuild_shopping_list
 
 logger = logging.getLogger(__name__)
 
@@ -214,18 +214,9 @@ def substitute_ingredient(
 
     db.commit()
 
-    # La lista della spesa delle settimane non bloccate che usano questa ricetta
-    # va riallineata: l'ingrediente comprato non è più quello.
-    weeks = (
-        db.query(WeekPlan)
-        .join(DayPlan, DayPlan.week_plan_id == WeekPlan.id)
-        .join(PlannedMeal, PlannedMeal.day_plan_id == DayPlan.id)
-        .filter(PlannedMeal.recipe_id == recipe.id, WeekPlan.is_locked.is_(False))
-        .distinct()
-        .all()
-    )
-    for week in weeks:
-        rebuild_lists_for(db, user.id, week)
+    # La lista si riallinea: l'ingrediente da comprare non è più quello. Quello che
+    # era già stato comprato resta in dispensa — se non serve più, lo si toglie a mano.
+    rebuild_shopping_list(db, user.id)
     db.commit()
 
     return {

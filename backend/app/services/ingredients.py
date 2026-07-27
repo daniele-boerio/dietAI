@@ -36,8 +36,8 @@ from ..utils.units import to_base
 # stato dei pomodori ma una conserva.
 _NOISE = re.compile(
     r"\b("
-    # marchi commerciali
-    r"hero|barilla|de\s+cecco|rustichella|garofalo|buitoni|mutti|sa|valfrutta|unifruit|"
+    # marchi commerciali e origini geografiche
+    r"hero|barilla|de\s+cecco|rustichella|garofalo|buitoni|mutti|sa|valfrutta|unifruit|reggiano|"
     # conservazione e stato
     r"fresc[ao]|fresch[ei]|secc[ao]|secch[ei]|surgelat[oaie]|congelat[oaie]|"
     r"sgusciat[oaie]|sbucciat[oaie]|maturo|matura|"
@@ -81,6 +81,18 @@ _GAMBERI = re.compile(
     re.IGNORECASE,
 )
 
+# Formaggio grattugiato: parmigiano, grana, formaggio grattato → "formaggio grattugiato"
+_FORMAGGIO_GRATTUGIATO = re.compile(
+    r"\b(parmigiano|grana|formaggio)\b",
+    re.IGNORECASE,
+)
+
+# Olive: togliere tipi e qualificatori, conservare solo "olive"
+_OLIVE = re.compile(
+    r"\bolive\s+(taggiasche|nere|verdi|denocciolate|snocciolate|di\s+\w+)\b|\b(taggiasche|nere|verdi)\s+olive\b",
+    re.IGNORECASE,
+)
+
 # Quello che sta fra parentesi è sempre una glossa, mai l'alimento: "pasta corta
 # (penne)", "legumi (ceci o fagioli)". Si toglie prima dei qualificatori, o resterebbe
 # attaccato al nome e farebbe una riga a sé nella lista della spesa.
@@ -96,6 +108,8 @@ def normalize_name(name: str) -> str:
     I tipi di pasta (spaghetti, penne, ecc.) vengono normalizzati a "pasta".
     I filetti di pesce magro (branzino, orata, sogliola, merluzzo) diventano "filetto di pesce magro".
     I gamberi con qualificatori geografici (indopacifici, rossi, bianchi) diventano "gamberi".
+    Parmigiano, grana e formaggio diventano "formaggio grattugiato".
+    Olive con tipi (taggiasche, nere, ecc.) diventano "olive".
     """
     n = _PARENTESI.sub(" ", (name or "").strip().lower())
     # Normalizza i tipi di pasta a "pasta"
@@ -104,6 +118,10 @@ def normalize_name(name: str) -> str:
     n = _PESCE_MAGRO.sub("filetto di pesce magro", n)
     # Normalizza gamberi con qualificatori a "gamberi"
     n = _GAMBERI.sub("gamberi", n)
+    # Normalizza formaggio grattugiato a "formaggio grattugiato"
+    n = _FORMAGGIO_GRATTUGIATO.sub("formaggio grattugiato", n)
+    # Normalizza olive con tipi a "olive"
+    n = _OLIVE.sub("olive", n)
     n = _NOISE.sub(" ", n)
     n = re.sub(r"[\s,;]+", " ", n).strip(" -,.")
     n = _DANGLING.sub("", n).strip(" -,.")

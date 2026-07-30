@@ -13,6 +13,7 @@ from ..auth import (
     clear_auth_cookies,
     consume_refresh_token,
     create_access_token,
+    get_current_admin,
     get_current_user,
     get_password_hash,
     issue_refresh_token,
@@ -28,6 +29,7 @@ from ..database import get_db
 from ..models import DietPlan, User, UserPreferences
 from ..rate_limit import limiter
 from ..schemas import ApiKeyRequest, ChangePasswordRequest, LoginRequest
+from ..services.ai_client import ai_owner
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
@@ -35,7 +37,11 @@ router = APIRouter(prefix="/api/auth", tags=["Auth"])
 def _serialize_user(db: Session, user: User) -> dict:
     """Il profilo che il frontend usa per decidere cosa mostrare (onboarding incluso).
 
-    La API key non esce mai da qui: solo il fatto che ci sia o no.
+    La API key non esce mai da qui: solo il fatto che ci sia o no. E "ci sia" vuol
+    dire *la chiave che verrà usata per costui*: per chi non è amministratore è quella
+    dell'admin, perché è con quella che genererà. Se dicessimo di no, l'onboarding
+    aprirebbe uno schermo che chiede una chiave che quell'utente non può nemmeno
+    salvare.
     """
     has_diet = (
         db.query(DietPlan)
@@ -46,7 +52,11 @@ def _serialize_user(db: Session, user: User) -> dict:
     return {
         "id": user.id,
         "email": user.email,
-        "has_api_key": bool(user.claude_api_key_enc),
+        "is_admin": user.is_admin,
+        "ai_enabled": user.ai_enabled,
+        "has_api_key": bool(ai_owner(db, user).claude_api_key_enc),
+        # La chiave la gestisce chi la paga: agli altri quella schermata non si mostra.
+        "can_manage_api_key": user.is_admin,
         "has_active_diet": has_diet,
     }
 
@@ -64,6 +74,11 @@ def login(
     # un attaccante quale delle due ha indovinato.
     if not user or not verify_password(body.password, user.password_hash):
         raise HTTPException(401, "Credenziali non valide")
+
+    # Qui invece il messaggio è esplicito: le credenziali erano giuste, e chi le ha
+    # digitate deve sapere che il problema non è la password ma il permesso.
+    if not user.is_active:
+        raise HTTPException(403, "Accesso sospeso. Chiedi all'amministratore.")
 
     access = create_access_token({"user_id": user.id, "token_version": user.token_version})
     refresh = issue_refresh_token(db, user.id, request.headers.get("user-agent"))
@@ -114,10 +129,10 @@ def me(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
 @router.put("/api-key")
 def set_api_key(
     body: ApiKeyRequest,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
-    """Salva la API key del provider AI, cifrata."""
+    """Salva la API key del provider AI, cifrata. Solo l'amministratore: è la sua."""
     key = body.api_key.strip()
     # Il prefisso dipende dal provider configurato (sk-or- per OpenRouter,
     # sk-ant- per Anthropic): accorgersene qui evita di scoprire l'errore alla
@@ -136,7 +151,7 @@ def set_api_key(
 
 @router.delete("/api-key")
 def delete_api_key(
-    user: User = Depends(get_current_user), db: Session = Depends(get_db)
+    user: User = Depends(get_current_admin), db: Session = Depends(get_db)
 ):
     user.claude_api_key_enc = None
     db.commit()

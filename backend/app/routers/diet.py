@@ -10,11 +10,12 @@ from ..auth import get_current_user
 from ..database import get_db
 from ..models import DietPlan, MealSlot, User
 from ..rate_limit import AI_LIMIT, limiter
-from ..schemas import DietMealsUpdate
+from ..schemas import DietMealsUpdate, QuestionnaireRequest
 from ..services import prompts
 from ..services.ai_client import AIError, get_client
 from ..services.pdf import extract_text, looks_scanned
 from ..services.planner import get_active_diet, meal_slots_of
+from ..utils import nutrition
 
 logger = logging.getLogger(__name__)
 
@@ -25,11 +26,17 @@ MAX_PDF_BYTES = 10 * 1024 * 1024  # 10 MB: un piano alimentare non pesa di più
 
 def _serialize_diet(db: Session, diet: DietPlan) -> dict:
     slots = meal_slots_of(db, diet.id)
+    data = diet.parsed_data if isinstance(diet.parsed_data, dict) else {}
     return {
         "id": diet.id,
         "filename": diet.filename,
         "total_daily_calories": diet.total_daily_calories,
         "notes": diet.notes,
+        # Da dove vengono questi numeri: un PDF, il questionario o le dita dell'utente.
+        # Serve alla pagina della dieta per riaprire il questionario già compilato —
+        # il peso cambia, e ricalcolare deve costare tre secondi, non riscrivere tutto.
+        "source": data.get("source") or ("pdf" if diet.filename else "manuale"),
+        "profile": data.get("profile"),
         "created_at": diet.created_at.isoformat() if diet.created_at else None,
         "meals": [
             {
@@ -181,6 +188,73 @@ def create_diet_manually(
     db.flush()
     _replace_meals(db, diet, meals)
     db.commit()
+    return _serialize_diet(db, diet)
+
+
+@router.get("/questionnaire/options")
+def questionnaire_options(_user: User = Depends(get_current_user)):
+    """Le scelte del questionario, con le loro spiegazioni.
+
+    Le tiene il backend perché è lì che vengono usate per calcolare: due elenchi che
+    si allontanano fra loro sono un 400 in faccia all'utente ("livello di attività non
+    valido") per una parola cambiata da una parte sola.
+    """
+    return nutrition.options()
+
+
+@router.post("/questionnaire")
+def create_diet_from_questionnaire(
+    body: QuestionnaireRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Calcola la dieta dai dati della persona, quando non c'è un nutrizionista.
+
+    Il risultato è una dieta come le altre — stessi `MealSlot`, stessi target, stessa
+    modificabilità: da qui in poi l'app non sa e non deve sapere da dove vengono i
+    numeri. Le risposte restano dentro `parsed_data`, così il questionario si riapre
+    già compilato quando il peso cambia (e resta scritto, nella dieta archiviata, con
+    che dati era stato fatto quel calcolo).
+    """
+    try:
+        computed = nutrition.compute_plan(**body.model_dump())
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+    db.query(DietPlan).filter(
+        DietPlan.user_id == user.id, DietPlan.is_active.is_(True)
+    ).update({"is_active": False})
+
+    diet = DietPlan(
+        user_id=user.id,
+        filename=None,
+        parsed_data={
+            "source": "questionario",
+            "profile": body.model_dump(),
+            "computed": {
+                key: computed[key]
+                for key in ("bmr", "tdee", "daily_calories", "protein_g", "carbs_g", "fat_g")
+            },
+            "meals": computed["meals"],
+        },
+        total_daily_calories=computed["daily_calories"],
+        notes=(
+            f"Calcolata dal questionario: metabolismo basale {computed['bmr']} kcal, "
+            f"fabbisogno {computed['tdee']} kcal, obiettivo «{body.goal}»."
+        ),
+        is_active=True,
+    )
+    db.add(diet)
+    db.flush()
+    _replace_meals(db, diet, computed["meals"])
+    db.commit()
+
+    logger.info(
+        "Dieta da questionario per utente %s: %s kcal su %s pasti",
+        user.id,
+        computed["daily_calories"],
+        len(computed["meals"]),
+    )
     return _serialize_diet(db, diet)
 
 

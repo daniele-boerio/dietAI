@@ -32,7 +32,12 @@ async function raw(path, options = {}, allowRefresh = true) {
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `Errore ${res.status}`);
+    // Sui 422 di Pydantic `detail` è una lista di oggetti: senza questo passaggio il
+    // toast direbbe "[object Object]" invece di quale campo è fuori misura.
+    const detail = Array.isArray(err.detail)
+      ? err.detail.map((d) => d.msg || '').filter(Boolean).join(' · ')
+      : err.detail;
+    throw new Error(detail || `Errore ${res.status}`);
   }
   return res;
 }
@@ -86,6 +91,30 @@ export const api = {
 
   createDietManually: (meals) =>
     request('/diet/manual', { method: 'POST', body: JSON.stringify({ meals }) }),
+
+  // Il questionario per chi non ha una dieta scritta: le risposte diventano calorie e
+  // macro con una formula, senza chiamare nessun modello.
+  getQuestionnaireOptions: () => request('/diet/questionnaire/options'),
+
+  createDietFromQuestionnaire: (payload) =>
+    request('/diet/questionnaire', { method: 'POST', body: JSON.stringify(payload) }),
+
+  // ── Utenti (solo amministratore) ──
+  getUsers: () => request('/admin/users'),
+
+  createUser: (email, password) =>
+    request('/admin/users', { method: 'POST', body: JSON.stringify({ email, password }) }),
+
+  updateUserFlags: (id, payload) =>
+    request(`/admin/users/${id}/flags`, { method: 'PUT', body: JSON.stringify(payload) }),
+
+  resetUserPassword: (id, new_password) =>
+    request(`/admin/users/${id}/password`, {
+      method: 'POST',
+      body: JSON.stringify({ new_password }),
+    }),
+
+  deleteUser: (id) => request(`/admin/users/${id}`, { method: 'DELETE' }),
 
   updateDietMeals: (dietId, meals) =>
     request(`/diet/${dietId}/meals`, { method: 'PUT', body: JSON.stringify({ meals }) }),

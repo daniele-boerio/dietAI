@@ -10,11 +10,11 @@ Si lancia una volta dopo le migrazioni:
 import logging
 import sys
 
-from .auth import get_password_hash
 from .config import SEED_USER_EMAIL, SEED_USER_PASSWORD
 from .database import SessionLocal
-from .models import BaseIngredient, Ingredient, User, UserPreferences
-from .utils.pricing import DEFAULT_BASE_INGREDIENTS, INGREDIENT_CATALOG
+from .models import Ingredient, User
+from .services.accounts import admin_user, create_user
+from .utils.pricing import INGREDIENT_CATALOG
 from .utils.seasonality import season_months_for
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -55,10 +55,23 @@ def seed_ingredients(db) -> tuple[int, int]:
 
 
 def seed_user(db) -> User | None:
-    """Crea l'utente unico dell'app, se non esiste già."""
+    """Crea l'amministratore dell'app, se non esiste già.
+
+    Gli altri account non nascono da qui: li crea l'amministratore da Impostazioni →
+    Utenti. Il seed gira a ogni avvio del container e ricreerebbe ogni volta chi è
+    stato cancellato apposta.
+    """
     email = SEED_USER_EMAIL.lower().strip()
     existing = db.query(User).filter(User.email == email).first()
     if existing:
+        # Un database nato prima dei due account non ha nessun amministratore (la
+        # migrazione lo segna, ma le tabelle create da SQLAlchemy — i test, uno
+        # sviluppo locale ripartito da zero — no): senza questa riga sparirebbero la
+        # schermata della API key e la scelta dei modelli, a chi la chiave la paga.
+        if not admin_user(db):
+            existing.is_admin = True
+            db.commit()
+            logger.info("Utente %s promosso ad amministratore.", email)
         logger.info("Utente %s già presente (id %s).", email, existing.id)
         return existing
 
@@ -69,19 +82,9 @@ def seed_user(db) -> User | None:
         )
         return None
 
-    user = User(email=email, password_hash=get_password_hash(SEED_USER_PASSWORD))
-    db.add(user)
-    db.flush()
-
-    db.add(UserPreferences(user_id=user.id, prefer_seasonal=True, prefer_italian=True))
-
-    for name in DEFAULT_BASE_INGREDIENTS:
-        ingredient = db.query(Ingredient).filter(Ingredient.name == name).first()
-        if ingredient:
-            db.add(BaseIngredient(user_id=user.id, ingredient_id=ingredient.id))
-
+    user = create_user(db, email, SEED_USER_PASSWORD, is_admin=True)
     db.commit()
-    logger.info("Utente %s creato (id %s).", email, user.id)
+    logger.info("Amministratore %s creato (id %s).", email, user.id)
     return user
 
 

@@ -35,6 +35,10 @@ limiter.enabled = False
 TEST_EMAIL = "test@dietai.local"
 TEST_PASSWORD = "password-di-test"
 
+# Il secondo account: esiste, ha i suoi dati, ma non amministra niente. Genera con la
+# chiave e i modelli dell'amministratore e non vede le schermate che li governano.
+GUEST_EMAIL = "ospite@dietai.local"
+
 
 @pytest.fixture(autouse=True)
 def oggi_e_lunedi(monkeypatch):
@@ -69,8 +73,18 @@ def db():
 
 @pytest.fixture()
 def client(db):
-    """Client già autenticato: l'utente esiste e il login è fatto."""
-    db.add(User(email=TEST_EMAIL, password_hash=get_password_hash(TEST_PASSWORD)))
+    """Client già autenticato: l'utente esiste e il login è fatto.
+
+    È l'**amministratore**, come quello che nasce dal seed: è lui che mette la API
+    key, sceglie i modelli e crea gli altri account.
+    """
+    db.add(
+        User(
+            email=TEST_EMAIL,
+            password_hash=get_password_hash(TEST_PASSWORD),
+            is_admin=True,
+        )
+    )
     db.commit()
 
     def override_get_db():
@@ -84,6 +98,26 @@ def client(db):
         assert res.status_code == 200, res.text
         yield test_client
     app.dependency_overrides.clear()
+
+
+@pytest.fixture()
+def guest_client(client):
+    """Il secondo account, creato dall'amministratore e già loggato.
+
+    Passa dalla rotta vera invece di scrivere la riga a mano: se creare un utente
+    smettesse di funzionare, questi test devono accorgersene per primi.
+    """
+    res = client.post(
+        "/api/admin/users", json={"email": GUEST_EMAIL, "password": TEST_PASSWORD}
+    )
+    assert res.status_code == 201, res.text
+
+    with TestClient(app) as guest:
+        login = guest.post(
+            "/api/auth/login", json={"email": GUEST_EMAIL, "password": TEST_PASSWORD}
+        )
+        assert login.status_code == 200, login.text
+        yield guest
 
 
 @pytest.fixture()

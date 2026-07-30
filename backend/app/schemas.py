@@ -29,6 +29,27 @@ class ApiKeyRequest(BaseModel):
     api_key: str = Field(min_length=20, max_length=200)
 
 
+# ── Amministrazione degli account ──────────────────────────────────────────────
+
+
+class UserCreateRequest(BaseModel):
+    """Nuovo account. La password iniziale la sceglie l'amministratore."""
+
+    email: str = Field(min_length=3, max_length=255)
+    password: str = Field(min_length=8, max_length=128)
+
+
+class UserFlagsUpdate(BaseModel):
+    """Interruttori di un account. I campi non passati restano come sono."""
+
+    is_active: bool | None = None
+    ai_enabled: bool | None = None
+
+
+class UserPasswordResetRequest(BaseModel):
+    new_password: str = Field(min_length=8, max_length=128)
+
+
 # ── Dieta ──────────────────────────────────────────────────────────────────────
 
 
@@ -47,6 +68,22 @@ class MealSlotInput(BaseModel):
 
 class DietMealsUpdate(BaseModel):
     meals: list[MealSlotInput] = Field(min_length=1, max_length=20)
+
+
+class QuestionnaireRequest(BaseModel):
+    """Le risposte da cui si calcolano calorie e macro, per chi non ha una dieta.
+
+    I valori ammessi per sesso, attività e obiettivo li controlla il router contro
+    `utils/nutrition.py`, che è l'unico posto dove sono scritti.
+    """
+
+    sex: str = Field(min_length=1, max_length=10)
+    age: int = Field(ge=14, le=100)
+    height_cm: float = Field(ge=120, le=230)
+    weight_kg: float = Field(ge=35, le=250)
+    activity: str = Field(min_length=1, max_length=20)
+    goal: str = Field(min_length=1, max_length=20)
+    meals_count: int = Field(default=4, ge=3, le=6)
 
 
 # ── Configurazione ─────────────────────────────────────────────────────────────

@@ -2,9 +2,10 @@
 
 ## Cos'è questo progetto
 
-Webapp **single-user** che prende la dieta del nutrizionista (PDF), la fa leggere a un
-modello linguistico e genera ogni settimana un piano di ricette che rispetta i macro, con la lista
-della spesa già compilata. La lista dice sempre **quello che il piano chiede da oggi
+Webapp **a pochi account** (l'amministratore e chi invita lui) che prende la dieta —
+il PDF del nutrizionista, oppure un questionario quando una dieta scritta non c'è — la
+fa leggere a un modello linguistico e genera ogni settimana un piano di ricette che
+rispetta i macro, con la lista della spesa già compilata. La lista dice sempre **quello che il piano chiede da oggi
 in avanti e che in dispensa non c'è**: quando la spesa è fatta si svuota da sé (la
 roba è passata in dispensa) e si riempie di nuovo appena generi altre ricette.
 
@@ -52,11 +53,12 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
 │       ├── auth.py             # hashing, JWT, cookie, get_current_user
 │       ├── crypto.py           # Fernet per la API key del provider
 │       ├── rate_limit.py       # slowapi (AI_LIMIT = 20/minuto)
-│       ├── seed.py             # `python -m app.seed`: utente + anagrafica ingredienti
+│       ├── seed.py             # `python -m app.seed`: amministratore + anagrafica ingredienti
 │       ├── reset_password.py   # `python -m app.reset_password '...'`: unica via di rientro
 │       ├── merge_ingredients.py # `python -m app.merge_ingredients`: fonde i doppioni di anagrafica
-│       ├── routers/            # auth, diet, config, planning, recipes, chat, shopping, tracking
+│       ├── routers/            # auth, admin, diet, config, planning, recipes, chat, shopping, tracking
 │       ├── services/
+│       │   ├── accounts.py     # chi è l'amministratore, creazione di un account
 │       │   ├── ai_client.py    # due backend (openrouter/anthropic) dietro una interfaccia
 │       │   ├── catalog.py      # catalogo modelli del provider (per il selettore)
 │       │   ├── pdf.py          # estrazione testo dal PDF della dieta
@@ -69,6 +71,7 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
 │       └── utils/
 │           ├── units.py        # conversione unità (g/ml/unità)
 │           ├── seasonality.py  # stagionalità prodotti italiani
+│           ├── nutrition.py    # questionario → calorie e macro (Mifflin-St Jeor)
 │           └── pricing.py      # catalogo ingredienti: categoria + prezzo medio
 └── frontend/src/
     ├── App.jsx                 # layout, routing, gate onboarding, AppContext (toast)
@@ -76,12 +79,59 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
     ├── api.js                  # TUTTE le fetch + refresh automatico sul 401
     ├── index.css               # design system completo (variabili CSS, tema chiaro/scuro)
     ├── lib/macros.js           # ripartizione calorie/macro tra i pasti (+ test)
-    ├── components/             # WeekGrid, MealCard, MealChat, RecipeView, MacroBar...
+    ├── components/             # WeekGrid, MealCard, MealChat, RecipeView, MacroBar,
+    │                           # Questionnaire (dieta calcolata, onboarding + /diet)...
     └── pages/                  # Dashboard, Planning, MealDetail, Shopping, Pantry,
                                 # Recipes, Tracking, Diet, Settings, Onboarding, Login
 ```
 
 ## Concetti da avere in testa
+
+**Gli account sono più d'uno, ma la API key la mette una persona sola.**
+`User.is_admin` è chi paga: l'unico che vede la schermata della chiave
+(`PUT /api/auth/api-key` è `get_current_admin`), l'unico che sceglie i modelli
+(`/api/config/ai/models`, GET e PUT) e l'unico che crea account
+(`/api/admin/*`). Gli altri **generano con la sua chiave e con i suoi modelli**:
+`ai_owner(db, user)` restituisce l'admin per chi non lo è, e `get_client` costruisce
+il client su quello — chiave, modello e conto sono suoi. Nascondere la scheda nel
+frontend non basta e non è la difesa: le rotte rispondono 403 da sole
+(`tests/test_due_account.py`).
+
+Due conseguenze che si dimenticano scrivendo il codice. La prima: `has_api_key` in
+`/api/auth/me` dice **la chiave con cui quell'utente genererà**, non "ne possiede
+una" — e il gate dell'onboarding pesa la chiave solo per chi la gestisce
+(`can_manage_api_key`), altrimenti l'ospite resterebbe chiuso nel percorso guidato
+per sempre, con tutti i passi fatti. La seconda: i messaggi d'errore non possono
+mandare in "Impostazioni → Account" chi quella schermata non ce l'ha.
+
+Due interruttori, che sono due problemi diversi: `is_active` toglie l'accesso
+(login 403, `get_current_user_id` 403, sessioni revocate e `token_version` alzata,
+perché sospendere deve avere effetto adesso e non fra mezz'ora) e `ai_enabled` spegne
+solo le funzioni AI — l'app resta in piedi, i dati non si toccano, ed è il freno sulla
+bolletta di chi mette la chiave. Cancellare un account porta via tutto (FK in
+CASCADE): è proprio il motivo per cui esiste la sospensione. L'amministratore non si
+sospende, non si cancella e non si resetta da solo (`_target` in `routers/admin.py`):
+da lì si tornerebbe soltanto con `python -m app.reset_password` dal container.
+
+Quello che **non** è per-utente è l'anagrafica ingredienti (`Ingredient`): è un
+dizionario di nomi, reparti e prezzi al kg, non un dato personale. Se un utente
+corregge il prezzo del pane, il pane costa quello per tutti.
+
+**Chi non ha una dieta scritta la calcola.** `POST /api/diet/questionnaire` prende
+sesso, età, altezza, peso, attività, obiettivo e numero di pasti, e ne ricava una
+`DietPlan` **identica alle altre** — stessi `MealSlot`, stessi target, stessa
+modificabilità: da lì in poi l'app non sa e non deve sapere da dove vengono i numeri.
+Il conto lo fa una formula (`utils/nutrition.py`: Mifflin-St Jeor → fattore di
+attività → scarto dell'obiettivo → proteine sul peso, grassi in percentuale,
+carboidrati per differenza), non il modello: è gratis, istantaneo, riproducibile e
+verificabile, mentre chiedere gli stessi numeri a un modello costerebbe una chiamata e
+darebbe risposte diverse a parità di risposte. Due pavimenti che non si tolgono: non
+si scende mai sotto il metabolismo basale né sotto il minimo per sesso, perché un
+calcolo automatico che sbaglia in difetto fa danno. Le risposte restano in
+`parsed_data["profile"]` (esposto come `profile` da `_serialize_diet`): il peso
+cambia, e riaprire il questionario già compilato deve costare tre secondi. La divisione
+fra i pasti usa la stessa aritmetica di `lib/macros.js` — quote arrotondate e resto
+sulla più grande — così la somma dei pasti è **esattamente** il totale del giorno.
 
 **La settimana esiste sempre.** `GET /api/planning/weeks/current` crea al volo
 `WeekPlan` + 7 `DayPlan` + una `PlannedMeal` per ogni incrocio giorno × pasto, anche
@@ -244,8 +294,8 @@ elenchi, paragrafi) costruendo elementi React — nessuna libreria, nessun HTML 
 
 **Il modello si sceglie per ruolo.** `planning`, `chat`, `diet` hanno pesi diversi:
 incastrare trenta pasti nei macro è difficile, rispondere in chat no. `get_client(db,
-user, role)` costruisce il client col modello scelto dall'utente (`user_preferences`)
-o col default d'ambiente. Aggiungendo un ruolo, aggiornare `ROLES` in `ai_client.py`,
+user, role)` costruisce il client col modello scelto dall'**amministratore**
+(`user_preferences` della riga di `ai_owner`) o col default d'ambiente. Aggiungendo un ruolo, aggiornare `ROLES` in `ai_client.py`,
 `_DEFAULTS` in `config.py` e `ROLE_LABELS` in `routers/config.py`.
 
 **Il PDF passa prima da `pypdf`.** Estrarre il testo rende la lettura della dieta
@@ -342,9 +392,14 @@ e preferenze sulla riga buona. Se la fusione ha unito troppo,
 ancora cous cous o riso; la dispensa no, perché le scorte sommate non si dividono.
 
 **Niente email, in tutta l'app.** Nessun SMTP, nessuna registrazione, nessun recupero
-password via link: l'utente nasce dal seed e l'unico endpoint pubblico è `/auth/login`.
-Se la password si perde si usa `python -m app.reset_password` dal container. Cancellare
-la riga utente per farla ricreare dal seed **distrugge tutti i dati** (FK in CASCADE).
+password via link: l'unico endpoint pubblico è `/auth/login`. L'amministratore nasce
+dal seed; gli altri li crea lui da Impostazioni → Utenti, e la password iniziale gliela
+dice a voce (per questo il campo è in chiaro: bisogna poterla leggere per dettarla).
+Chi perde la password se la fa rimettere dall'amministratore; se a perderla è
+l'amministratore c'è `python -m app.reset_password` dal container, ed è l'unica via.
+Cancellare la riga utente per farla ricreare dal seed **distrugge tutti i dati** (FK in
+CASCADE) — e il seed **non** ricrea gli altri account: gira a ogni avvio del container
+e resusciterebbe ogni volta chi è stato cancellato apposta.
 
 **Le rotte sono `def`, mai `async def`.** Il lavoro dell'app è sincrono e bloccante
 (SQLAlchemy senza async, chiamate al modello che durano minuti): su una rotta `async`
@@ -354,9 +409,10 @@ threadpool. La regola non ha eccezioni e `tests/test_concurrency.py` la fa rispe
 
 ## Convenzioni
 
-- **Ogni query su dati personali va filtrata per `user_id`.** L'app è single-user ma lo
-  schema no: un endpoint che dimentica il filtro è un bug di sicurezza, non di stile.
-  Per i pasti si passa da `_get_meal()`, che risale la catena pasto → giorno → settimana.
+- **Ogni query su dati personali va filtrata per `user_id`.** Gli account sono due e
+  non devono vedersi: un endpoint che dimentica il filtro è un bug di sicurezza, non di
+  stile. Per i pasti si passa da `_get_meal()`, che risale la catena pasto → giorno →
+  settimana. Le rotte da amministratore passano da `get_current_admin`.
 - **Lo schema lo gestisce Alembic**, non l'app: nessun `create_all` all'avvio. Cambiato
   un modello, serve `alembic revision --autogenerate -m "..."` e la migrazione va **riletta**.
 - I modelli usano `JSONType` (`JSON` con variante `JSONB` su Postgres): serve a far
@@ -425,7 +481,7 @@ docker compose -f docker-compose.dev.yml up -d
 cd backend && py -3.12 -m venv .venv
 .venv/Scripts/python.exe -m pip install -r requirements-dev.txt
 .venv/Scripts/python.exe -m alembic upgrade head        # crea lo schema
-.venv/Scripts/python.exe -m app.seed                    # utente + ~180 ingredienti
+.venv/Scripts/python.exe -m app.seed                    # amministratore + ~180 ingredienti
 .venv/Scripts/python.exe -m uvicorn app.main:app --reload --port 8000
 
 # Frontend (altro terminale)
@@ -435,8 +491,10 @@ cd frontend && npm install && npm run dev               # http://localhost:3000
 cd backend && .venv/Scripts/python.exe -m pytest tests -q
 ```
 
-Al primo login parte l'onboarding: API key del provider → PDF della dieta → ingredienti
-→ preferenze. Senza API key le funzioni AI rispondono 400 con un messaggio esplicito.
+Al primo login parte l'onboarding: API key del provider → dieta (PDF **o**
+questionario) → ingredienti → preferenze. Senza API key le funzioni AI rispondono 400
+con un messaggio esplicito. Per chi non è amministratore il primo passo non c'è: genera
+con la chiave dell'admin, e il percorso comincia dalla dieta.
 
 ## Deploy (Coolify)
 
@@ -452,6 +510,8 @@ diventerebbe indecifrabile e andrebbe reinserita.
 - **Nuovo endpoint:** rotta nel router giusto sotto `routers/`, funzione in `api.js`,
   chiamata dalla pagina.
 - **Nuova pagina:** file in `pages/`, `<Route>` in `App.jsx`, voce nella sidebar.
+- **Nuovo account:** Impostazioni → Utenti (solo amministratore). Da lì si sospende, si
+  rimette la password e si spengono le funzioni AI. Cancellare porta via tutti i dati.
 - **Cambiare il comportamento dell'AI:** `services/prompts.py`. Se cambia la forma del
   JSON atteso, aggiornare anche chi lo consuma (`planner.generate_week`, `recipes.create_recipe`).
 - **Cambiare modello:** dalla UI (Impostazioni → Modelli AI, per ruolo) oppure

@@ -40,6 +40,7 @@ from ..config import (
 )
 from ..crypto import decrypt_api_key
 from ..models import User, UserPreferences
+from .accounts import admin_user
 
 logger = logging.getLogger(__name__)
 
@@ -504,8 +505,42 @@ class AIClient:
             )
 
 
+def ai_owner(db: Session, user: User) -> User:
+    """Chi mette la chiave — e quindi sceglie i modelli — per le chiamate di `user`.
+
+    L'amministratore paga per tutti: chi non lo è genera con la sua chiave e con i
+    modelli che ha scelto lui. È la stessa decisione presa due volte, e a ragione —
+    chi paga il conto decide il rapporto fra costo e qualità, e all'altro utente la
+    schermata dei modelli non viene nemmeno mostrata.
+    """
+    if user.is_admin:
+        return user
+    return admin_user(db) or user
+
+
 def get_client(db: Session, user: User, role: str) -> AIClient:
-    """Costruisce il client per un ruolo, col modello scelto dall'utente."""
+    """Costruisce il client per un ruolo, con la chiave e il modello di chi paga."""
     if role not in ROLES:
         raise ValueError(f"Ruolo AI sconosciuto: {role}")
-    return AIClient(user, model_for(db, user.id, role))
+
+    if not user.ai_enabled:
+        raise AIError(
+            "Le funzioni AI sono sospese su questo account. "
+            "Il piano, la spesa e la dispensa restano come sono.",
+            403,
+        )
+
+    owner = ai_owner(db, user)
+    if not owner.claude_api_key_enc:
+        # Due messaggi perché sono due problemi diversi: uno lo risolve chi legge,
+        # l'altro no. Mandare l'ospite in "Impostazioni → Account" sarebbe crudele:
+        # quella schermata, per lui, non esiste.
+        raise AIError(
+            "API key non configurata. Inseriscila in Impostazioni → Account."
+            if owner.id == user.id
+            else "L'amministratore non ha configurato nessuna API key: "
+            "le funzioni AI sono spente.",
+            400,
+        )
+
+    return AIClient(owner, model_for(db, owner.id, role))

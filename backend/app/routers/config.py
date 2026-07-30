@@ -8,13 +8,14 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ..auth import get_current_user_id
+from ..auth import get_current_admin, get_current_user, get_current_user_id
 from ..database import get_db
 from ..models import (
     BaseIngredient,
     ExcludedIngredient,
     Ingredient,
     PantryItem,
+    User,
     UserPreferences,
 )
 from ..config import (
@@ -33,6 +34,7 @@ from ..schemas import (
     PantryUpdate,
     PreferencesUpdate,
 )
+from ..services.ai_client import ai_owner
 from ..services.catalog import list_models
 from ..services.ingredients import get_or_create_ingredient, normalize_name
 from ..services.shopping import CATEGORY_LABELS
@@ -419,15 +421,22 @@ def _prefs_of(db: Session, user_id: int) -> UserPreferences:
 
 @router.get("/ai")
 def get_ai_config(
-    user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
+    user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
-    """Provider attivo e modello scelto per ogni ruolo (col default se non scelto)."""
-    prefs = _prefs_of(db, user_id)
+    """Provider attivo e modello scelto per ogni ruolo (col default se non scelto).
+
+    I modelli mostrati sono quelli di chi paga: per chi non è amministratore sono
+    quelli scelti dall'admin, ed è con quelli che genererà davvero.
+    """
+    owner = ai_owner(db, user)
+    prefs = _prefs_of(db, owner.id)
     return {
         "provider": AI_PROVIDER,
         "key_prefix": API_KEY_PREFIX,
         "key_url": API_KEY_URL,
         "can_list_models": AI_PROVIDER == "openrouter",
+        # Sceglie i modelli chi ne paga le chiamate: agli altri la scheda non si mostra.
+        "can_choose_models": user.is_admin,
         "roles": [
             {
                 "key": role,
@@ -444,7 +453,7 @@ def get_ai_config(
 @router.get("/ai/models")
 def get_ai_models(
     q: str = "",
-    _user_id: int = Depends(get_current_user_id),
+    _admin: User = Depends(get_current_admin),
 ):
     """Catalogo dei modelli del provider, filtrabile.
 
@@ -467,10 +476,12 @@ def get_ai_models(
 @router.put("/ai/models")
 def update_ai_models(
     body: AiModelsUpdate,
-    user_id: int = Depends(get_current_user_id),
+    admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
-    prefs = _prefs_of(db, user_id)
+    """Cambia i modelli. Solo l'amministratore: valgono anche per gli altri account,
+    che generano con la sua chiave."""
+    prefs = _prefs_of(db, admin.id)
     for role in ("planning", "chat", "diet"):
         value = (getattr(body, role) or "").strip()
         # Meglio rifiutare qui che lasciar scoprire lo slug sbagliato dopo mezzo
@@ -487,7 +498,7 @@ def update_ai_models(
             )
         setattr(prefs, f"ai_model_{role}", value or None)
     db.commit()
-    return get_ai_config(user_id=user_id, db=db)
+    return get_ai_config(user=admin, db=db)
 
 
 # ── Ricerca ingredienti (autocomplete) ─────────────────────────────────────────

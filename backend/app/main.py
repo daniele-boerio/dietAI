@@ -13,7 +13,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from .rate_limit import limiter
-from .routers import auth, chat, diet, planning, recipes, shopping, tracking
+from .routers import admin, auth, chat, diet, planning, recipes, shopping, tracking
 from .routers import config as config_router
 
 logging.basicConfig(level=logging.INFO)
@@ -36,6 +36,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(admin.router)
 app.include_router(diet.router)
 app.include_router(config_router.router)
 app.include_router(planning.router)

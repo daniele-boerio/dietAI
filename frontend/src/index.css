@@ -2281,6 +2281,40 @@ textarea:focus {
   }
 }
 
+/* Campi corti che stanno in riga finché c'è spazio (età, altezza, peso): su un
+   telefono tre righe intere per tre numeri di due cifre sono uno spreco di schermo. */
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0 12px;
+}
+
+/* Scelta fra due o tre alternative brevi. Un <select> per due voci è un tocco in più
+   e un menu che copre la pagina; qui si vede subito cosa c'è e si preme una volta. */
+.segmented {
+  display: flex;
+  gap: 4px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 3px;
+}
+
+.segmented button {
+  flex: 1;
+  padding: 7px 10px;
+  border-radius: 6px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  transition: background var(--transition), color var(--transition);
+}
+
+.segmented button.on {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
 .inline-form {
   display: flex;
   gap: 8px;
@@ -2411,6 +2445,27 @@ textarea:focus {
   display: block;
   font-size: 0.78rem;
   color: var(--text-muted);
+}
+
+/* Riga di un account: quattro comandi che sul telefono non stanno in fila con
+   l'email. Vanno a capo tutti insieme e restano allineati a destra, invece di
+   spezzarsi a metà — "Sospendi" da una parte e il cestino dall'altra. */
+.user-row-flags,
+.user-row-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+@media (max-width: 620px) {
+  .list-row:has(.user-row-actions) {
+    flex-wrap: wrap;
+  }
+
+  .user-row-actions {
+    width: 100%;
+  }
 }
 
 /* ── Impostazioni ──────────────────────────────────────────────── */
@@ -2590,6 +2645,50 @@ textarea:focus {
   display: flex;
   gap: 10px;
   margin-top: 24px;
+}
+
+/* Un bivio dove nessuna delle due strade è quella giusta (il PDF del nutrizionista o
+   il questionario): due riquadri uguali, non un pulsante e un link sotto — la scelta
+   dipende da com'è fatta la vita di chi legge, non da cosa consiglia l'app. */
+.choice-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 12px;
+}
+
+.choice-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  text-align: left;
+  padding: 18px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.choice-card:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-card);
+}
+
+.choice-card svg {
+  width: 22px;
+  height: 22px;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+
+.choice-card strong {
+  font-size: 1rem;
+}
+
+.choice-card span {
+  font-size: 0.84rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
 }
 
 /* ── Auth ──────────────────────────────────────────────────────── */

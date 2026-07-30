@@ -1,19 +1,43 @@
-import { useEffect, useState } from 'react';
-import { ArrowRight, Check, FileUp, KeyRound, Sprout, X } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { ArrowRight, Calculator, Check, FileUp, KeyRound, Sprout, X } from 'lucide-react';
 import { api } from '../api';
 import { useApp } from '../App';
 import { useAuth } from '../AuthContext';
 import IngredientInput from '../components/IngredientInput';
+import Questionnaire from '../components/Questionnaire';
 
 // Percorso guidato al primo accesso. L'ordine non è estetico: senza API key non si
 // può leggere il PDF, senza dieta non si può generare niente, e senza esclusi la
 // prima generazione rischia di finire nel cestino.
-const STEPS = ['Benvenuto', 'API key', 'Dieta', 'Ingredienti', 'Preferenze'];
+//
+// La API key però ce l'ha una persona sola — l'amministratore, che paga le chiamate
+// anche per gli altri: a chi non la gestisce quel passo non si mostra proprio. Fargli
+// vedere una schermata che chiede una cosa che non può salvare sarebbe un vicolo cieco
+// al primo accesso, cioè nel momento peggiore.
+const ALL_STEPS = ['welcome', 'apikey', 'diet', 'ingredients', 'preferences'];
 
 export default function OnboardingPage() {
   const { user, refreshUser } = useAuth();
   const { addToast } = useApp();
-  const [step, setStep] = useState(user.has_api_key ? (user.has_active_diet ? 3 : 2) : 0);
+
+  const steps = useMemo(
+    () => ALL_STEPS.filter((s) => s !== 'apikey' || user.can_manage_api_key),
+    [user.can_manage_api_key]
+  );
+
+  // Si riparte da dove si era arrivati: chi ha già la dieta ha già fatto i due passi
+  // prima, e riproporglieli sembrerebbe che non fosse stato salvato niente.
+  const [step, setStep] = useState(() => {
+    const start = user.has_active_diet
+      ? 'ingredients'
+      : user.can_manage_api_key && user.has_api_key
+        ? 'diet'
+        : 'welcome';
+    return Math.max(0, steps.indexOf(start));
+  });
+
+  const next = () => setStep((i) => Math.min(i + 1, steps.length - 1));
+  const current = steps[step];
 
   return (
     <div className="onboarding">
@@ -23,22 +47,20 @@ export default function OnboardingPage() {
       </div>
 
       <div className="onboarding-steps">
-        {STEPS.map((_, i) => (
-          <i key={i} className={i <= step ? 'done' : ''} />
+        {steps.map((key, i) => (
+          <i key={key} className={i <= step ? 'done' : ''} />
         ))}
       </div>
 
-      {step === 0 && <Welcome onNext={() => setStep(1)} />}
-      {step === 1 && (
-        <ApiKeyStep
-          onNext={() => setStep(2)}
-          addToast={addToast}
-          alreadySet={user.has_api_key}
-        />
+      {current === 'welcome' && (
+        <Welcome onNext={next} ownKey={user.can_manage_api_key} />
       )}
-      {step === 2 && <DietStep onNext={() => setStep(3)} addToast={addToast} />}
-      {step === 3 && <IngredientsStep onNext={() => setStep(4)} addToast={addToast} />}
-      {step === 4 && (
+      {current === 'apikey' && (
+        <ApiKeyStep onNext={next} addToast={addToast} alreadySet={user.has_api_key} />
+      )}
+      {current === 'diet' && <DietStep onNext={next} addToast={addToast} />}
+      {current === 'ingredients' && <IngredientsStep onNext={next} addToast={addToast} />}
+      {current === 'preferences' && (
         <PreferencesStep
           addToast={addToast}
           onDone={async () => {
@@ -50,15 +72,16 @@ export default function OnboardingPage() {
   );
 }
 
-function Welcome({ onNext }) {
+function Welcome({ onNext, ownKey }) {
   return (
     <>
       <h1 className="onboarding-title">Ciao! Mettiamo su la tua cucina.</h1>
       <p className="onboarding-text">
-        DietAI parte dalla dieta del tuo nutrizionista e la trasforma in ricette vere,
-        una settimana alla volta, con la lista della spesa già pronta. Servono tre
-        cose: la tua API key, il PDF della dieta e due minuti per dirmi cosa
-        non vuoi vedere nel piatto.
+        DietAI parte dalla tua dieta e la trasforma in ricette vere, una settimana alla
+        volta, con la lista della spesa già pronta.{' '}
+        {ownKey
+          ? 'Servono tre cose: la tua API key, il PDF della dieta e due minuti per dirmi cosa non vuoi vedere nel piatto.'
+          : 'Servono due cose: la tua dieta — il PDF del nutrizionista, oppure sei domande da cui la calcolo io — e due minuti per dirmi cosa non vuoi vedere nel piatto.'}
       </p>
       <button className="btn btn-primary" onClick={onNext}>
         Cominciamo <ArrowRight size={16} />
@@ -151,10 +174,124 @@ function ApiKeyStep({ onNext, addToast, alreadySet }) {
   );
 }
 
+// Due strade per la stessa cosa, e nessuna delle due è quella "giusta": chi ha una
+// dieta scritta la carica, chi non è mai stato da un nutrizionista risponde a sei
+// domande. Senza la seconda, l'app al primo accesso è un muro per chi una dieta non
+// ce l'ha — e sono la maggioranza delle persone.
 function DietStep({ onNext, addToast }) {
+  const [mode, setMode] = useState(null);
+  const [result, setResult] = useState(null);
+
+  if (result) return <DietResult result={result} onNext={onNext} onRedo={() => setResult(null)} />;
+
+  if (mode === 'pdf') {
+    return <PdfDiet addToast={addToast} onDone={setResult} onBack={() => setMode(null)} />;
+  }
+
+  if (mode === 'questionnaire') {
+    return (
+      <>
+        <h1 className="onboarding-title">Due dati e ti dico quanto mangiare</h1>
+        <p className="onboarding-text">
+          Da questi calcolo il fabbisogno giornaliero e lo divido fra i pasti. È
+          aritmetica, non un modello: nessuna chiamata AI, e i numeri restano tuoi da
+          correggere.
+        </p>
+        <div className="card">
+          <Questionnaire
+            submitLabel="Calcola la mia dieta"
+            onDone={(diet) => {
+              setResult(diet);
+              addToast(`Dieta calcolata: ${diet.total_daily_calories} kcal al giorno ✓`);
+            }}
+          />
+        </div>
+        <div className="onboarding-actions">
+          <button className="btn btn-ghost" onClick={() => setMode(null)}>
+            Indietro
+          </button>
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <h1 className="onboarding-title">La tua dieta</h1>
+      <p className="onboarding-text">
+        Da qui nasce tutto il resto: le ricette, la lista della spesa, l'aderenza. Se ti
+        è stata prescritta da un professionista parti da quella; altrimenti la calcolo
+        io dai tuoi dati.
+      </p>
+
+      <div className="choice-cards">
+        <button className="choice-card" onClick={() => setMode('pdf')}>
+          <FileUp />
+          <strong>Ho il PDF del nutrizionista</strong>
+          <span>
+            Lo leggo io e ne ricavo pasti, calorie e macro. Il file non viene
+            conservato.
+          </span>
+        </button>
+
+        <button className="choice-card" onClick={() => setMode('questionnaire')}>
+          <Calculator />
+          <strong>Non ho una dieta</strong>
+          <span>
+            Sei domande — sesso, età, altezza, peso, quanto ti muovi, che obiettivo hai
+            — e calcolo calorie e macro con la formula standard.
+          </span>
+        </button>
+      </div>
+    </>
+  );
+}
+
+function DietResult({ result, onNext, onRedo }) {
+  const daQuestionario = result.source === 'questionario';
+  return (
+    <>
+      <h1 className="onboarding-title">
+        {daQuestionario ? 'Ecco i tuoi numeri' : 'Ecco cosa ho letto'}
+      </h1>
+      <p className="onboarding-text">
+        {result.total_daily_calories} kcal al giorno su {result.meals.length} pasti.
+        Potrai correggere qualunque valore da <strong>La mia dieta</strong> — i macro
+        sbagliati si notano subito, alla prima generazione.
+      </p>
+
+      <div className="card">
+        <div className="list-rows">
+          {result.meals.map((m) => (
+            <div key={m.order} className="list-row">
+              <div className="list-row-main">
+                <strong>{m.name}</strong>
+                <span>
+                  P {m.protein_g}g · C {m.carbs_g}g · G {m.fat_g}g
+                  {m.notes ? ` · ${m.notes}` : ''}
+                </span>
+              </div>
+              <span className="badge badge-accent">{m.calories} kcal</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="onboarding-actions">
+        <button className="btn btn-primary" onClick={onNext}>
+          Va bene, avanti <ArrowRight size={16} />
+        </button>
+        <button className="btn btn-ghost" onClick={onRedo}>
+          {daQuestionario ? 'Rifai il calcolo' : 'Carica un altro PDF'}
+        </button>
+      </div>
+    </>
+  );
+}
+
+function PdfDiet({ addToast, onDone, onBack }) {
   const [file, setFile] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState(null);
   const [over, setOver] = useState(false);
 
   const upload = async () => {
@@ -162,7 +299,7 @@ function DietStep({ onNext, addToast }) {
     setBusy(true);
     try {
       const diet = await api.uploadDiet(file);
-      setResult(diet);
+      onDone(diet);
       addToast(`Letti ${diet.meals.length} pasti dal PDF ✓`);
     } catch (e) {
       addToast(e.message, 'error');
@@ -170,45 +307,6 @@ function DietStep({ onNext, addToast }) {
       setBusy(false);
     }
   };
-
-  if (result) {
-    return (
-      <>
-        <h1 className="onboarding-title">Ecco cosa ho letto</h1>
-        <p className="onboarding-text">
-          {result.total_daily_calories} kcal al giorno su {result.meals.length} pasti.
-          Potrai correggere qualunque valore da <strong>La mia dieta</strong> — i macro
-          sbagliati si notano subito, alla prima generazione.
-        </p>
-
-        <div className="card">
-          <div className="list-rows">
-            {result.meals.map((m) => (
-              <div key={m.order} className="list-row">
-                <div className="list-row-main">
-                  <strong>{m.name}</strong>
-                  <span>
-                    P {m.protein_g}g · C {m.carbs_g}g · G {m.fat_g}g
-                    {m.notes ? ` · ${m.notes}` : ''}
-                  </span>
-                </div>
-                <span className="badge badge-accent">{m.calories} kcal</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="onboarding-actions">
-          <button className="btn btn-primary" onClick={onNext}>
-            Va bene, avanti <ArrowRight size={16} />
-          </button>
-          <button className="btn btn-ghost" onClick={() => setResult(null)}>
-            Carica un altro PDF
-          </button>
-        </div>
-      </>
-    );
-  }
 
   return (
     <>
@@ -257,6 +355,9 @@ function DietStep({ onNext, addToast }) {
         <button className="btn btn-primary" onClick={upload} disabled={!file || busy}>
           {busy && <span className="spinner-inline" />}
           {busy ? 'Sto leggendo il PDF...' : 'Leggi la dieta'}
+        </button>
+        <button className="btn btn-ghost" onClick={onBack} disabled={busy}>
+          Indietro
         </button>
       </div>
     </>

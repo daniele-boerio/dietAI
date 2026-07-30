@@ -42,6 +42,17 @@ class User(Base):
     # API key Claude cifrata (Fernet). NULL finché l'utente non la inserisce:
     # senza, tutte le funzioni AI sono spente.
     claude_api_key_enc = Column(Text)
+    # Gli account sono più d'uno, ma la API key la mette una persona sola: l'admin è
+    # chi paga, e quindi l'unico che sceglie i modelli e vede la schermata della
+    # chiave. Gli altri usano la sua chiave e i suoi modelli senza saperlo.
+    is_admin = Column(Boolean, nullable=False, default=False, server_default="false")
+    # Accesso sospeso: l'account resta con tutti i suoi dati ma non fa più login.
+    # È l'alternativa non distruttiva a cancellarlo (che porta via tutto, in CASCADE).
+    is_active = Column(Boolean, nullable=False, default=True, server_default="true")
+    # Interruttore delle funzioni AI: spento, l'utente usa l'app — piano, spesa,
+    # dispensa, tracking — ma non genera niente. È il freno sulla bolletta di chi
+    # mette la chiave, e non tocca nemmeno un dato.
+    ai_enabled = Column(Boolean, nullable=False, default=True, server_default="true")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 

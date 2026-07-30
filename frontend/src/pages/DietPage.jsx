@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { FileUp, MessageSquare, Save, Sparkles, User, X } from 'lucide-react';
+import { Calculator, FileUp, MessageSquare, Save, Sparkles, User, X } from 'lucide-react';
 import { api } from '../api';
 import { useApp } from '../App';
+import Questionnaire from '../components/Questionnaire';
 import { addMeal, dailyTotals, removeMeal } from '../lib/macros';
 
 // La dieta è una pagina sua e non una scheda delle impostazioni: non è una preferenza,
@@ -251,6 +252,18 @@ export default function DietPage() {
 
           <DietRulesCard />
 
+          <QuestionnaireCard
+            diet={diet}
+            onDone={(updated) => {
+              setDiet(updated);
+              setMeals(updated.meals);
+              addToast(
+                `Ricalcolata: ${updated.total_daily_calories} kcal al giorno ✓ — ` +
+                  'rigenera la settimana per adeguare le ricette'
+              );
+            }}
+          />
+
           <div className="card settings-section">
             <div className="card-title">Carica un nuovo PDF</div>
             <p className="field-hint" style={{ marginBottom: 12 }}>
@@ -280,6 +293,76 @@ export default function DietPage() {
         </>
       )}
     </>
+  );
+}
+
+// ── Dieta calcolata ────────────────────────────────────────────────────────────
+
+const ATTIVITA = {
+  sedentario: 'sedentaria',
+  leggero: 'poco attiva',
+  moderato: 'moderatamente attiva',
+  intenso: 'molto attiva',
+  atleta: 'atleta',
+};
+
+// Chiusa di default anche per chi la dieta se l'è calcolata: aperta occuperebbe mezza
+// pagina davanti ai numeri che si vengono a correggere qui il 90% delle volte. Ma il
+// riassunto dei dati resta a vista, perché è quello che dice se vale la pena riaprirla:
+// il peso di sei settimane fa si riconosce a colpo d'occhio.
+function QuestionnaireCard({ diet, onDone }) {
+  const [open, setOpen] = useState(false);
+  const profile = diet?.profile;
+
+  return (
+    <div className="card settings-section">
+      <div className="card-title">
+        <Calculator /> Calcola i macro dai tuoi dati
+      </div>
+
+      <p className="field-hint" style={{ marginBottom: 12 }}>
+        {profile ? (
+          <>
+            Questi numeri sono calcolati da: {profile.sex}, {profile.age} anni,{' '}
+            {profile.height_cm} cm, <strong>{profile.weight_kg} kg</strong>, vita{' '}
+            {ATTIVITA[profile.activity] || profile.activity}, obiettivo «{profile.goal}».
+            Se il peso è cambiato, ricalcolare è la strada più corta — e sostituisce la
+            dieta attuale, che finisce in archivio.
+          </>
+        ) : (
+          <>
+            La tua dieta di adesso non viene da qui. Se vuoi ripartire dai tuoi dati —
+            sesso, età, altezza, peso, quanto ti muovi e che obiettivo hai — calcolo
+            calorie e macro con la formula standard (Mifflin-St Jeor) e sostituisco
+            quella attuale, che finisce in archivio. Nessuna chiamata AI: è aritmetica.
+          </>
+        )}
+      </p>
+
+      {open ? (
+        <>
+          <Questionnaire
+            profile={profile}
+            submitLabel={profile ? 'Ricalcola e sostituisci' : 'Calcola e sostituisci'}
+            onDone={(updated) => {
+              setOpen(false);
+              onDone(updated);
+            }}
+          />
+          <button
+            className="btn btn-ghost btn-sm"
+            style={{ marginTop: 10 }}
+            onClick={() => setOpen(false)}
+          >
+            Lascia perdere
+          </button>
+        </>
+      ) : (
+        <button className="btn btn-secondary btn-sm" onClick={() => setOpen(true)}>
+          <Calculator size={14} /> {profile ? 'Ricalcola' : 'Apri il questionario'}
+        </button>
+      )}
+    </div>
   );
 }
 

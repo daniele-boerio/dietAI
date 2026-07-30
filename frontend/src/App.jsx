@@ -88,7 +88,13 @@ function AuthenticatedApp() {
 
   // Finché mancano la API key o la dieta non c'è niente da pianificare: l'app
   // mostra solo il percorso guidato, non una interfaccia piena di stati vuoti.
-  const needsOnboarding = !user.has_api_key || !user.has_active_diet;
+  //
+  // La chiave conta però solo per chi la gestisce: chi genera con quella
+  // dell'amministratore non ha nessuno schermo da cui inserirla, e se pesasse anche
+  // per lui resterebbe chiuso nell'onboarding per sempre — con tutti i passi fatti e
+  // nessun modo di uscirne.
+  const needsOnboarding =
+    (user.can_manage_api_key && !user.has_api_key) || !user.has_active_diet;
 
   if (needsOnboarding) {
     return (

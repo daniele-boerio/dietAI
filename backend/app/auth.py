@@ -254,6 +254,12 @@ def get_current_user_id(request: Request, db: Session = Depends(get_db)) -> int:
     if not user or user.token_version != payload.get("token_version", 1):
         raise credentials_exception
 
+    # Un account sospeso non entra più, nemmeno con un token ancora valido. Chi lo
+    # sospende alza anche token_version, quindi questo è il secondo lucchetto: serve
+    # se il primo viene dimenticato da qualche parte.
+    if not user.is_active:
+        raise HTTPException(403, "Accesso sospeso. Chiedi all'amministratore.")
+
     return user_id
 
 
@@ -265,4 +271,16 @@ def get_current_user(
     user = db.get(User, user_id)
     if not user:
         raise HTTPException(401, "Non autenticato")
+    return user
+
+
+def get_current_admin(user: User = Depends(get_current_user)) -> User:
+    """Le rotte che governano gli account e la spesa in API key passano da qui.
+
+    Nascondere un pulsante nel frontend non protegge niente: chi non è amministratore
+    non deve poter creare utenti, cambiare i modelli o toccare la chiave nemmeno
+    chiamando l'endpoint a mano.
+    """
+    if not user.is_admin:
+        raise HTTPException(403, "Riservato all'amministratore.")
     return user

@@ -150,10 +150,18 @@ export default function DashboardPage() {
       ) : (
         <div className="recipe-grid">
           {today.meals.map((meal) => (
-            <div key={meal.meal_id} className={`card ${meal.is_skipped ? 'skipped' : ''}`}>
+            <div
+              key={meal.meal_id}
+              className={`card ${meal.is_skipped ? 'skipped' : ''} ${
+                meal.is_followed === true ? 'followed' : ''
+              }`}
+            >
               <div className="meal-slot">
                 {meal.slot_name}
                 {meal.is_skipped && <span className="meal-flag skipped">Saltato</span>}
+                {meal.is_followed === true && (
+                  <span className="meal-flag done">Seguito</span>
+                )}
               </div>
 
               {meal.recipe ? (

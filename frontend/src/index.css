@@ -39,6 +39,7 @@
   --warning: #c9902b;
   --danger: #c0392b;
   --danger-soft: rgba(192, 57, 43, 0.1);
+  --danger-contrast: #ffffff;
 
   /* Macro: proteine, carboidrati, grassi — colori stabili in tutta l'app */
   --macro-p: #c3572c;
@@ -85,6 +86,7 @@
   --warning: #e0b45c;
   --danger: #e57367;
   --danger-soft: rgba(229, 115, 103, 0.14);
+  --danger-contrast: #241412;
 
   --macro-p: #e08155;
   --macro-c: #e0b45c;
@@ -570,6 +572,18 @@ textarea {
   color: var(--text-primary);
 }
 
+/* Il gemello buono di `.notice-skip`: nel dettaglio del pasto "saltato" aveva il suo
+   riquadro e "seguito" no, così lo stato registrato si leggeva solo dal pulsante. */
+.notice-ok {
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--accent);
+}
+
+.notice-ok strong {
+  color: var(--accent);
+}
+
 /* ── Barre macro ───────────────────────────────────────────────── */
 
 .macro-bar {
@@ -709,6 +723,9 @@ textarea {
   flex-direction: column;
   gap: 8px;
   min-width: 0;
+  /* Aprendo la settimana la pagina si posiziona su oggi: un filo d'aria sopra, o
+     l'intestazione del giorno finisce incollata al bordo dello schermo. */
+  scroll-margin-top: 12px;
 }
 
 /* Vista settimanale piena: sette colonne per N righe. `display: contents` scioglie
@@ -930,6 +947,33 @@ textarea {
   color: var(--accent);
 }
 
+/* "Seguito" è l'unico flag pieno: gli altri raccontano com'è fatta la casella, questo
+   dice cos'ha fatto l'utente ieri sera, ed è quello che si cerca scorrendo la
+   settimana. Il colore da solo non basta a dirlo (daltonismo, schermo al sole): la
+   parola c'è, e il verde la conferma. */
+.meal-flag.done {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+/* Pasto seguito: la card intera si tinge di verde e prende un filetto sul bordo
+   sinistro. Segnare "l'ho seguito" era visibile solo nell'icona premuta — quattordici
+   pixel in fondo alla card, dello stesso verde smorto del resto — e una settimana
+   tracciata a metà si leggeva solo fermandosi a guardare bottone per bottone.
+   La tinta è sovrapposta a `--bg-card` invece di sostituirla (`--accent-soft` è
+   traslucido) perché al buio la card è più chiara della pagina: mettere il verde da
+   solo la incupirebbe, e una casella fatta sembrerebbe una casella spenta. */
+.meal-card.followed {
+  background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--bg-card);
+  border-color: transparent;
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.meal-card.followed:hover {
+  border-color: var(--accent);
+  box-shadow: inset 3px 0 0 var(--accent), var(--shadow-card);
+}
+
 /* Pasto saltato: la ricetta resta scritta per memoria, ma non conta più. Spenta e
    barrata nel titolo, così si distingue a colpo d'occhio da un piatto in programma. */
 .meal-flag.skipped {
@@ -953,7 +997,15 @@ textarea {
   opacity: 0.45;
 }
 
-/* Stesso trattamento per la card "oggi" della home. */
+/* Stesso trattamento per la card "oggi" della home, che è una `.card` e non una
+   `.meal-card`: è lì che si segna la cena appena finita, e la conferma deve vedersi
+   senza rileggere i due pulsanti. */
+.card.followed {
+  background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--bg-card);
+  border-color: transparent;
+  box-shadow: inset 3px 0 0 var(--accent), var(--shadow-card);
+}
+
 .card.skipped .recipe-card-title {
   color: var(--text-muted);
   text-decoration: line-through;
@@ -1003,13 +1055,31 @@ textarea {
 }
 
 /* "L'ho seguito" e "ho mangiato altro": acceso è il colore che il tracking usa
-   ovunque per le stesse due cose, così la griglia si legge come il resto dell'app. */
+   ovunque per le stesse due cose, così la griglia si legge come il resto dell'app.
+   Acceso vuol dire pieno, non solo colorato: un'icona verde su una card che il verde
+   ce l'ha già addosso sparisce, e sono i due pulsanti che dicono se la sera è stata
+   registrata — devono leggersi come premuti, non come disegnati di un altro colore. */
 .meal-action.ok.on {
-  color: var(--success);
+  background: var(--accent);
+  color: var(--accent-contrast);
 }
 
 .meal-action.no.on {
-  color: var(--danger);
+  background: var(--danger);
+  color: var(--danger-contrast);
+}
+
+/* Senza questi due il :hover generico rimetterebbe lo sfondo della card e il pulsante
+   acceso si spegnerebbe proprio mentre lo si punta. */
+.meal-action.ok.on:hover:not(:disabled) {
+  background: var(--accent-hover);
+  color: var(--accent-contrast);
+}
+
+.meal-action.no.on:hover:not(:disabled) {
+  background: var(--danger);
+  color: var(--danger-contrast);
+  opacity: 0.85;
 }
 
 .meal-action.ok:hover:not(:disabled) {
@@ -2758,6 +2828,12 @@ textarea:focus {
 @media (max-width: 768px) {
   .topbar {
     display: flex;
+  }
+  /* Qui in cima c'è la barra fissa: senza questo margine il giorno su cui la pagina
+     si posiziona da sola arriverebbe proprio sotto, e si vedrebbero i pasti di un
+     giorno di cui non si legge il nome. */
+  .day-column {
+    scroll-margin-top: calc(66px + env(safe-area-inset-top));
   }
   .sidebar {
     width: 258px;

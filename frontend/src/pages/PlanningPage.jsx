@@ -72,6 +72,9 @@ export default function PlanningPage() {
   const [confirmRegenerate, setConfirmRegenerate] = useState(false);
   // Serve a distinguere "non sta generando" da "ha appena finito", per il messaggio.
   const wasGenerating = useRef(false);
+  // La colonna di oggi e la settimana per cui ci si è già spostati (vedi sotto).
+  const oggiRef = useRef(null);
+  const scrollFatto = useRef(null);
 
   // Quale settimana si sta guardando. `/plan` è quella corrente e `/plan/next` la
   // prossima — i due indirizzi di prima, che restano validi ovunque siano linkati;
@@ -124,6 +127,39 @@ export default function PlanningPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Sul telefono i sette giorni stanno uno sotto l'altro, e la settimana si apre su
+  // lunedì: di domenica vuol dire sei giorni di scorrimento prima di arrivare a quello
+  // per cui si è entrati — vedere cosa si mangia stasera, o segnare com'è andata. La
+  // pagina ci si porta da sé.
+  //
+  // Una volta sola per settimana aperta, ed è il motivo per cui la memoria sta qui e
+  // non dentro `WeekGrid`: la griglia si smonta a ogni caricamento non silenzioso
+  // (rigenerare un pasto ne fa uno), e ritrovarsi sbalzati su oggi dopo aver premuto
+  // ↻ su sabato sembrerebbe che l'app abbia perso il segno.
+  useEffect(() => {
+    const colonna = oggiRef.current;
+    // Niente colonna vuol dire che oggi non è in questa settimana: si sta sfogliando
+    // il passato o il futuro, e non c'è nessun giorno da cercare.
+    if (loading || !colonna || scrollFatto.current === lunediIso) return;
+    // Sopra i 1100px i giorni sono affiancati e `.day-column` è `display: contents`:
+    // non ha nemmeno un riquadro da misurare, e non c'è niente da raggiungere.
+    if (window.matchMedia('(min-width: 1100px)').matches) return;
+
+    scrollFatto.current = lunediIso;
+    // Se oggi è già in vista — di lunedì, di solito — muovere la pagina sarebbe solo
+    // un sussulto che nasconde la testata senza far vedere niente di nuovo.
+    const { top } = colonna.getBoundingClientRect();
+    if (top >= 0 && top < window.innerHeight * 0.6) return;
+    colonna.scrollIntoView({
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        ? 'auto'
+        : 'smooth',
+      block: 'start',
+    });
+    // I due momenti in cui la griglia compare: finito il caricamento e finita la
+    // generazione. Le riletture silenziose non rientrano qui, e va bene così.
+  }, [loading, lunediIso, week?.is_generating]);
 
   // La generazione vive sul server, non in questa pagina: se cambi scheda, torni
   // indietro o ricarichi, il lavoro prosegue. Finché il server la dà per in corso si
@@ -362,6 +398,7 @@ export default function PlanningPage() {
       ) : (
         <WeekGrid
           week={week}
+          todayRef={oggiRef}
           busyMealId={busyMealId}
           followingMealId={followingMealId}
           busyDayId={busyDayId}

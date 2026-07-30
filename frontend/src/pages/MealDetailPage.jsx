@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   CalendarOff,
   Check,
+  CheckCircle2,
   Heart,
   Pin,
   RefreshCw,
@@ -229,6 +230,16 @@ export default function MealDetailPage() {
             qui sotto resta per memoria, ma è stata rimandata alla prima casella libera di
             questo pasto. Se invece l'hai cucinata, premi "L'ho seguito" e torna al suo
             posto.
+          </div>
+        </div>
+      )}
+
+      {meal.is_followed === true && (
+        <div className="notice notice-ok">
+          <CheckCircle2 />
+          <div>
+            <strong>Pasto seguito.</strong> Gli ingredienti sono stati scalati dalla
+            dispensa e questo piatto è uscito dalla lista della spesa.
           </div>
         </div>
       )}

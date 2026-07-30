@@ -26,9 +26,20 @@ export default function MealCard({
   return (
     // `style` porta la posizione nella griglia settimanale (riga e colonna): sui
     // monitor stretti il contenitore torna flex e queste proprietà vengono ignorate.
-    <div className={`meal-card ${meal.is_skipped ? 'skipped' : ''}`} style={style}>
+    <div
+      className={`meal-card ${meal.is_skipped ? 'skipped' : ''} ${
+        meal.is_followed === true ? 'followed' : ''
+      }`}
+      style={style}
+    >
       <Link to={`/meals/${meal.id}`} style={{ display: 'contents' }}>
-        <div className="meal-slot">{meal.slot_name}</div>
+        {/* Il "Seguito" sta sulla riga dello slot e non fra i flag qui sotto: nella
+            griglia le righe sono allineate fra i sette giorni, e una fascia in più su
+            una sola card alzerebbe l'intera riga della settimana. */}
+        <div className="meal-slot">
+          {meal.slot_name}
+          {meal.is_followed === true && <span className="meal-flag done">Seguito</span>}
+        </div>
 
         {recipe ? (
           <>

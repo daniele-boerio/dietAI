@@ -18,6 +18,10 @@ export default function WeekGrid({
   onRegenerate,
   onFollowed,
   onToggleDaySkip,
+  // La colonna di oggi, se la settimana a schermo è quella corrente: chi ci porta la
+  // pagina è `PlanningPage`, che resta montata anche quando questa griglia sparisce
+  // per un caricamento — ed è lì che sta la memoria di averlo già fatto.
+  todayRef,
 }) {
   const today = todayIso();
 
@@ -33,6 +37,7 @@ export default function WeekGrid({
         return (
           <div
             key={day.id}
+            ref={isToday ? todayRef : null}
             className={`day-column ${isToday ? 'today' : ''} ${
               day.is_skipped ? 'skipped' : ''
             }`}

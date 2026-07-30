@@ -152,12 +152,12 @@ export default function DashboardPage() {
           {today.meals.map((meal) => (
             <div
               key={meal.meal_id}
-              className={`card ${meal.is_skipped ? 'skipped' : ''} ${
+              className={`card today-card ${meal.is_skipped ? 'skipped' : ''} ${
                 meal.is_followed === true ? 'followed' : ''
               }`}
             >
               <div className="meal-slot">
-                {meal.slot_name}
+                <span className="today-card-slot-name">{meal.slot_name}</span>
                 {meal.is_skipped && <span className="meal-flag skipped">Saltato</span>}
                 {meal.is_followed === true && (
                   <span className="meal-flag done">Seguito</span>
@@ -166,55 +166,66 @@ export default function DashboardPage() {
 
               {meal.recipe ? (
                 <>
+                  {/* `title` perché il nome tagliato dall'ellissi resta leggibile
+                      passandoci sopra, senza aprire il pasto. */}
                   <div
-                    className="recipe-card-title"
-                    style={{ cursor: 'pointer', margin: '6px 0 8px' }}
+                    className="today-card-title"
+                    title={meal.recipe.title}
                     onClick={() => navigate(`/meals/${meal.meal_id}`)}
                   >
                     {meal.recipe.title}
                   </div>
-                  <div className="meal-meta" style={{ marginBottom: 8 }}>
-                    <span>{meal.recipe.calories} kcal</span>
-                    <span>
-                      {meal.recipe.prep_time_min + meal.recipe.cook_time_min} min
-                    </span>
-                    <span style={{ color: 'var(--text-muted)' }}>
-                      target {meal.target_calories} kcal
-                    </span>
-                  </div>
-                  <MacroBar
-                    protein={meal.recipe.protein_g}
-                    carbs={meal.recipe.carbs_g}
-                    fat={meal.recipe.fat_g}
-                  />
+                  <div className="today-card-foot">
+                    <div className="meal-meta">
+                      <span>{meal.recipe.calories} kcal</span>
+                      <span>
+                        {meal.recipe.prep_time_min + meal.recipe.cook_time_min} min
+                      </span>
+                      <span className="meal-meta-target">
+                        target {meal.target_calories} kcal
+                      </span>
+                    </div>
+                    <MacroBar
+                      protein={meal.recipe.protein_g}
+                      carbs={meal.recipe.carbs_g}
+                      fat={meal.recipe.fat_g}
+                    />
 
-                  <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
-                    <button
-                      className={`btn btn-sm ${
-                        meal.is_followed === true ? 'btn-primary' : 'btn-secondary'
-                      }`}
-                      onClick={() => markFollowed(meal.meal_id, true)}
-                    >
-                      <Check size={14} /> Fatto
-                    </button>
-                    <button
-                      className={`btn btn-sm ${
-                        meal.is_followed === false ? 'btn-danger' : 'btn-secondary'
-                      }`}
-                      onClick={() => markFollowed(meal.meal_id, false)}
-                    >
-                      <X size={14} /> Saltato
-                    </button>
+                    <div className="today-card-actions">
+                      <button
+                        className={`btn btn-sm ${
+                          meal.is_followed === true ? 'btn-primary' : 'btn-secondary'
+                        }`}
+                        onClick={() => markFollowed(meal.meal_id, true)}
+                      >
+                        <Check size={14} /> Fatto
+                      </button>
+                      <button
+                        className={`btn btn-sm ${
+                          meal.is_followed === false ? 'btn-danger' : 'btn-secondary'
+                        }`}
+                        onClick={() => markFollowed(meal.meal_id, false)}
+                      >
+                        <X size={14} /> Saltato
+                      </button>
+                    </div>
                   </div>
                 </>
               ) : (
                 <>
-                  <div className="meal-empty" style={{ margin: '8px 0' }}>
+                  <div className="meal-empty">
                     Nessuna ricetta · target {meal.target_calories} kcal
                   </div>
-                  <Link className="btn btn-secondary btn-sm" to={`/meals/${meal.meal_id}`}>
-                    Scegli cosa mangiare
-                  </Link>
+                  <div className="today-card-foot">
+                    <div className="today-card-actions">
+                      <Link
+                        className="btn btn-secondary btn-sm"
+                        to={`/meals/${meal.meal_id}`}
+                      >
+                        Scegli cosa mangiare
+                      </Link>
+                    </div>
+                  </div>
                 </>
               )}
             </div>

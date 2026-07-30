@@ -1000,16 +1000,19 @@ textarea {
 }
 
 /* Pasto saltato: la ricetta resta scritta per memoria, ma non conta più. Spenta e
-   barrata nel titolo, così si distingue a colpo d'occhio da un piatto in programma. */
+   barrata nel titolo, così si distingue a colpo d'occhio da un piatto in programma.
+   Il flag è rosso pieno come "Seguito" è verde pieno: sono le due risposte alla stessa
+   domanda ("com'è andata?"), e in una griglia da sette giorni si cercano guardando il
+   colore. La parola resta, il colore la conferma. */
 .meal-flag.skipped {
-  background: var(--bg-surface);
-  color: var(--text-muted);
-  border: 1px dashed var(--border-light);
+  background: var(--danger);
+  color: var(--danger-contrast);
 }
 
 .meal-card.skipped {
   background: var(--bg-surface);
   border-style: dashed;
+  box-shadow: inset 3px 0 0 var(--danger);
 }
 
 .meal-card.skipped .meal-title {
@@ -1031,7 +1034,15 @@ textarea {
   box-shadow: inset 3px 0 0 var(--accent), var(--shadow-card);
 }
 
-.card.skipped .recipe-card-title {
+/* E lo stesso vale per il rovescio: rimandare un piatto si segna da qui, e la card
+   deve dirlo da lontano quanto lo dice quella seguita. */
+.card.skipped {
+  background: linear-gradient(var(--danger-soft), var(--danger-soft)), var(--bg-card);
+  border-color: transparent;
+  box-shadow: inset 3px 0 0 var(--danger), var(--shadow-card);
+}
+
+.card.skipped .today-card-title {
   color: var(--text-muted);
   text-decoration: line-through;
 }
@@ -1044,6 +1055,85 @@ textarea {
 .meal-slot .meal-flag {
   margin-left: 8px;
   vertical-align: middle;
+}
+
+/* ── Card "cosa si mangia oggi" ─────────────────────────────────── */
+
+/* I pasti di oggi stanno in riga, e in riga si leggono per colonne: le calorie di
+   tutti, poi le barre dei macro, poi i pulsanti. Bastava un titolo su due righe —
+   "Omelette di albumi alle zucchine con pan bauletto" — perché quella card scivolasse
+   mezza riga sotto le altre e il confronto si perdesse. Qui il fondo della card è
+   appeso in basso con `margin-top: auto`: le card di una riga hanno già la stessa
+   altezza, quindi meta, macro e pulsanti si allineano da soli qualunque cosa succeda
+   sopra. Al titolo resta lo spazio che avanza, con l'ellissi quando non basta. */
+.today-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* Intestazione su una riga sola: "Spuntino pomeriggio" più il flag mandava a capo, e
+   il capo spostava in giù tutto il resto della card. */
+.today-card .meal-slot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.today-card .meal-slot .meal-flag {
+  margin-left: 0;
+  flex: none;
+}
+
+.today-card-slot-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.today-card-title {
+  font-weight: 600;
+  font-size: 0.98rem;
+  line-height: 1.3;
+  cursor: pointer;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.today-card-foot {
+  margin-top: auto;
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* La riga dei numeri non va mai a capo: un "target 1.020 kcal" più lungo in una sola
+   card basterebbe a disallineare le barre dei macro di tutte le altre. */
+.today-card .meal-meta {
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+
+.today-card .meal-meta span {
+  white-space: nowrap;
+}
+
+.today-card .meal-meta-target {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-muted);
+}
+
+.today-card-actions {
+  display: flex;
+  gap: 6px;
 }
 
 .meal-actions {

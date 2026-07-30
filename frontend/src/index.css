@@ -164,8 +164,12 @@ textarea {
 
 /* ── Shell ─────────────────────────────────────────────────────── */
 
+/* Il menu è `position: fixed` e non occupa spazio nel flusso: lo spazio glielo tiene
+   questo padding. Prima era un `margin-left` sul contenuto, che però lo inchiodava a
+   sinistra — con lo spazio avanzato tutto in un blocco a destra. */
 .app-layout {
   display: flex;
+  padding-left: 236px;
   min-height: 100vh;
   min-height: 100dvh;
 }
@@ -286,12 +290,33 @@ textarea {
   color: var(--danger);
 }
 
+/* Un tetto serve — a schermo intero su un monitor grande le pagine si sfilaccerebbero
+   — ma 1320px su 1920 lasciavano una fascia morta di 360px sul bordo destro, e la
+   settimana intanto stava in sette colonne da 178px. Quello che avanza oltre il tetto
+   si divide in due (`margin: auto`), così sui monitor molto larghi non finisce tutto
+   da una parte sola. Le pagine che si leggono e si compilano hanno un tetto più basso
+   loro: vedi `.page-narrow` più sotto. */
 .main-content {
-  margin-left: 236px;
   flex: 1;
   padding: 30px 36px 64px;
-  max-width: 1320px;
+  max-width: 1600px;
   width: 100%;
+  margin: 0 auto;
+}
+
+/* Non tutte le pagine vogliono lo spazio che c'è. Una riga di procedimento lunga un
+   metro non si legge, un campo di un modulo largo quanto lo schermo non si compila, e
+   in una riga della spesa il nome a sinistra e il prezzo a destra finirebbero a due
+   palmi di distanza. Queste restano larghe come stavano prima che lo spazio si
+   aprisse; a guadagnarci sono le pagine che si scorrono a colpo d'occhio — oggi, la
+   settimana, il ricettario, l'andamento. */
+.page-narrow,
+.detail-layout,
+.settings-layout,
+.settings-section,
+.shopping-category,
+.shopping-footer {
+  max-width: 1280px;
 }
 
 .topbar {
@@ -1982,10 +2007,20 @@ textarea {
 
 /* ── Ricettario ────────────────────────────────────────────────── */
 
+/* `auto-fill` tiene le colonne vuote e le card alla loro misura: è quello che serve al
+   ricettario, dove un filtro che lascia due risultati non deve gonfiarli a mezzo
+   schermo. */
 .recipe-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 14px;
+}
+
+/* I pasti di oggi invece sono quattro o sei, e sono tutti quelli che ci sono: le
+   colonne vuote lascerebbero un buco a destra proprio nella schermata che si apre per
+   prima. `auto-fit` le toglie di mezzo e la riga si divide fra i pasti. */
+.recipe-grid.fill {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
 .recipe-card {
@@ -2846,8 +2881,11 @@ textarea:focus {
   .sidebar.open {
     transform: translateX(0);
   }
+  /* Il menu qui è un cassetto che scorre da fuori: non tiene più il suo posto. */
+  .app-layout {
+    padding-left: 0;
+  }
   .main-content {
-    margin-left: 0;
     /* In cima ci va la topbar (54px) più la fascia della tacca; ai lati e in fondo
        quel che serve a non finire sotto i bordi curvi e la barra di scorrimento. */
     padding: calc(70px + env(safe-area-inset-top)) calc(14px + env(safe-area-inset-right))

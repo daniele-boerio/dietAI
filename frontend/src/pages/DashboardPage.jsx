@@ -148,7 +148,7 @@ export default function DashboardPage() {
           }
         />
       ) : (
-        <div className="recipe-grid">
+        <div className="recipe-grid fill">
           {today.meals.map((meal) => (
             <div
               key={meal.meal_id}

@@ -39,7 +39,9 @@ export default function PantryPage() {
   };
 
   return (
-    <>
+    // Un modulo e una lista di righe: sono le due cose che dallo spazio in più non
+    // guadagnano niente — il nome finirebbe solo più lontano dalla sua quantità.
+    <div className="page-narrow">
       <div className="page-header">
         <div>
           <h1 className="page-title">Dispensa</h1>
@@ -124,7 +126,7 @@ export default function PantryPage() {
           )}
         </div>
       </div>
-    </>
+    </div>
   );
 }
 

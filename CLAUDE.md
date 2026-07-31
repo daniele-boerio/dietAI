@@ -55,6 +55,7 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
 │       ├── rate_limit.py       # slowapi (AI_LIMIT = 20/minuto)
 │       ├── seed.py             # `python -m app.seed`: amministratore + anagrafica ingredienti
 │       ├── reset_password.py   # `python -m app.reset_password '...'`: unica via di rientro
+│       ├── make_admin.py       # `python -m app.make_admin`: rialza il flag di amministratore
 │       ├── merge_ingredients.py # `python -m app.merge_ingredients`: fonde i doppioni di anagrafica
 │       ├── routers/            # auth, admin, diet, config, planning, recipes, chat, shopping, tracking
 │       ├── services/
@@ -103,6 +104,14 @@ una" — e il gate dell'onboarding pesa la chiave solo per chi la gestisce
 (`can_manage_api_key`), altrimenti l'ospite resterebbe chiuso nel percorso guidato
 per sempre, con tutti i passi fatti. La seconda: i messaggi d'errore non possono
 mandare in "Impostazioni → Account" chi quella schermata non ce l'ha.
+
+Il flag arriva da tre parti, in ordine di quanto è probabile: la migrazione `0015` lo
+dà all'utente più vecchio, il seed lo dà a `SEED_USER_EMAIL` **quando in tabella non c'è
+nessun amministratore** (gira a ogni avvio del container, quindi si ripara da sé al
+primo deploy), e `python -m app.make_admin [--email ...]` lo alza a mano. Serve un
+comando perché da qui non si esce dalla UI: le rotte che rimetterebbero il flag sono
+proprio quelle riservate all'amministratore, e un database senza admin è chiuso a
+chiave dall'interno.
 
 Due interruttori, che sono due problemi diversi: `is_active` toglie l'accesso
 (login 403, `get_current_user_id` 403, sessioni revocate e `token_version` alzata,
@@ -385,7 +394,28 @@ vanno tolti — il seed semina l'anagrafica coi nomi del catalogo così come son
 scritti, quindi un nome che `normalize_name` non può più produrre diventa una riga che
 nessuna ricetta userà mai, ricreata a ogni avvio del container.
 
-Cambiata una regola, le righe già in tabella vanno riallineate a mano:
+**Le stesse regole si allargano dalle Impostazioni**, senza deploy (Impostazioni →
+Nomi e accorpamenti, solo amministratore: l'anagrafica è una sola per tutti).
+`NormalizationRule` tiene le aggiunte — `kind='alias'` è un termine che finisce su un
+nome normalizzato, `kind='noise'` una parola da togliere — e `load_rules(db)` le
+compila nella stessa forma di quelle di serie: una sostituzione con regex su parola
+intera. Si applicano **dopo** le regole del codice, che restano la base su cui si
+reggono il catalogo dei prezzi e mezza suite di test; per questo un termine si salva
+già normalizzato ("pasta rigate", non "penne rigate") e chi ne aggiunge uno inutile si
+sente rispondere perché. Senza regole aggiunte `NormalizationRules` è falsa e la
+normalizzazione resta identica byte per byte (`__bool__`): è la garanzia che questo
+strato non esista finché non lo si usa. Chi chiama `normalize_name` avendo una
+sessione in mano **passa sempre** `load_rules(db)` — nessuna cache di processo, perché
+sarebbe un valore vecchio da invalidare a mano.
+
+Salvare una regola riallinea subito l'anagrafica (lo stesso lavoro di
+`merge_ingredients`), e prima di salvare si passa da `POST
+/api/config/normalization/preview`, che dice quali righe cambierebbero nome e quali si
+fonderebbero con una che esiste già. L'anteprima non è cortesia: **togliere la regola
+non disfa la fusione** — le righe cancellate non tornano e le quantità sommate in
+dispensa non si dividono — quindi "riso → pasta" va visto prima, non dopo.
+
+Cambiata una regola nel codice, le righe già in tabella vanno riallineate a mano:
 `python -m app.merge_ingredients` fonde i doppioni spostando ricette, dispensa, liste
 e preferenze sulla riga buona. Se la fusione ha unito troppo,
 `python -m app.repair_cereals` rimette al loro posto le ricette che nel testo dicono
@@ -519,3 +549,7 @@ diventerebbe indecifrabile e andrebbe reinserita.
 - **Cambiare provider:** `AI_PROVIDER` + `AI_BASE_URL`; la API key salvata va reinserita.
 - **Aggiungere ingredienti al catalogo:** `utils/pricing.py` (categoria + prezzo), poi
   `python -m app.seed` per riallineare l'anagrafica.
+- **Accorpare un nome nuovo** (un formato di pasta che il modello si è inventato, un
+  taglio che non era in elenco): Impostazioni → Nomi e accorpamenti, che salva la
+  regola e rifà l'anagrafica. Nel codice si scende solo per cambiare le regole di
+  serie, che sono quelle su cui poggiano il catalogo dei prezzi e i test.

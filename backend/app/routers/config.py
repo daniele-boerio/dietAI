@@ -14,6 +14,7 @@ from ..models import (
     BaseIngredient,
     ExcludedIngredient,
     Ingredient,
+    NormalizationRule,
     PantryItem,
     User,
     UserPreferences,
@@ -30,13 +31,22 @@ from ..schemas import (
     ExcludedCreate,
     IngredientCategoryUpdate,
     IngredientNameRequest,
+    NormalizationRuleCreate,
     PantryCreate,
     PantryUpdate,
     PreferencesUpdate,
 )
 from ..services.ai_client import ai_owner
 from ..services.catalog import list_models
-from ..services.ingredients import get_or_create_ingredient, normalize_name
+from ..services.ingredients import (
+    NormalizationRules,
+    builtin_rules,
+    get_or_create_ingredient,
+    load_rules,
+    merge_duplicates,
+    normalize_name,
+    preview_rule,
+)
 from ..services.shopping import CATEGORY_LABELS
 from ..utils.pricing import DEFAULT_BASE_INGREDIENTS
 from ..utils.units import format_quantity, normalize_unit
@@ -162,7 +172,7 @@ def add_excluded(
     la lista della spesa e la dispensa parlano la stessa lingua); altrimenti si
     conserva il testo libero — "frutti di mare" non è un ingrediente, è una famiglia.
     """
-    clean = normalize_name(body.ingredient_name)
+    clean = normalize_name(body.ingredient_name, load_rules(db))
     if not clean:
         raise HTTPException(400, "Nome non valido")
 
@@ -501,6 +511,171 @@ def update_ai_models(
     return get_ai_config(user=admin, db=db)
 
 
+# ── Regole di normalizzazione ──────────────────────────────────────────────────
+
+# Sono dell'amministratore per lo stesso motivo per cui non hanno `user_id`:
+# l'anagrafica ingredienti è una sola, e fondere due righe tocca le ricette, la
+# dispensa e le liste **di tutti**.
+
+
+def _serialize_rule(rule: NormalizationRule) -> dict:
+    return {
+        "id": rule.id,
+        "kind": rule.kind,
+        "term": rule.term,
+        "replacement": rule.replacement,
+        "created_at": rule.created_at.isoformat() if rule.created_at else None,
+    }
+
+
+def _validate_rule(db: Session, body: NormalizationRuleCreate) -> tuple[str, str, str | None]:
+    """Ripulisce la regola e rifiuta quelle che non farebbero niente.
+
+    Il termine si salva **già normalizzato** con le regole di serie, perché è contro il
+    nome normalizzato che verrà confrontato: scrivere "penne rigate" e salvarlo così
+    com'è darebbe una regola che non scatta mai, visto che a quel punto della catena il
+    nome è già diventato "pasta rigate". Meglio dirlo qui che lasciarlo scoprire fra un
+    mese guardando una lista della spesa che non si accorpa.
+    """
+    kind = body.kind.strip().lower()
+    if kind not in ("noise", "alias"):
+        raise HTTPException(400, "Tipo di regola non valido")
+
+    rules = load_rules(db)
+    # Le regole già salvate valgono per pulire il termine, tranne gli accorpamenti:
+    # incatenarli (a → b, b → c) renderebbe illeggibile la lista.
+    solo_rumore = NormalizationRules(noise=rules.noise)
+
+    grezzo = " ".join(body.term.strip().lower().split())
+    term = normalize_name(grezzo, solo_rumore)
+    if not term:
+        raise HTTPException(
+            400,
+            f"«{grezzo}» sparisce già del tutto con le regole di serie: "
+            "non c'è niente da aggiungere.",
+        )
+
+    if kind == "noise":
+        if term != grezzo:
+            raise HTTPException(
+                400,
+                f"«{grezzo}» viene già ridotto a «{term}» dalle regole di serie: "
+                "quella parola è già tolta.",
+            )
+        return kind, term, None
+
+    replacement = normalize_name(body.replacement or "", solo_rumore)
+    if not replacement:
+        raise HTTPException(400, "Serve il nome su cui accorpare.")
+    if term == replacement:
+        raise HTTPException(
+            400, f"«{grezzo}» è già «{replacement}»: la regola non farebbe niente."
+        )
+    return kind, term, replacement
+
+
+@router.get("/normalization")
+def get_normalization(_admin: User = Depends(get_current_admin), db: Session = Depends(get_db)):
+    """Le regole, come si guardano: un nome normalizzato e l'elenco di chi ci finisce.
+
+    I termini di serie e quelli aggiunti a mano stanno nello **stesso** gruppo, perché
+    fanno la stessa cosa: la differenza è solo che i primi non si tolgono da qui (ci si
+    appoggiano il catalogo dei prezzi e i test) e i secondi sì.
+    """
+    rows = (
+        db.query(NormalizationRule)
+        .order_by(NormalizationRule.kind, NormalizationRule.term)
+        .all()
+    )
+    builtin = builtin_rules()
+
+    groups = [{**g, "custom": []} for g in builtin["groups"]]
+    per_target = {g["target"]: g for g in groups}
+    noise_custom = []
+
+    for row in rows:
+        if row.kind == "noise":
+            noise_custom.append(_serialize_rule(row))
+            continue
+        gruppo = per_target.get(row.replacement)
+        if not gruppo:
+            # Un gruppo nato dalle Impostazioni: nessun termine di serie dentro.
+            gruppo = {"target": row.replacement, "terms": [], "note": None, "custom": []}
+            per_target[row.replacement] = gruppo
+            groups.append(gruppo)
+        gruppo["custom"].append(_serialize_rule(row))
+
+    return {
+        "groups": groups,
+        "noise": {"builtin": builtin["noise"], "custom": noise_custom},
+        "scoped": builtin["scoped"],
+        "kept": builtin["kept"],
+    }
+
+
+@router.post("/normalization/preview")
+def preview_normalization(
+    body: NormalizationRuleCreate,
+    _admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Cosa cambierebbe salvando questa regola. Non scrive niente."""
+    kind, term, replacement = _validate_rule(db, body)
+    result = preview_rule(db, kind, term, replacement)
+    return {"kind": kind, "term": term, "replacement": replacement, **result}
+
+
+@router.post("/normalization", status_code=201)
+def add_normalization(
+    body: NormalizationRuleCreate,
+    _admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Salva la regola e riallinea subito l'anagrafica.
+
+    Riallineare fa parte della regola, non è un extra: senza, "tortiglioni" resterebbe
+    una riga a sé finché non lo si rigenera, e la dispensa non coprirebbe la ricetta
+    che dice "pasta". È lo stesso lavoro di `python -m app.merge_ingredients`, fatto
+    adesso invece che da un terminale.
+    """
+    kind, term, replacement = _validate_rule(db, body)
+
+    rule = NormalizationRule(kind=kind, term=term, replacement=replacement)
+    db.add(rule)
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, f"«{term}» è già fra le regole.")
+
+    fusi = merge_duplicates(db)  # committa
+    return {
+        "rule": _serialize_rule(rule),
+        "merged": [{"name": nome, "from": doppioni} for nome, doppioni in fusi],
+    }
+
+
+@router.delete("/normalization/{rule_id}", status_code=204)
+def remove_normalization(
+    rule_id: int,
+    _admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Toglie la regola **da qui in avanti**.
+
+    Quello che ha già fuso resta fuso: le righe cancellate non si ricreano e le
+    quantità sommate in dispensa non si dividono. Da questo momento i nomi nuovi non
+    verranno più accorpati, e il vecchio nome tornerà a fare riga a sé.
+    """
+    deleted = (
+        db.query(NormalizationRule).filter(NormalizationRule.id == rule_id).delete()
+    )
+    db.commit()
+    if not deleted:
+        raise HTTPException(404, "Regola non trovata")
+    return Response(status_code=204)
+
+
 # ── Ricerca ingredienti (autocomplete) ─────────────────────────────────────────
 
 
@@ -509,7 +684,7 @@ def search_ingredients(
     q: str = "", _user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
 ):
     """Suggerimenti per i campi "aggiungi ingrediente"."""
-    term = normalize_name(q)
+    term = normalize_name(q, load_rules(db))
     if len(term) < 2:
         return []
     rows = (

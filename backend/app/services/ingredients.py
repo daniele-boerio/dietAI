@@ -6,6 +6,7 @@ dispensa non ne coprirebbe nessuna. Qui si normalizza e si riusa sempre la stess
 """
 
 import re
+from dataclasses import dataclass, field
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -14,6 +15,7 @@ from ..models import (
     BaseIngredient,
     ExcludedIngredient,
     Ingredient,
+    NormalizationRule,
     PantryItem,
     PlannedMeal,
     RecipeIngredient,
@@ -34,28 +36,41 @@ from ..utils.units import to_base
 # l'alimento, non la sua confezione: uno yogurt magro e uno intero non sono la stessa
 # riga della spesa nemmeno volendo. Fuori anche "pelati", che in italiano non è lo
 # stato dei pomodori ma una conserva.
+#
+# I termini stanno in tuple e non dentro la regex già compilata perché sono anche
+# **contenuto**: le Impostazioni li mostrano uno per uno (Impostazioni →
+# Normalizzazione), e una lista che si può leggere è l'unico modo di accorgersi che
+# una parola manca. Sono schemi, non parole: `fresc[ao]` copre fresco e fresca.
+_NOISE_GROUPS = {
+    "Marchi e denominazioni": (
+        "hero", "barilla", r"de\s+cecco", "rustichella", "garofalo", "buitoni",
+        "mutti", "sa", "valfrutta", "unifruit", "reggiano",
+    ),
+    "Conservazione e stato": (
+        "fresc[ao]", "fresch[ei]", "secc[ao]", "secch[ei]", "surgelat[oaie]",
+        "congelat[oaie]", "sgusciat[oaie]", "sbucciat[oaie]", "maturo", "matura",
+    ),
+    "Calibro e qualità": (
+        "medi[ao]", "medie", "grande", "grandi", "piccol[oaie]", "bio", "biologic[ao]",
+    ),
+    "Taglio e preparazione": (
+        "tritat[oaie]", "macinat[oaie]", "grattugiat[oaie]", "affettat[oaie]",
+        r"a\s+cubetti", r"a\s+dadini", r"a\s+fette", r"a\s+fettine", r"a\s+rondelle",
+        r"a\s+lamelle", r"a\s+listarelle", r"a\s+striscioline", r"a\s+julienne",
+        r"a\s+spicchi", r"a\s+pezzi", r"a\s+pezzetti", r"in\s+scaglie", r"in\s+filetti",
+    ),
+    # "pasta corta" è pasta, come "pasta di semola di grano duro" — dicono che taglio
+    # è, non che alimento è, e al supermercato si compra un pacco solo. Restano fuori i
+    # formati con un'identità propria ("pasta all'uovo", "pasta sfoglia") e
+    # "integrale", che sta fra le parole che cambiano i macro.
+    "Formato e quantità": (
+        "cort[aeio]", "lung[ao]", "lungh[ei]", "formato",
+        r"di\s+semola(\s+di\s+grano\s+duro)?", r"q\.?b\.?",
+    ),
+}
+
 _NOISE = re.compile(
-    r"\b("
-    # marchi commerciali e origini geografiche
-    r"hero|barilla|de\s+cecco|rustichella|garofalo|buitoni|mutti|sa|valfrutta|unifruit|reggiano|"
-    # conservazione e stato
-    r"fresc[ao]|fresch[ei]|secc[ao]|secch[ei]|surgelat[oaie]|congelat[oaie]|"
-    r"sgusciat[oaie]|sbucciat[oaie]|maturo|matura|"
-    # calibro e qualità
-    r"medi[ao]|medie|grande|grandi|piccol[oaie]|bio|biologic[ao]|"
-    # taglio e formato
-    r"tritat[oaie]|macinat[oaie]|grattugiat[oaie]|affettat[oaie]|"
-    r"a\s+cubetti|a\s+dadini|a\s+fette|a\s+fettine|a\s+rondelle|a\s+lamelle|"
-    r"a\s+listarelle|a\s+striscioline|a\s+julienne|a\s+spicchi|a\s+pezzi|a\s+pezzetti|"
-    r"in\s+scaglie|in\s+filetti|"
-    # formato: "pasta corta" è pasta, come "pasta di semola di grano duro" — dicono
-    # che taglio è, non che alimento è, e al supermercato si compra un pacco solo.
-    # Restano fuori i formati con un'identità propria ("pasta all'uovo", "pasta
-    # sfoglia") e "integrale", che sta più su fra le parole che cambiano i macro.
-    r"cort[aeio]|lung[ao]|lungh[ei]|formato|"
-    r"di\s+semola(\s+di\s+grano\s+duro)?|"
-    r"q\.?b\.?"
-    r")\b",
+    r"\b(" + "|".join(t for gruppo in _NOISE_GROUPS.values() for t in gruppo) + r")\b",
     re.IGNORECASE,
 )
 
@@ -66,23 +81,27 @@ _NOISE = re.compile(
 # macro e un altro scaffale: riso, cous cous, orzo, farro e quinoa restano quello che
 # sono. Fuori anche la pasta ripiena (ravioli, tortellini: dentro c'è carne o
 # formaggio) e gli gnocchi, che sono patate.
-_PASTA_TYPES = re.compile(
-    r"\b(spaghetti|penne|fusilli|farfalle|rigatoni|sedani|bucatini|linguine|fettuccine|"
-    r"tagliatelle|bavette|trenette|vermicelli|pennette|mezzemaniche|tortiglioni|"
-    r"tagliolini|pappardelle|maltagliati|casarecce|orecchiette|rotelle|conchiglie|"
-    r"tubetti|ditalini)\b",
-    re.IGNORECASE,
+_PASTA_NAMES = (
+    "spaghetti", "penne", "fusilli", "farfalle", "rigatoni", "sedani", "bucatini",
+    "linguine", "fettuccine", "tagliatelle", "bavette", "trenette", "vermicelli",
+    "pennette", "mezzemaniche", "tortiglioni", "tagliolini", "pappardelle",
+    "maltagliati", "casarecce", "orecchiette", "rotelle", "conchiglie", "tubetti",
+    "ditalini",
 )
+_PASTA_TYPES = re.compile(r"\b(" + "|".join(_PASTA_NAMES) + r")\b", re.IGNORECASE)
 
 # Tipi di pesce magro da normalizzare a "filetto di pesce magro"
+_PESCE_NAMES = ("branzino", "orata", "sogliola", "merluzzo", "platessa")
 _PESCE_MAGRO = re.compile(
-    r"\b(filetti?|filett[io])\s+di\s+(branzino|orata|sogliola|merluzzo|platessa)\b|\b(branzino|orata|sogliola|merluzzo|platessa)\b",
+    r"\b(filetti?|filett[io])\s+di\s+(" + "|".join(_PESCE_NAMES) + r")\b"
+    r"|\b(" + "|".join(_PESCE_NAMES) + r")\b",
     re.IGNORECASE,
 )
 
 # Gamberi: togliere qualificatori geografici e conservare solo "gamberi"
+_GAMBERI_QUALIFIERS = ("indopacifici?", "rossi?", "bianchi?", r"di\s+\w+")
 _GAMBERI = re.compile(
-    r"\bgamberi\s+(indopacifici?|rossi?|bianchi?|di\s+\w+)\b",
+    r"\bgamberi\s+(" + "|".join(_GAMBERI_QUALIFIERS) + r")\b",
     re.IGNORECASE,
 )
 
@@ -100,8 +119,12 @@ _DA_GRATTUGIA = {
 }
 
 # Olive: togliere tipi e qualificatori, conservare solo "olive"
+_OLIVE_QUALIFIERS = (
+    "taggiasche", "nere", "verdi", "denocciolate", "snocciolate", r"di\s+\w+",
+)
 _OLIVE = re.compile(
-    r"\bolive\s+(taggiasche|nere|verdi|denocciolate|snocciolate|di\s+\w+)\b|\b(taggiasche|nere|verdi)\s+olive\b",
+    r"\bolive\s+(" + "|".join(_OLIVE_QUALIFIERS) + r")\b"
+    r"|\b(taggiasche|nere|verdi)\s+olive\b",
     re.IGNORECASE,
 )
 
@@ -119,16 +142,13 @@ _DANGLING = re.compile(r"\s+(a|di|in|al|alla|con|da)\s*$", re.IGNORECASE)
 _PASTA_INTEGRALE = re.compile(r"\bpasta\s+integral[ei]\b", re.IGNORECASE)
 
 
-def normalize_name(name: str) -> str:
-    """Minuscolo, senza glosse fra parentesi, senza qualificatori e senza spazi doppi.
+def _tidy(n: str) -> str:
+    """Spazi doppi, virgole e preposizioni appese dopo aver tolto una parola."""
+    n = re.sub(r"[\s,;]+", " ", n).strip(" -,.")
+    return _DANGLING.sub("", n).strip(" -,.")
 
-    Oltre a togliere il rumore, unisce sulla stessa riga le cose che per la dieta e
-    per la spesa sono lo stesso alimento: i formati della pasta (spaghetti, penne e
-    anche "pasta integrale" → `pasta`), i pesci bianchi (`_PESCE_MAGRO`), i formaggi da
-    grattugia (`_DA_GRATTUGIA` → `formaggio`). **Un altro cereale non è pasta**: riso,
-    cous cous, farro e orzo restano quello che sono, e lo stesso vale per la pasta
-    ripiena e gli gnocchi.
-    """
+
+def _builtin_normalize(name: str) -> str:
     n = _PARENTESI.sub(" ", (name or "").strip().lower())
     n = _PASTA_TYPES.sub("pasta", n)
     n = _PESCE_MAGRO.sub("filetto di pesce magro", n)
@@ -143,6 +163,104 @@ def normalize_name(name: str) -> str:
     # il rumore qui sopra.
     if n in _DA_GRATTUGIA or n == "formaggio":
         return "formaggio"
+    return n
+
+
+@dataclass(frozen=True)
+class NormalizationRules:
+    """Le regole aggiunte a mano, che si applicano **dopo** quelle di serie.
+
+    Funzionano come quelle di serie — una sostituzione con regex su parola intera —
+    solo che i termini stanno in tabella invece che nel codice: `aliases` è
+    `{"pasta": ("tortiglioni", "calamarata"), ...}`, cioè esattamente il gruppo che si
+    riempie dalle Impostazioni.
+
+    L'ordine non è arbitrario: le regole di serie sono quelle su cui si reggono il
+    catalogo dei prezzi e mezza suite di test, e devono restare prevedibili. Le
+    aggiunte lavorano su ciò che esce da lì.
+    """
+
+    noise: tuple[str, ...] = ()
+    aliases: dict[str, tuple[str, ...]] = field(default_factory=dict)
+
+    def __bool__(self) -> bool:
+        """Senza regole aggiunte non si tocca niente: la normalizzazione resta quella
+        di serie, byte per byte."""
+        return bool(self.noise or self.aliases)
+
+    def apply(self, n: str) -> str:
+        # Prima gli accorpamenti, poi le parole da ignorare: è lo stesso ordine delle
+        # regole di serie, dove "penne integrali" diventa "pasta integrali" prima che
+        # si tolga il rumore.
+        for target, terms in self.aliases.items():
+            if not terms:
+                continue
+            pattern = "|".join(re.escape(t) for t in terms)
+            n = re.sub(rf"\b({pattern})\b", target, n, flags=re.IGNORECASE)
+            # "olive taggiasche" con «taggiasche» accorpato su «olive» darebbe "olive
+            # olive": succede quando il termine è un qualificatore e non un nome. Si
+            # ripulisce **solo** la parola appena sostituita, perché i nomi ripetuti
+            # per davvero esistono — "cous cous" è uno di quelli.
+            fuga = re.escape(target)
+            n = re.sub(rf"\b{fuga}( {fuga}\b)+", target, n, flags=re.IGNORECASE)
+
+        if self.noise:
+            pattern = "|".join(re.escape(t) for t in self.noise)
+            n = re.sub(rf"\b({pattern})\b", " ", n, flags=re.IGNORECASE)
+
+        return _tidy(n)
+
+    def plus(self, kind: str, term: str, replacement: str | None) -> "NormalizationRules":
+        """Le stesse regole più una, senza salvarla: serve all'anteprima."""
+        if kind == "noise":
+            return NormalizationRules(self.noise + (term,), dict(self.aliases))
+        target = replacement or term
+        aliases = dict(self.aliases)
+        aliases[target] = aliases.get(target, ()) + (term,)
+        return NormalizationRules(self.noise, aliases)
+
+
+NO_RULES = NormalizationRules()
+
+
+def load_rules(db: Session) -> NormalizationRules:
+    """Legge le regole dal database. Una query su una tabella di poche righe.
+
+    Nessuna cache: le chiamate sono poche (una per ingrediente creato) e stanno dentro
+    richieste che durano minuti perché parlano con un modello. Una cache di processo
+    sarebbe un valore vecchio da invalidare a mano, cioè un bug in attesa.
+    """
+    rows = db.query(NormalizationRule).order_by(NormalizationRule.id).all()
+
+    aliases: dict[str, tuple[str, ...]] = {}
+    for row in rows:
+        if row.kind == "alias" and row.replacement:
+            aliases[row.replacement] = aliases.get(row.replacement, ()) + (row.term,)
+
+    return NormalizationRules(
+        noise=tuple(r.term for r in rows if r.kind == "noise"),
+        aliases=aliases,
+    )
+
+
+def normalize_name(name: str, rules: NormalizationRules | None = None) -> str:
+    """Minuscolo, senza glosse fra parentesi, senza qualificatori e senza spazi doppi.
+
+    Oltre a togliere il rumore, unisce sulla stessa riga le cose che per la dieta e
+    per la spesa sono lo stesso alimento: i formati della pasta (spaghetti, penne e
+    anche "pasta integrale" → `pasta`), i pesci bianchi (`_PESCE_MAGRO`), i formaggi da
+    grattugia (`_DA_GRATTUGIA` → `formaggio`). **Un altro cereale non è pasta**: riso,
+    cous cous, farro e orzo restano quello che sono, e lo stesso vale per la pasta
+    ripiena e gli gnocchi.
+
+    `rules` sono le aggiunte dell'utente (`load_rules`). Chi ha una sessione in mano le
+    passa sempre: senza, si otterrebbe la normalizzazione di serie, e due punti dell'app
+    che chiamano questa funzione in modo diverso creerebbero due righe di anagrafica per
+    lo stesso alimento — che è esattamente il problema che questo file risolve.
+    """
+    n = _builtin_normalize(name)
+    if rules:
+        n = rules.apply(n)
     return n[:120]
 
 
@@ -154,7 +272,7 @@ def get_or_create_ingredient(db: Session, name: str) -> Ingredient:
     raggruppare la lista della spesa per reparto) e il prezzo resta NULL — meglio
     "costo non stimabile" che un numero inventato.
     """
-    clean = normalize_name(name)
+    clean = normalize_name(name, load_rules(db))
     if not clean:
         raise ValueError("Nome ingrediente vuoto")
 
@@ -184,6 +302,103 @@ def get_or_create_ingredient(db: Session, name: str) -> Ingredient:
         db.rollback()
         return db.query(Ingredient).filter(Ingredient.name == clean).one()
     return ingredient
+
+
+# ── Le regole, viste da fuori ──────────────────────────────────────────────────
+
+
+def _readable(term: str) -> str:
+    """Lo schema com'è scritto, ma senza la sintassi delle regex davanti agli occhi."""
+    return (
+        term.replace(r"\s+", " ").replace(r"\w+", "…").replace("\\.", ".").replace("\\", "")
+    )
+
+
+# I gruppi di serie, nella stessa forma di quelli che si riempiono dalle Impostazioni:
+# un nome normalizzato e l'elenco dei termini che ci finiscono sopra. Si costruiscono
+# dalle stesse tuple che compilano le regex — una lista scritta a parte per la UI si
+# allontanerebbe dal codice al primo termine aggiunto, e sarebbe una bugia detta
+# proprio nella pagina che si apre per capire perché due ingredienti stanno insieme.
+def builtin_groups() -> list[dict]:
+    return [
+        {
+            "target": "pasta",
+            "terms": sorted(_PASTA_NAMES),
+            "note": "Solo pasta: riso, cous cous, farro e orzo sono altri alimenti, con "
+            "altri macro e un altro scaffale. Fuori anche pasta ripiena e gnocchi.",
+        },
+        {
+            "target": "filetto di pesce magro",
+            "terms": sorted(_PESCE_NAMES),
+            "note": "Valgono con o senza «filetto di» davanti.",
+        },
+        {
+            "target": "formaggio",
+            "terms": sorted(_DA_GRATTUGIA),
+            "note": "Confrontati per nome intero: sulla pasta ci va quello che c'è in "
+            "casa. «Formaggio spalmabile» resta un altro alimento.",
+        },
+    ]
+
+
+def builtin_rules() -> dict:
+    """Le regole di serie in forma leggibile, per la schermata delle Impostazioni."""
+    return {
+        "groups": builtin_groups(),
+        "noise": [
+            {"label": label, "terms": [_readable(t) for t in terms]}
+            for label, terms in _NOISE_GROUPS.items()
+        ],
+        # Due casi che non sono né accorpamenti né rumore: un qualificatore che si
+        # toglie **solo** dopo un certo alimento. "Nere" da solo non vuol dire niente,
+        # dopo "olive" sì.
+        "scoped": [
+            {
+                "target": "gamberi",
+                "terms": [_readable(t) for t in _GAMBERI_QUALIFIERS],
+                "note": "Tolti quando seguono «gamberi».",
+            },
+            {
+                "target": "olive",
+                "terms": [_readable(t) for t in _OLIVE_QUALIFIERS],
+                "note": "Tolti quando seguono «olive».",
+            },
+        ],
+        "kept": [
+            "integrale", "magro", "light", "intero", "al naturale", "sott'olio",
+            "senza zuccheri", "pelati",
+        ],
+    }
+
+
+def preview_rule(
+    db: Session, kind: str, term: str, replacement: str | None = None
+) -> dict:
+    """Cosa cambierebbe in anagrafica se la regola ci fosse già. Non scrive niente.
+
+    Serve perché un accorpamento sbagliato non si annulla togliendo la regola: le
+    righe fuse restano fuse, e rimetterle a posto è lavoro a mano. Vedere prima che
+    «riso» sta per diventare «pasta» costa una schermata e salva mezza serata.
+    """
+    rules = load_rules(db)
+    candidate = rules.plus(kind, term, replacement)
+
+    esistenti = {row.name for row in db.query(Ingredient.name).all()}
+    changes = []
+    for ingredient in db.query(Ingredient).order_by(Ingredient.name).all():
+        prima = normalize_name(ingredient.name, rules)
+        dopo = normalize_name(ingredient.name, candidate)
+        if dopo and dopo != prima:
+            changes.append(
+                {
+                    "from": ingredient.name,
+                    "to": dopo,
+                    # Se la riga di destinazione esiste già, le due si fondono: è il
+                    # caso che porta via dati (quantità sommate, righe cancellate).
+                    "merges": dopo in esistenti,
+                }
+            )
+    return {"changes": changes, "checked": len(esistenti)}
 
 
 # ── Riallineamento dell'anagrafica ─────────────────────────────────────────────
@@ -260,9 +475,10 @@ def merge_duplicates(db: Session) -> list[tuple[str, list[str]]]:
     liste e preferenze, e restituisce cosa ha fuso perché lo si possa leggere prima di
     fidarsi. Rieseguirla non fa niente: dopo la prima volta non ci sono più doppioni.
     """
+    rules = load_rules(db)
     gruppi: dict[str, list[Ingredient]] = {}
     for ingredient in db.query(Ingredient).order_by(Ingredient.id).all():
-        gruppi.setdefault(normalize_name(ingredient.name), []).append(ingredient)
+        gruppi.setdefault(normalize_name(ingredient.name, rules), []).append(ingredient)
 
     fusi: list[tuple[str, list[str]]] = []
     rimappati: dict[int, int] = {}

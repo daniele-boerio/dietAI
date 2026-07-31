@@ -162,6 +162,24 @@ export const api = {
   searchIngredients: (q) =>
     request(`/config/ingredients/search?q=${encodeURIComponent(q)}`),
 
+  // ── Normalizzazione dei nomi (solo amministratore) ──
+  // `payload` è { kind: 'alias' | 'noise', term, replacement }. L'anteprima non scrive
+  // niente: dice solo quali righe di anagrafica cambierebbero nome, e quali si
+  // fonderebbero con una che esiste già — che è la parte che non si annulla.
+  getNormalization: () => request('/config/normalization'),
+
+  previewNormalizationRule: (payload) =>
+    request('/config/normalization/preview', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  addNormalizationRule: (payload) =>
+    request('/config/normalization', { method: 'POST', body: JSON.stringify(payload) }),
+
+  deleteNormalizationRule: (id) =>
+    request(`/config/normalization/${id}`, { method: 'DELETE' }),
+
   // ── Modelli AI ──
   getAiConfig: () => request('/config/ai'),
 

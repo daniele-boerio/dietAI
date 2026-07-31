@@ -7,6 +7,7 @@ import { useAuth } from '../AuthContext';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IngredientInput from '../components/IngredientInput';
 import ModelPicker from '../components/ModelPicker';
+import NormalizationSettings from '../components/NormalizationSettings';
 
 // Qui stanno solo le cose che si impostano una volta e poi restano. Quelle che
 // cambiano di continuo hanno una pagina loro: la dieta (`/diet`) e la dispensa
@@ -19,6 +20,7 @@ const TABS = [
   { key: 'preferences', label: 'Preferenze' },
   { key: 'base', label: 'Ingredienti di base' },
   { key: 'excluded', label: 'Alimenti esclusi' },
+  { key: 'normalization', label: 'Nomi e accorpamenti', adminOnly: true },
   { key: 'models', label: 'Modelli AI', adminOnly: true },
   { key: 'users', label: 'Utenti', adminOnly: true },
   { key: 'account', label: 'Account' },
@@ -66,6 +68,7 @@ export default function SettingsPage() {
           {tab === 'preferences' && <PreferencesTab />}
           {tab === 'base' && <BaseTab />}
           {tab === 'excluded' && <ExcludedTab />}
+          {tab === 'normalization' && <NormalizationSettings />}
           {tab === 'models' && <ModelsTab />}
           {tab === 'users' && <UsersTab />}
           {tab === 'account' && <AccountTab />}

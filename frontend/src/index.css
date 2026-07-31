@@ -2507,6 +2507,64 @@ textarea:focus {
   margin-top: 20px;
 }
 
+/* ── Regole di normalizzazione ─────────────────────────────────── */
+
+.settings-heading {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin: 26px 0 4px;
+}
+
+/* La scatola di un accorpamento: il nome normalizzato in testa, i termini dentro.
+   Il filetto verde a sinistra dice a colpo d'occhio dove finisce un gruppo e comincia
+   il successivo, in una pagina che ne ha una decina uno sotto l'altro. */
+.rule-box {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-md);
+  padding: 15px 16px;
+  margin-bottom: 12px;
+}
+
+.rule-box-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.rule-target {
+  font-weight: 700;
+  font-size: 1rem;
+  /* È un nome esatto, non una frase: si legge come un valore, non come testo. */
+  font-family: var(--font-body);
+  letter-spacing: -0.01em;
+}
+
+/* Due tipi di termine nella stessa scatola, perché fanno la stessa cosa: quelli di
+   serie sono spenti e senza crocetta, i tuoi sono verdi e si tolgono. La differenza
+   si vede senza doverla leggere da nessuna parte. */
+.tag.fixed {
+  background: transparent;
+  border-style: dashed;
+  color: var(--text-secondary);
+  padding-right: 12px;
+}
+
+.tag.custom {
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.rule-builtin-group + .rule-builtin-group {
+  margin-top: 14px;
+}
+
 .meal-editor-row {
   display: grid;
   grid-template-columns: minmax(120px, 2fr) repeat(4, minmax(64px, 1fr)) 104px 32px;
@@ -2953,6 +3011,12 @@ textarea:focus {
   font-size: 0.9rem;
   line-height: 1.6;
   margin-bottom: 20px;
+  /* Gli a capo scritti nel messaggio si vedono: l'anteprima di un accorpamento è un
+     elenco di righe ("· riso → pasta"), e tutto attaccato non si leggerebbe. Se sono
+     tante, l'elenco scorre invece di spingere i pulsanti fuori dallo schermo. */
+  white-space: pre-line;
+  max-height: 45vh;
+  overflow-y: auto;
 }
 
 .modal-actions {

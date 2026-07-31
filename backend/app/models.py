@@ -189,6 +189,43 @@ class Ingredient(Base):
     )
 
 
+class NormalizationRule(Base):
+    """Una regola di normalizzazione dei nomi aggiunta a mano.
+
+    Le regole di serie stanno nel codice (`services/ingredients.py`) perché su di esse
+    si reggono il catalogo dei prezzi e mezza suite di test. Queste sono le aggiunte
+    che si fanno guardando la lista della spesa — «anche "a filetti" è un taglio», «i
+    tortiglioni sono pasta» — e chiedono un deploy solo se restano nel codice.
+
+    Non hanno `user_id`: l'anagrafica ingredienti è una sola per tutti, quindi lo sono
+    anche le regole che decidono come ci si scrive dentro. Per lo stesso motivo le
+    tocca solo l'amministratore.
+
+    `kind = "noise"` → `term` è una parola da togliere dal nome.
+    `kind = "alias"` → il nome **intero** `term` diventa `replacement`.
+    """
+
+    __tablename__ = "normalization_rules"
+
+    id = Column(Integer, primary_key=True)
+    kind = Column(String, nullable=False)
+    # Già normalizzato con le regole di serie quando la riga viene creata: è contro il
+    # nome normalizzato che verrà confrontato, e scoprirlo dopo vorrebbe dire avere una
+    # regola che non scatta mai.
+    term = Column(String, nullable=False)
+    replacement = Column(String)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("kind", "term", name="uq_normalization_rule"),
+        CheckConstraint("kind IN ('noise','alias')", name="ck_normalization_kind"),
+        CheckConstraint(
+            "kind <> 'alias' OR replacement IS NOT NULL",
+            name="ck_normalization_alias_target",
+        ),
+    )
+
+
 # ─────────────────────────── Ricette ───────────────────────────
 
 

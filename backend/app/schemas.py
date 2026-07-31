@@ -128,6 +128,18 @@ class PreferencesUpdate(BaseModel):
     notes: str | None = Field(default=None, max_length=2000)
 
 
+class NormalizationRuleCreate(BaseModel):
+    """Una regola di normalizzazione dei nomi.
+
+    `kind = "noise"`: `term` è una parola da togliere dal nome ("a filetti").
+    `kind = "alias"`: il nome intero `term` diventa `replacement` ("tortiglioni" → "pasta").
+    """
+
+    kind: str = Field(min_length=4, max_length=5)
+    term: str = Field(min_length=2, max_length=60)
+    replacement: str | None = Field(default=None, max_length=60)
+
+
 class AiModelsUpdate(BaseModel):
     """Slug del modello per ciascun ruolo. None (o stringa vuota) = default d'ambiente."""
 

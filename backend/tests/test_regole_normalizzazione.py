@@ -71,6 +71,66 @@ def test_un_qualificatore_accorpato_non_raddoppia_il_nome(client, db):
     assert normalize_name("olive taggiasche", rules) == "olive"
 
 
+# ── Spegnere un termine di serie ───────────────────────────────────────────────
+
+
+def test_un_termine_di_serie_si_spegne_e_si_riaccende(client, db):
+    """«sedani» è un formato di pasta, ma è anche il plurale del sedano."""
+    assert normalize_name("sedani") == "pasta"
+
+    res = _regola(client, "off", "sedani")
+    assert res.status_code == 201, res.text
+    assert normalize_name("sedani", load_rules(db)) == "sedani"
+
+    # Il termine resta nel codice: quella riga era una sospensione, non una cancellazione.
+    client.delete(f"/api/config/normalization/{res.json()['rule']['id']}")
+    assert normalize_name("sedani", load_rules(db)) == "pasta"
+
+
+def test_si_spegne_anche_una_parola_ignorata(client, db):
+    assert normalize_name("passata bio") == "passata"
+
+    _regola(client, "off", "bio")
+    assert normalize_name("passata bio", load_rules(db)) == "passata bio"
+
+
+def test_spegnere_tutto_un_gruppo_non_rompe_la_regex(client, db):
+    """Con l'ultimo termine spento la sostituzione va saltata, non compilata vuota."""
+    for pesce in ("branzino", "orata", "sogliola", "merluzzo", "platessa"):
+        assert _regola(client, "off", pesce).status_code == 201
+
+    assert normalize_name("filetto di merluzzo", load_rules(db)) == "filetto di merluzzo"
+    # E il resto della normalizzazione continua a funzionare.
+    assert normalize_name("Zucchine fresche medie", load_rules(db)) == "zucchine"
+
+
+def test_un_termine_che_di_serie_non_c_e_non_si_spegne(client):
+    res = _regola(client, "off", "calamarata")
+    assert res.status_code == 400
+    assert "non è un termine di serie" in res.json()["detail"]
+
+
+def test_la_lista_dice_quali_sono_spenti(client):
+    _regola(client, "off", "sedani")
+
+    body = client.get("/api/config/normalization").json()
+    pasta = next(g for g in body["groups"] if g["target"] == "pasta")
+    sedani = next(t for t in pasta["terms"] if t["term"] == "sedani")
+    penne = next(t for t in pasta["terms"] if t["term"] == "penne")
+
+    assert sedani["disabled"] is True and sedani["rule_id"]
+    assert penne["disabled"] is False and penne["rule_id"] is None
+
+
+def test_i_termini_arrivano_con_la_forma_per_spegnerli_e_quella_da_leggere(client):
+    body = client.get("/api/config/normalization").json()
+    marchi = next(g for g in body["noise"]["builtin"] if g["label"].startswith("Marchi"))
+    cecco = next(t for t in marchi["terms"] if "cecco" in t["label"])
+
+    assert cecco["label"] == "de cecco"
+    assert cecco["term"] == r"de\s+cecco"
+
+
 # ── Quello che non si accetta ──────────────────────────────────────────────────
 
 
@@ -185,7 +245,8 @@ def test_la_lista_mette_insieme_termini_di_serie_e_aggiunti(client):
     body = client.get("/api/config/normalization").json()
     pasta = next(g for g in body["groups"] if g["target"] == "pasta")
 
-    assert "penne" in pasta["terms"] and "fusilli" in pasta["terms"]
+    di_serie = {t["term"] for t in pasta["terms"]}
+    assert "penne" in di_serie and "fusilli" in di_serie
     assert [c["term"] for c in pasta["custom"]] == ["calamarata"]
     assert [c["term"] for c in body["noise"]["custom"]] == ["a filetti"]
     # I termini di serie ci sono tutti, raggruppati come nel codice.

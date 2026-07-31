@@ -73,11 +73,13 @@ export default function NormalizationSettings() {
     }
   };
 
-  const rimuovi = async (rule) => {
+  const rimuovi = async (rule, messaggio) => {
     setBusy(true);
     try {
-      await api.deleteNormalizationRule(rule.id);
-      addToast(`«${rule.term}» non verrà più accorpato da qui in avanti`);
+      await api.deleteNormalizationRule(rule.id ?? rule.rule_id);
+      addToast(
+        messaggio || `«${rule.term}» non verrà più accorpato da qui in avanti`
+      );
       load();
     } catch (e) {
       addToast(e.message, 'error');
@@ -85,6 +87,15 @@ export default function NormalizationSettings() {
       setBusy(false);
     }
   };
+
+  // Spegnere un termine di serie non lo cancella: resta scritto nel codice e questa è
+  // una riga che lo sospende. Per questo si riaccende, e per questo passa dalla stessa
+  // anteprima delle aggiunte — spegnere "sedani" non rimette in due righe la pasta che
+  // ci si era già fusa dentro, e conviene saperlo prima.
+  const spegni = (t) => chiedi({ kind: 'off', term: t.term });
+
+  const riaccendi = (t) =>
+    rimuovi({ id: t.rule_id, term: t.label }, `«${t.label}» torna a valere`);
 
   if (failed) return <LoadError message={failed} onRetry={load} />;
   if (!data) return <div className="spinner" />;
@@ -119,6 +130,12 @@ export default function NormalizationSettings() {
           già fuse restano fuse e le quantità sommate in dispensa non si dividono. Per
           questo prima di salvare ti mostro cosa cambierebbe.
         </p>
+        <p className="field-hint">
+          I termini di serie si spengono con la crocetta e restano barrati: sono scritti
+          nel codice, quindi quella è una sospensione e si annulla con la freccia
+          accanto. Serve per i casi ambigui — «sedani» è un formato di pasta, ma è anche
+          il plurale del sedano.
+        </p>
       </div>
 
       <h3 className="settings-heading">Accorpamenti</h3>
@@ -141,6 +158,8 @@ export default function NormalizationSettings() {
             chiedi({ kind: 'alias', term, replacement: group.target })
           }
           onRemove={rimuovi}
+          onDisable={spegni}
+          onRestore={riaccendi}
         />
       ))}
 
@@ -187,45 +206,40 @@ export default function NormalizationSettings() {
         onRemove={rimuovi}
       />
 
-      <div className="card settings-section">
-        <div className="card-title">Di serie</div>
-        {data.noise.builtin.map((gruppo) => (
-          <div key={gruppo.label} className="rule-builtin-group">
-            <div className="field-label">{gruppo.label}</div>
-            <div className="tag-list" style={{ marginTop: 6 }}>
-              {gruppo.terms.map((t) => (
-                <span key={t} className="tag fixed">
-                  {t}
-                </span>
-              ))}
-            </div>
-          </div>
-        ))}
-        <p className="field-hint" style={{ marginTop: 14 }}>
-          Sono schemi, non parole: <code>fresc[ao]</code> copre fresco e fresca,{' '}
-          <code>di …</code> una parola qualsiasi.
-        </p>
-      </div>
+      {data.noise.builtin.map((gruppo) => (
+        <RuleBox
+          key={gruppo.label}
+          target={gruppo.label}
+          fixed={gruppo.terms}
+          busy={busy}
+          onDisable={spegni}
+          onRestore={riaccendi}
+        />
+      ))}
 
-      <div className="card settings-section">
-        <div className="card-title">Qualificatori legati a un alimento</div>
-        <p className="field-hint" style={{ marginBottom: 12 }}>
-          Si tolgono solo dopo quel nome: «nere» da solo non vuol dire niente, dopo
-          «olive» sì.
-        </p>
-        {data.scoped.map((s) => (
-          <div key={s.target} className="rule-builtin-group">
-            <div className="field-label">{s.target}</div>
-            <div className="tag-list" style={{ marginTop: 6 }}>
-              {s.terms.map((t) => (
-                <span key={t} className="tag fixed">
-                  {t}
-                </span>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
+      <p className="field-hint">
+        Sono schemi, non parole: <code>fresc[ao]</code> copre fresco e fresca,{' '}
+        <code>di …</code> una parola qualsiasi. Spegnerne uno non rimette in due le
+        righe che si erano già unite grazie a lui: vale da qui in avanti.
+      </p>
+
+      <h3 className="settings-heading">Qualificatori legati a un alimento</h3>
+      <p className="field-hint" style={{ marginBottom: 12 }}>
+        Si tolgono solo dopo quel nome: «nere» da solo non vuol dire niente, dopo
+        «olive» sì.
+      </p>
+
+      {data.scoped.map((s) => (
+        <RuleBox
+          key={s.target}
+          target={s.target}
+          note={s.note}
+          fixed={s.terms}
+          busy={busy}
+          onDisable={spegni}
+          onRestore={riaccendi}
+        />
+      ))}
 
       <div className="card settings-section">
         <div className="card-title">Parole che restano, di proposito</div>

@@ -41,6 +41,7 @@ from ..services.catalog import list_models
 from ..services.ingredients import (
     NormalizationRules,
     builtin_rules,
+    builtin_terms,
     get_or_create_ingredient,
     load_rules,
     merge_duplicates,
@@ -538,8 +539,16 @@ def _validate_rule(db: Session, body: NormalizationRuleCreate) -> tuple[str, str
     mese guardando una lista della spesa che non si accorpa.
     """
     kind = body.kind.strip().lower()
-    if kind not in ("noise", "alias"):
+    if kind not in ("noise", "alias", "off"):
         raise HTTPException(400, "Tipo di regola non valido")
+
+    # Spegnere un termine di serie è l'unico caso in cui il termine **non** si
+    # normalizza: è uno schema di regex (`fresc[ao]`), e va confrontato con la lista
+    # del codice esattamente com'è scritto lì.
+    if kind == "off":
+        if body.term not in builtin_terms():
+            raise HTTPException(400, f"«{body.term}» non è un termine di serie.")
+        return kind, body.term, None
 
     rules = load_rules(db)
     # Le regole già salvate valgono per pulire il termine, tranne gli accorpamenti:
@@ -588,12 +597,25 @@ def get_normalization(_admin: User = Depends(get_current_admin), db: Session = D
         .all()
     )
     builtin = builtin_rules()
+    # Quali termini di serie sono stati spenti, e con quale regola: la crocetta su un
+    # termine di serie crea una riga, e per riaccenderlo si cancella quella riga.
+    spenti = {r.term: r.id for r in rows if r.kind == "off"}
 
-    groups = [{**g, "custom": []} for g in builtin["groups"]]
+    def con_stato(terms: list[dict]) -> list[dict]:
+        return [
+            {**t, "disabled": t["term"] in spenti, "rule_id": spenti.get(t["term"])}
+            for t in terms
+        ]
+
+    groups = [
+        {**g, "terms": con_stato(g["terms"]), "custom": []} for g in builtin["groups"]
+    ]
     per_target = {g["target"]: g for g in groups}
     noise_custom = []
 
     for row in rows:
+        if row.kind == "off":
+            continue
         if row.kind == "noise":
             noise_custom.append(_serialize_rule(row))
             continue
@@ -607,8 +629,13 @@ def get_normalization(_admin: User = Depends(get_current_admin), db: Session = D
 
     return {
         "groups": groups,
-        "noise": {"builtin": builtin["noise"], "custom": noise_custom},
-        "scoped": builtin["scoped"],
+        "noise": {
+            "builtin": [
+                {**g, "terms": con_stato(g["terms"])} for g in builtin["noise"]
+            ],
+            "custom": noise_custom,
+        },
+        "scoped": [{**g, "terms": con_stato(g["terms"])} for g in builtin["scoped"]],
         "kept": builtin["kept"],
     }
 

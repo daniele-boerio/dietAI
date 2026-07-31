@@ -7,6 +7,7 @@ dispensa non ne coprirebbe nessuna. Qui si normalizza e si riusa sempre la stess
 
 import re
 from dataclasses import dataclass, field
+from functools import lru_cache
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -69,11 +70,6 @@ _NOISE_GROUPS = {
     ),
 }
 
-_NOISE = re.compile(
-    r"\b(" + "|".join(t for gruppo in _NOISE_GROUPS.values() for t in gruppo) + r")\b",
-    re.IGNORECASE,
-)
-
 # Formati di pasta da normalizzare a "pasta": penne o fusilli sono lo stesso pacco
 # per la spesa e lo stesso alimento per la dieta.
 #
@@ -88,22 +84,12 @@ _PASTA_NAMES = (
     "maltagliati", "casarecce", "orecchiette", "rotelle", "conchiglie", "tubetti",
     "ditalini",
 )
-_PASTA_TYPES = re.compile(r"\b(" + "|".join(_PASTA_NAMES) + r")\b", re.IGNORECASE)
 
 # Tipi di pesce magro da normalizzare a "filetto di pesce magro"
 _PESCE_NAMES = ("branzino", "orata", "sogliola", "merluzzo", "platessa")
-_PESCE_MAGRO = re.compile(
-    r"\b(filetti?|filett[io])\s+di\s+(" + "|".join(_PESCE_NAMES) + r")\b"
-    r"|\b(" + "|".join(_PESCE_NAMES) + r")\b",
-    re.IGNORECASE,
-)
 
 # Gamberi: togliere qualificatori geografici e conservare solo "gamberi"
 _GAMBERI_QUALIFIERS = ("indopacifici?", "rossi?", "bianchi?", r"di\s+\w+")
-_GAMBERI = re.compile(
-    r"\bgamberi\s+(" + "|".join(_GAMBERI_QUALIFIERS) + r")\b",
-    re.IGNORECASE,
-)
 
 # I formaggi da grattugia stanno tutti sulla riga "formaggio", che è come li chiama la
 # dieta: sulla pasta ci va quello che c'è in casa. Si confronta il **nome intero**, non
@@ -122,11 +108,8 @@ _DA_GRATTUGIA = {
 _OLIVE_QUALIFIERS = (
     "taggiasche", "nere", "verdi", "denocciolate", "snocciolate", r"di\s+\w+",
 )
-_OLIVE = re.compile(
-    r"\bolive\s+(" + "|".join(_OLIVE_QUALIFIERS) + r")\b"
-    r"|\b(taggiasche|nere|verdi)\s+olive\b",
-    re.IGNORECASE,
-)
+# I tre che si dicono anche prima del nome ("olive nere" ma anche "nere olive").
+_OLIVE_PREFISSI = ("taggiasche", "nere", "verdi")
 
 # Quello che sta fra parentesi è sempre una glossa, mai l'alimento: "pasta corta
 # (penne)", "legumi (ceci o fagioli)". Si toglie prima dei qualificatori, o resterebbe
@@ -148,20 +131,81 @@ def _tidy(n: str) -> str:
     return _DANGLING.sub("", n).strip(" -,.")
 
 
-def _builtin_normalize(name: str) -> str:
+def _alt(terms: tuple[str, ...]) -> str | None:
+    """L'alternanza `a|b|c`, o niente se non è rimasto nessun termine acceso."""
+    return "|".join(terms) or None
+
+
+@dataclass(frozen=True)
+class _Builtin:
+    """Le regex di serie, già filtrate dei termini spenti dall'utente."""
+
+    noise: re.Pattern | None
+    pasta: re.Pattern | None
+    pesce: re.Pattern | None
+    gamberi: re.Pattern | None
+    olive: re.Pattern | None
+    grattugia: frozenset
+
+
+@lru_cache(maxsize=32)
+def _builtin(spenti: frozenset) -> _Builtin:
+    """Compila le regole di serie senza i termini disattivati.
+
+    In cache perché l'insieme dei termini spenti cambia una volta ogni mai, mentre
+    normalizzare succede cento volte per generazione. Con l'insieme vuoto — il caso
+    normale — escono esattamente le regex di prima.
+    """
+    tieni = lambda terms: tuple(t for t in terms if t not in spenti)  # noqa: E731
+
+    rumore = _alt(tuple(t for g in _NOISE_GROUPS.values() for t in g if t not in spenti))
+    pasta = _alt(tieni(_PASTA_NAMES))
+    pesce = _alt(tieni(_PESCE_NAMES))
+    gamberi = _alt(tieni(_GAMBERI_QUALIFIERS))
+    olive = _alt(tieni(_OLIVE_QUALIFIERS))
+    olive_prefissi = _alt(tieni(_OLIVE_PREFISSI))
+
+    compila = lambda p: re.compile(p, re.IGNORECASE)  # noqa: E731
+    return _Builtin(
+        noise=compila(rf"\b({rumore})\b") if rumore else None,
+        pasta=compila(rf"\b({pasta})\b") if pasta else None,
+        pesce=compila(
+            rf"\b(filetti?|filett[io])\s+di\s+({pesce})\b|\b({pesce})\b"
+        )
+        if pesce
+        else None,
+        gamberi=compila(rf"\bgamberi\s+({gamberi})\b") if gamberi else None,
+        olive=compila(
+            rf"\bolive\s+({olive})\b"
+            + (rf"|\b({olive_prefissi})\s+olive\b" if olive_prefissi else "")
+        )
+        if olive
+        else None,
+        grattugia=frozenset(t for t in _DA_GRATTUGIA if t not in spenti),
+    )
+
+
+def _builtin_normalize(name: str, spenti: frozenset = frozenset()) -> str:
+    regole = _builtin(spenti)
+
     n = _PARENTESI.sub(" ", (name or "").strip().lower())
-    n = _PASTA_TYPES.sub("pasta", n)
-    n = _PESCE_MAGRO.sub("filetto di pesce magro", n)
-    n = _GAMBERI.sub("gamberi", n)
-    n = _OLIVE.sub("olive", n)
-    n = _NOISE.sub(" ", n)
+    if regole.pasta:
+        n = regole.pasta.sub("pasta", n)
+    if regole.pesce:
+        n = regole.pesce.sub("filetto di pesce magro", n)
+    if regole.gamberi:
+        n = regole.gamberi.sub("gamberi", n)
+    if regole.olive:
+        n = regole.olive.sub("olive", n)
+    if regole.noise:
+        n = regole.noise.sub(" ", n)
     n = re.sub(r"[\s,;]+", " ", n).strip(" -,.")
     n = _PASTA_INTEGRALE.sub("pasta", n)
     n = _DANGLING.sub("", n).strip(" -,.")
 
     # "Formaggio grattugiato" ci arriva già così: `grattugiato` è un taglio, l'ha tolto
     # il rumore qui sopra.
-    if n in _DA_GRATTUGIA or n == "formaggio":
+    if n in regole.grattugia or n == "formaggio":
         return "formaggio"
     return n
 
@@ -182,11 +226,16 @@ class NormalizationRules:
 
     noise: tuple[str, ...] = ()
     aliases: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    # Termini di serie spenti a mano: restano scritti nel codice — sono la base su cui
+    # poggiano il catalogo e i test — ma smettono di valere. È il modo di togliere
+    # "sedani" da pasta (che è anche il plurale del sedano) senza un deploy, e di
+    # rimetterlo cancellando la regola.
+    disabled: frozenset = frozenset()
 
     def __bool__(self) -> bool:
         """Senza regole aggiunte non si tocca niente: la normalizzazione resta quella
         di serie, byte per byte."""
-        return bool(self.noise or self.aliases)
+        return bool(self.noise or self.aliases or self.disabled)
 
     def apply(self, n: str) -> str:
         # Prima gli accorpamenti, poi le parole da ignorare: è lo stesso ordine delle
@@ -212,12 +261,18 @@ class NormalizationRules:
 
     def plus(self, kind: str, term: str, replacement: str | None) -> "NormalizationRules":
         """Le stesse regole più una, senza salvarla: serve all'anteprima."""
+        if kind == "off":
+            return NormalizationRules(
+                self.noise, dict(self.aliases), self.disabled | {term}
+            )
         if kind == "noise":
-            return NormalizationRules(self.noise + (term,), dict(self.aliases))
+            return NormalizationRules(
+                self.noise + (term,), dict(self.aliases), self.disabled
+            )
         target = replacement or term
         aliases = dict(self.aliases)
         aliases[target] = aliases.get(target, ()) + (term,)
-        return NormalizationRules(self.noise, aliases)
+        return NormalizationRules(self.noise, aliases, self.disabled)
 
 
 NO_RULES = NormalizationRules()
@@ -240,6 +295,7 @@ def load_rules(db: Session) -> NormalizationRules:
     return NormalizationRules(
         noise=tuple(r.term for r in rows if r.kind == "noise"),
         aliases=aliases,
+        disabled=frozenset(r.term for r in rows if r.kind == "off"),
     )
 
 
@@ -258,7 +314,7 @@ def normalize_name(name: str, rules: NormalizationRules | None = None) -> str:
     che chiamano questa funzione in modo diverso creerebbero due righe di anagrafica per
     lo stesso alimento — che è esattamente il problema che questo file risolve.
     """
-    n = _builtin_normalize(name)
+    n = _builtin_normalize(name, rules.disabled if rules else frozenset())
     if rules:
         n = rules.apply(n)
     return n[:120]
@@ -319,26 +375,48 @@ def _readable(term: str) -> str:
 # dalle stesse tuple che compilano le regex — una lista scritta a parte per la UI si
 # allontanerebbe dal codice al primo termine aggiunto, e sarebbe una bugia detta
 # proprio nella pagina che si apre per capire perché due ingredienti stanno insieme.
+def _term(raw: str) -> dict:
+    """Il termine come lo applica il codice e come si legge a schermo.
+
+    Servono tutti e due: a schermo si mostra «de cecco», ma per spegnerlo bisogna
+    rimandare indietro `de\\s+cecco`, che è la chiave con cui il termine sta scritto
+    nella regex.
+    """
+    return {"term": raw, "label": _readable(raw)}
+
+
 def builtin_groups() -> list[dict]:
     return [
         {
             "target": "pasta",
-            "terms": sorted(_PASTA_NAMES),
+            "terms": [_term(t) for t in sorted(_PASTA_NAMES)],
             "note": "Solo pasta: riso, cous cous, farro e orzo sono altri alimenti, con "
             "altri macro e un altro scaffale. Fuori anche pasta ripiena e gnocchi.",
         },
         {
             "target": "filetto di pesce magro",
-            "terms": sorted(_PESCE_NAMES),
+            "terms": [_term(t) for t in sorted(_PESCE_NAMES)],
             "note": "Valgono con o senza «filetto di» davanti.",
         },
         {
             "target": "formaggio",
-            "terms": sorted(_DA_GRATTUGIA),
+            "terms": [_term(t) for t in sorted(_DA_GRATTUGIA)],
             "note": "Confrontati per nome intero: sulla pasta ci va quello che c'è in "
             "casa. «Formaggio spalmabile» resta un altro alimento.",
         },
     ]
+
+
+def builtin_terms() -> set[str]:
+    """Tutti i termini di serie che si possono spegnere, nella forma con cui si spengono."""
+    return (
+        {t for gruppo in _NOISE_GROUPS.values() for t in gruppo}
+        | set(_PASTA_NAMES)
+        | set(_PESCE_NAMES)
+        | set(_DA_GRATTUGIA)
+        | set(_GAMBERI_QUALIFIERS)
+        | set(_OLIVE_QUALIFIERS)
+    )
 
 
 def builtin_rules() -> dict:
@@ -346,7 +424,7 @@ def builtin_rules() -> dict:
     return {
         "groups": builtin_groups(),
         "noise": [
-            {"label": label, "terms": [_readable(t) for t in terms]}
+            {"label": label, "terms": [_term(t) for t in terms]}
             for label, terms in _NOISE_GROUPS.items()
         ],
         # Due casi che non sono né accorpamenti né rumore: un qualificatore che si
@@ -355,12 +433,12 @@ def builtin_rules() -> dict:
         "scoped": [
             {
                 "target": "gamberi",
-                "terms": [_readable(t) for t in _GAMBERI_QUALIFIERS],
+                "terms": [_term(t) for t in _GAMBERI_QUALIFIERS],
                 "note": "Tolti quando seguono «gamberi».",
             },
             {
                 "target": "olive",
-                "terms": [_readable(t) for t in _OLIVE_QUALIFIERS],
+                "terms": [_term(t) for t in _OLIVE_QUALIFIERS],
                 "note": "Tolti quando seguono «olive».",
             },
         ],

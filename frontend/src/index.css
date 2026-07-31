@@ -2561,6 +2561,19 @@ textarea:focus {
   font-weight: 600;
 }
 
+/* Un termine di serie spento: barrato e sbiadito, non sparito. Toglierlo dall'elenco
+   nasconderebbe che quella regola esiste ancora nel codice e che si può riaccendere —
+   e fra sei mesi si riaggiungerebbe a mano una cosa che basta ripristinare. */
+.tag.fixed.off {
+  text-decoration: line-through;
+  opacity: 0.55;
+  padding-right: 8px;
+}
+
+.tag.fixed.off button:hover {
+  color: var(--accent);
+}
+
 .rule-builtin-group + .rule-builtin-group {
   margin-top: 14px;
 }

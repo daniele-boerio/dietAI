@@ -203,6 +203,10 @@ class NormalizationRule(Base):
 
     `kind = "noise"` → `term` è una parola da togliere dal nome.
     `kind = "alias"` → il nome **intero** `term` diventa `replacement`.
+    `kind = "off"`   → un termine **di serie** che smette di valere. Resta scritto nel
+    codice (ci poggiano il catalogo dei prezzi e i test): questa riga lo spegne, e
+    cancellarla lo riaccende. È così che si toglie "sedani" da pasta senza un deploy —
+    è un formato, ma è anche il plurale del sedano.
     """
 
     __tablename__ = "normalization_rules"
@@ -218,7 +222,7 @@ class NormalizationRule(Base):
 
     __table_args__ = (
         UniqueConstraint("kind", "term", name="uq_normalization_rule"),
-        CheckConstraint("kind IN ('noise','alias')", name="ck_normalization_kind"),
+        CheckConstraint("kind IN ('noise','alias','off')", name="ck_normalization_kind"),
         CheckConstraint(
             "kind <> 'alias' OR replacement IS NOT NULL",
             name="ck_normalization_alias_target",

@@ -401,10 +401,18 @@ nessuna ricetta userà mai, ricreata a ogni avvio del container.
 
 **Le stesse regole si allargano dalle Impostazioni**, senza deploy (Impostazioni →
 Nomi e accorpamenti, solo amministratore: l'anagrafica è una sola per tutti).
-`NormalizationRule` tiene le aggiunte — `kind='alias'` è un termine che finisce su un
-nome normalizzato, `kind='noise'` una parola da togliere — e `load_rules(db)` le
-compila nella stessa forma di quelle di serie: una sostituzione con regex su parola
-intera. Si applicano **dopo** le regole del codice, che restano la base su cui si
+`NormalizationRule` tiene le modifiche — `kind='alias'` è un termine che finisce su un
+nome normalizzato, `kind='noise'` una parola da togliere, `kind='off'` **spegne un
+termine di serie** — e `load_rules(db)` le compila nella stessa forma di quelle di
+serie: una sostituzione con regex su parola intera. I termini di serie restano scritti
+nel codice anche da spenti, perché `kind='off'` è una sospensione e non una
+cancellazione: `_builtin(spenti)` ricompila le regex senza quei termini (in `lru_cache`,
+perché l'insieme cambia una volta ogni mai e normalizzare succede cento volte per
+generazione) e togliendo la riga tutto torna com'era. Serve per i termini ambigui —
+"sedani" è un formato di pasta ma è anche il plurale del sedano — e per questo la UI li
+mostra barrati invece di farli sparire: nascosti, fra sei mesi si riscriverebbero a mano.
+Se si spegne l'ultimo termine di un gruppo la sostituzione viene **saltata**, non
+compilata vuota (`\b()\b` matcha ovunque). Si applicano **dopo** le regole del codice, che restano la base su cui si
 reggono il catalogo dei prezzi e mezza suite di test; per questo un termine si salva
 già normalizzato ("pasta rigate", non "penne rigate") e chi ne aggiunge uno inutile si
 sente rispondere perché. Senza regole aggiunte `NormalizationRules` è falsa e la

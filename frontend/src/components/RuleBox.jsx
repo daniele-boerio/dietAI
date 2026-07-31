@@ -1,14 +1,15 @@
 import { useState } from 'react';
-import { Plus, X } from 'lucide-react';
+import { Plus, RotateCcw, X } from 'lucide-react';
 
 // Un gruppo di normalizzazione: il nome normalizzato in testa e, dentro, tutti i
 // termini che ci finiscono sopra.
 //
 // I termini di serie e quelli aggiunti a mano stanno nella **stessa** scatola, perché
-// fanno la stessa identica cosa — cambia solo che i primi non si tolgono da qui. La
-// differenza si vede senza doverla leggere: quelli aggiunti hanno la crocetta, gli
-// altri no. Tenerli in due elenchi separati avrebbe costretto a guardare in due punti
-// per sapere se "tortiglioni" c'è già.
+// fanno la stessa identica cosa: tenerli in due elenchi avrebbe costretto a guardare in
+// due punti per sapere se "tortiglioni" c'è già. Si tolgono tutti, ma in due modi
+// diversi — quelli tuoi spariscono, quelli di serie restano barrati con accanto il
+// modo di riaccenderli, perché sono scritti nel codice e la loro è una sospensione,
+// non una cancellazione.
 export default function RuleBox({
   target,
   note,
@@ -18,6 +19,8 @@ export default function RuleBox({
   busy = false,
   onAdd,
   onRemove,
+  onDisable,
+  onRestore,
   onRemoveGroup,
 }) {
   const [draft, setDraft] = useState('');
@@ -47,9 +50,36 @@ export default function RuleBox({
       {note && <p className="field-hint">{note}</p>}
 
       <div className="tag-list">
-        {fixed.map((term) => (
-          <span key={`f-${term}`} className="tag fixed" title="Regola di serie">
-            {term}
+        {fixed.map((t) => (
+          <span
+            key={`f-${t.term}`}
+            className={`tag fixed ${t.disabled ? 'off' : ''}`}
+            title={
+              t.disabled
+                ? 'Spento da te: non vale più. Premi per riaccenderlo.'
+                : `Regola di serie (${t.term})`
+            }
+          >
+            {t.label}
+            {t.disabled ? (
+              <button
+                title="Riaccendi questo termine"
+                disabled={busy}
+                onClick={() => onRestore(t)}
+              >
+                <RotateCcw size={12} />
+              </button>
+            ) : (
+              onDisable && (
+                <button
+                  title="Spegni questo termine di serie"
+                  disabled={busy}
+                  onClick={() => onDisable(t)}
+                >
+                  <X size={13} />
+                </button>
+              )
+            )}
           </span>
         ))}
         {custom.map((rule) => (
@@ -69,6 +99,10 @@ export default function RuleBox({
         )}
       </div>
 
+      {/* Senza `onAdd` la scatola è di sola consultazione (le famiglie di parole
+          ignorate, i qualificatori): niente campo, o si aprirebbe la porta su una
+          stanza che non c'è. */}
+      {onAdd && (
       <div className="inline-form" style={{ marginTop: 12 }}>
         <input
           type="text"
@@ -91,6 +125,7 @@ export default function RuleBox({
           <Plus size={15} /> Aggiungi
         </button>
       </div>
+      )}
     </div>
   );
 }

@@ -80,14 +80,17 @@ def main() -> int:
 
     db = SessionLocal()
     try:
-        user = reset_password(db, args.password, args.email)
+        # Dentro la sessione: dopo la commit gli attributi sono scaduti e dopo la
+        # close l'istanza è staccata, quindi leggere `user.email` più in basso
+        # solleverebbe DetachedInstanceError con la password ormai già cambiata.
+        email = reset_password(db, args.password, args.email).email
     except ValueError as exc:
         logger.error("%s", exc)
         return 1
     finally:
         db.close()
 
-    logger.info("Password di %s aggiornata.", user.email)
+    logger.info("Password di %s aggiornata.", email)
     logger.info("Tutte le sessioni aperte sono state revocate.")
     return 0
 

@@ -9,6 +9,8 @@ scomputato dalla prossima lista della spesa.
 
 import pytest
 
+from tests.conftest import TEST_EMAIL
+
 
 @pytest.fixture()
 def riga(client):
@@ -405,12 +407,15 @@ def test_a_spesa_fatta_la_riga_sparisce_dalla_lista(client, settimana):
     assert scorta(client, "pasta")["quantity"] == pytest.approx(700)
 
 
-def test_la_quantita_di_un_altro_utente_non_si_tocca(client, settimana, db):
+def test_la_quantita_di_un_altro_utente_non_si_tocca(client, guest_client, settimana, db):
     """La proprietà si verifica risalendo articolo → lista → settimana → utente."""
-    from app.models import ShoppingListItem, WeekPlan
+    from app.models import ShoppingListItem, User, WeekPlan
 
     pasta = voce(client, "pasta")  # la lista nasce da questa lettura
-    db.query(WeekPlan).update({WeekPlan.user_id: 999})
+    # La settimana passa a un utente **vero**: un id inventato non basta più, adesso
+    # che i test fanno rispettare le foreign key come Postgres.
+    altro = db.query(User).filter(User.email != TEST_EMAIL).first()
+    db.query(WeekPlan).update({WeekPlan.user_id: altro.id})
     db.commit()
 
     res = client.put(f"/api/shopping/items/{pasta['id']}/quantity", json={"quantity": 500})

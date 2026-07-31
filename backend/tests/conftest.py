@@ -17,7 +17,7 @@ os.environ.setdefault("ENCRYPTION_KEY", Fernet.generate_key().decode())
 os.environ.setdefault("COOKIE_SECURE", "false")
 
 from fastapi.testclient import TestClient  # noqa: E402
-from sqlalchemy import create_engine  # noqa: E402
+from sqlalchemy import create_engine, event  # noqa: E402
 from sqlalchemy.orm import sessionmaker  # noqa: E402
 from sqlalchemy.pool import StaticPool  # noqa: E402
 
@@ -61,6 +61,19 @@ def db():
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+
+    # SQLite ignora le foreign key se non gliele si accende a ogni connessione, e
+    # `ondelete="CASCADE"` diventa carta straccia: cancellando un utente le sue
+    # ricette resterebbero lì, orfane, e il test direbbe che va tutto bene mentre in
+    # produzione (Postgres, che le fa rispettare) succede il contrario. Dove i dati
+    # spariscono per davvero — cancellare un account — è la differenza fra provare
+    # qualcosa e provare niente.
+    @event.listens_for(engine, "connect")
+    def _accendi_le_foreign_key(dbapi_connection, _record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine, autocommit=False, autoflush=False)
     session = Session()

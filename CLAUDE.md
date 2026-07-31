@@ -56,6 +56,7 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
 │       ├── seed.py             # `python -m app.seed`: amministratore + anagrafica ingredienti
 │       ├── reset_password.py   # `python -m app.reset_password '...'`: unica via di rientro
 │       ├── make_admin.py       # `python -m app.make_admin`: rialza il flag di amministratore
+│       ├── delete_user.py      # `python -m app.delete_user --email ...`: cancella un account
 │       ├── merge_ingredients.py # `python -m app.merge_ingredients`: fonde i doppioni di anagrafica
 │       ├── routers/            # auth, admin, diet, config, planning, recipes, chat, shopping, tracking
 │       ├── services/
@@ -120,7 +121,11 @@ solo le funzioni AI — l'app resta in piedi, i dati non si toccano, ed è il fr
 bolletta di chi mette la chiave. Cancellare un account porta via tutto (FK in
 CASCADE): è proprio il motivo per cui esiste la sospensione. L'amministratore non si
 sospende, non si cancella e non si resetta da solo (`_target` in `routers/admin.py`):
-da lì si tornerebbe soltanto con `python -m app.reset_password` dal container.
+da lì si tornerebbe soltanto con `python -m app.reset_password` dal container. Un
+**altro** amministratore il pannello non lo tocca affatto, e per quello c'è
+`python -m app.delete_user --email ...`: senza `--yes` stampa solo l'inventario di cosa
+sparirebbe, e si rifiuta di lasciare l'app senza amministratori o di cancellare
+l'utente di `SEED_USER_EMAIL`, che il seed ricreerebbe al riavvio successivo.
 
 Quello che **non** è per-utente è l'anagrafica ingredienti (`Ingredient`): è un
 dizionario di nomi, reparti e prezzi al kg, non un dato personale. Se un utente

@@ -51,14 +51,18 @@ def main() -> int:
 
     db = SessionLocal()
     try:
-        user = make_admin(db, args.email)
+        # L'email si legge **dentro** la sessione. Dopo la commit gli attributi sono
+        # scaduti e dopo la close l'istanza è staccata: leggerla più in basso
+        # solleverebbe DetachedInstanceError a lavoro già fatto, cioè un traceback
+        # che fa credere fallito un comando riuscito.
+        email = make_admin(db, args.email).email
     except ValueError as exc:
         logger.error("%s", exc)
         return 1
     finally:
         db.close()
 
-    logger.info("%s è amministratore.", user.email)
+    logger.info("%s è amministratore.", email)
     logger.info("Ricarica la pagina: il profilo si rilegge a ogni caricamento.")
     return 0
 

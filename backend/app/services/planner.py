@@ -283,6 +283,55 @@ def clear_generation_progress(db: Session, week: WeekPlan) -> None:
     )
 
 
+def generation_error(week: WeekPlan) -> str | None:
+    """Perché l'ultima generazione non è arrivata in fondo, se è andata male.
+
+    Sta nella stessa colonna del diario, che a generazione ferma è libera: sono due
+    facce della stessa domanda ("cosa sta succedendo / cos'è successo") e tenerle
+    separate avrebbe voluto dire una colonna in più per un dato che vive quanto l'altro.
+    """
+    if is_generating(week):
+        return None
+    return (week.generation_progress or {}).get("error")
+
+
+def record_generation_failure(db: Session, week: WeekPlan, reason: str) -> None:
+    """Scrive sulla settimana perché la generazione è fallita, e sblocca la settimana.
+
+    Serve perché la risposta HTTP quasi mai arriva a destinazione: una generazione dura
+    minuti e la richiesta muore molto prima, tagliata dal proxy che sta davanti (nginx
+    a 300s, Cloudflare a 100s). Il messaggio d'errore finiva così in una risposta che
+    nessuno leggeva, e da fuori restava solo una settimana vuota senza spiegazioni —
+    mentre il frontend, che segue il polling e non la risposta, annunciava pure
+    "Settimana pronta ✓". Il motivo resta scritto qui finché non si riprova.
+
+    Il rollback prima di scrivere è deliberato: una generazione interrotta a metà non
+    si salva (le ricette già create senza il resto del piano sarebbero peggio di
+    niente), l'errore sì.
+    """
+    db.rollback()
+    payload = {"error": reason, "failed_at": datetime.now(timezone.utc).isoformat()}
+    week.generation_started_at = None
+    week.generation_progress = payload
+    # Come sopra: il diario lo scrive un'altra sessione, quindi la UPDATE va esplicita.
+    db.query(WeekPlan).filter(WeekPlan.id == week.id).update(
+        {WeekPlan.generation_started_at: None, WeekPlan.generation_progress: payload},
+        synchronize_session=False,
+    )
+    db.commit()
+
+
+def _failure_reason(exc: BaseException) -> str:
+    """Il messaggio da mostrare all'utente per un'eccezione della generazione.
+
+    Gli `AIError` sono già scritti per essere letti da lui (dicono anche cosa fare);
+    per tutto il resto si tiene il tipo, che a quel punto è l'informazione utile.
+    """
+    if isinstance(exc, HTTPException):
+        return str(exc.detail)
+    return f"{type(exc).__name__}: {exc}".strip()
+
+
 def ensure_not_generating(week: WeekPlan) -> None:
     """Una generazione alla volta per settimana.
 
@@ -766,6 +815,9 @@ def serialize_week(db: Session, week: WeekPlan) -> dict:
         # La UI ci si aggancia per rimettere il loader quando si torna sulla pagina
         # a generazione avviata.
         "is_generating": is_generating(week),
+        # E qui trova com'è finita, se è finita male: la risposta alla POST che
+        # l'avrebbe detto è quasi sempre già stata buttata via da un proxy.
+        "generation_error": generation_error(week),
         "meals_total": total_slots,
         "meals_filled": filled,
         "meals_self_managed": self_managed,
@@ -879,14 +931,29 @@ def generate_week(
             thinking=True,
             on_progress=progress,
         )
-    except Exception:
-        # Anche se va male la settimana deve tornare generabile, altrimenti resta
-        # bloccata su "sto generando" fino allo scadere del timeout.
-        week.generation_started_at = None
-        clear_generation_progress(db, week)
-        db.commit()
+        # Anche l'applicazione della risposta sta dentro il try: una risposta parsabile
+        # ma di forma sbagliata sollevava fuori di qui, e lasciava la settimana
+        # bloccata su "sto generando" fino allo scadere del quarto d'ora.
+        return _apply_generated_week(db, user, week, data, to_fill)
+    except Exception as exc:
+        # Il log è l'unico posto dove questo messaggio arriva per davvero: la risposta
+        # HTTP viene scritta su una connessione che il proxy ha chiuso da minuti, e
+        # senza questa riga una generazione fallita non lasciava alcuna traccia.
+        logger.exception("Generazione fallita per la settimana %s", week.id)
+        # Sblocca la settimana — altrimenti resta ferma fino al timeout — e ricorda
+        # perché, per chi la sta guardando dal polling.
+        record_generation_failure(db, week, _failure_reason(exc))
         raise
 
+
+def _apply_generated_week(
+    db: Session,
+    user: User,
+    week: WeekPlan,
+    data: dict | list,
+    to_fill: list[tuple[DayPlan, PlannedMeal, MealSlot]],
+) -> dict:
+    """Scrive nel piano le ricette uscite dal modello."""
     if not isinstance(data, dict) or not isinstance(data.get("days"), list):
         raise AIError("Claude ha restituito un piano in un formato inatteso.")
 
@@ -921,7 +988,8 @@ def generate_week(
     clear_generation_progress(db, week)
 
     if filled == 0:
-        db.commit()
+        # Niente commit: a rimettere in ordine la settimana — sbloccarla e segnare
+        # perché — ci pensa chi cattura, che è anche l'unico a saperlo dire all'utente.
         raise AIError("Il modello non ha prodotto nessuna ricetta utilizzabile. Riprova.")
 
     if week.status == "draft" and week.week_start_date == current_week_start():

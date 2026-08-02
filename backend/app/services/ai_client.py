@@ -361,6 +361,18 @@ class _OpenAICompatibleBackend:
         except openai.APIStatusError as exc:
             logger.warning("Errore API %s: %s", exc.status_code, exc.message)
             raise AIError(f"Errore dal fornitore ({exc.status_code}). Riprova.")
+        except openai.APIError as exc:
+            # Errore arrivato DENTRO lo stream, a intestazioni già mandate: OpenRouter
+            # lo scrive come un evento nel corpo della risposta quando il fornitore a
+            # valle si pianta, e l'SDK lo rilancia come APIError puro — che non è né uno
+            # status error né un errore di connessione. Senza questo ramo usciva di qui
+            # come eccezione non gestita, cioè come 500 con traceback al posto di un
+            # messaggio leggibile, ed è il caso più probabile su una generazione lunga.
+            logger.warning("Stream interrotto dal fornitore: %s", _provider_message(exc))
+            raise AIError(
+                f"Il fornitore ha interrotto la risposta del modello '{model}': "
+                f"{_provider_message(exc)}"
+            )
 
 
 # ── Client ─────────────────────────────────────────────────────────────────────

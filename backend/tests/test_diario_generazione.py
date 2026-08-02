@@ -191,7 +191,15 @@ def test_finita_la_generazione_non_resta_niente_appeso(
     assert _week(db).generation_progress is None
 
 
-def test_una_generazione_fallita_non_lascia_il_diario(client, diet, db, monkeypatch, api_key):
+def test_una_generazione_fallita_lascia_il_motivo_al_posto_del_diario(
+    client, diet, db, monkeypatch, api_key
+):
+    """Il ragionamento lasciato a metà non serve più a nessuno; il perché sì.
+
+    E questa riga è l'unico posto dove quel messaggio sopravvive: la risposta della POST
+    viaggia su una connessione che il proxy ha chiuso da minuti.
+    """
+
     class ModelloRotto(FakeModel):
         def generate_json(self, system, prompt, **kwargs):
             raise ai_client.AIError("il fornitore è esploso")
@@ -203,4 +211,5 @@ def test_una_generazione_fallita_non_lascia_il_diario(client, diet, db, monkeypa
 
     riga = _week(db)
     assert riga.generation_started_at is None
-    assert riga.generation_progress is None
+    assert riga.generation_progress.get("reasoning") is None
+    assert "esploso" in riga.generation_progress["error"]

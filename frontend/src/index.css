@@ -609,6 +609,20 @@ textarea {
   color: var(--accent);
 }
 
+/* L'ultima generazione è fallita. Resta finché non se ne prova un'altra, e non è
+   pignoleria: il toast dura tre secondi e quasi nessuno è davanti allo schermo quando
+   arriva — una generazione dura minuti, e la risposta della richiesta che l'avrebbe
+   detto è già stata tagliata dal proxy da un pezzo. */
+.notice-error {
+  background: var(--danger-soft);
+  border-color: transparent;
+  color: var(--danger);
+}
+
+.notice-error strong {
+  color: var(--danger);
+}
+
 /* ── Barre macro ───────────────────────────────────────────────── */
 
 .macro-bar {

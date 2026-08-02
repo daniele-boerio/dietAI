@@ -104,3 +104,70 @@ def test_se_il_modello_fallisce_lo_stato_viene_ripulito(client, diet, db, monkey
     assert _week(db).generation_started_at is None
     # E infatti si può riprovare subito.
     assert client.get("/api/planning/weeks/current").json()["is_generating"] is False
+
+
+# ── Com'è finita ───────────────────────────────────────────────────────────────
+#
+# Una generazione dura minuti e la risposta della POST non arriva quasi mai a
+# destinazione: davanti c'è un proxy che chiude molto prima (nginx a 300s, Cloudflare a
+# 100s) e a quel punto il messaggio d'errore viene scritto su una connessione morta.
+# Chi guarda vede solo il polling, e "non sta più generando" da solo non distingue una
+# settimana riuscita da una fallita: annunciava "Settimana pronta ✓" in tutti e due i
+# casi. L'esito deve quindi restare sulla settimana, come lo stato di prima.
+
+
+def _fallisci(monkeypatch, messaggio="il fornitore è esploso"):
+    class ModelloRotto(FakeModel):
+        def generate_json(self, system, prompt, **kwargs):
+            raise AIError(messaggio)
+
+    monkeypatch.setattr(planner, "get_client", lambda db_, user, role: ModelloRotto(user))
+
+
+def test_il_motivo_del_fallimento_resta_sulla_settimana(client, diet, monkeypatch, api_key):
+    _fallisci(monkeypatch, "il modello ha esaurito i token")
+    week = client.get("/api/planning/weeks/current").json()
+
+    client.post(f"/api/planning/weeks/{week['id']}/generate")
+
+    dopo = client.get("/api/planning/weeks/current").json()
+    assert dopo["is_generating"] is False
+    assert "esaurito i token" in dopo["generation_error"]
+    # Anche da qui: è l'endpoint che la pagina interroga mentre aspetta.
+    progresso = client.get(f"/api/planning/weeks/{week['id']}/progress").json()
+    assert "esaurito i token" in progresso["error"]
+
+
+def test_una_risposta_di_forma_sbagliata_non_blocca_la_settimana(
+    client, diet, db, monkeypatch, api_key
+):
+    """JSON valido ma senza `days`: sollevava fuori dal try, e la settimana restava
+    ferma su "sto generando" per un quarto d'ora senza che nessuno lo sapesse."""
+
+    class ModelloConfuso(FakeModel):
+        def generate_json(self, system, prompt, **kwargs):
+            return {"giorni": []}
+
+    monkeypatch.setattr(planner, "get_client", lambda db_, user, role: ModelloConfuso(user))
+
+    week = client.get("/api/planning/weeks/current").json()
+    res = client.post(f"/api/planning/weeks/{week['id']}/generate")
+
+    assert res.status_code == 502
+    assert _week(db).generation_started_at is None
+    assert client.get("/api/planning/weeks/current").json()["generation_error"]
+
+
+def test_una_generazione_riuscita_cancella_l_errore_di_prima(
+    client, diet, monkeypatch, api_key
+):
+    """L'errore racconta l'ultimo tentativo, non è una macchia sulla settimana."""
+    _fallisci(monkeypatch)
+    week = client.get("/api/planning/weeks/current").json()
+    client.post(f"/api/planning/weeks/{week['id']}/generate")
+    assert client.get("/api/planning/weeks/current").json()["generation_error"]
+
+    monkeypatch.setattr(planner, "get_client", lambda db_, user, role: FakeModel(user))
+    assert client.post(f"/api/planning/weeks/{week['id']}/generate").status_code == 200
+
+    assert client.get("/api/planning/weeks/current").json()["generation_error"] is None

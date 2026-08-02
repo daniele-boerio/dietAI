@@ -15,6 +15,7 @@ from ..services.planner import (
     current_week_start,
     ensure_not_skipped,
     generate_week,
+    generation_error,
     get_or_create_week,
     is_generating,
     monday_of,
@@ -126,6 +127,7 @@ def get_week_by_date(
                 "is_current": False,
                 "is_past": True,
                 "is_generating": False,
+                "generation_error": None,
                 "meals_total": 0,
                 "meals_filled": 0,
                 "meals_self_managed": 0,
@@ -168,7 +170,8 @@ def generation_progress(
     Chiamata a raffica mentre la generazione è in corso, quindi non ricostruisce
     niente: legge la riga della settimana e la restituisce. A generazione finita
     risponde con `is_generating` falso e il diario vuoto, che è il segnale per la
-    pagina di smettere di chiedere.
+    pagina di smettere di chiedere — e, se è finita male, col motivo: la risposta
+    della POST che l'avrebbe detto è quasi sempre già stata tagliata da un proxy.
     """
     week = _get_week(db, user_id, week_id)
     running = is_generating(week)
@@ -177,6 +180,7 @@ def generation_progress(
         "is_generating": running,
         "started_at": started.isoformat() if running and started else None,
         **(week.generation_progress or {} if running else {}),
+        "error": generation_error(week),
     }
 
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
+  AlertTriangle,
   Archive,
   CalendarDays,
   CalendarOff,
@@ -165,18 +166,25 @@ export default function PlanningPage() {
   // indietro o ricarichi, il lavoro prosegue. Finché il server la dà per in corso si
   // ricontrolla ogni pochi secondi, e al termine si avvisa — anche se il pulsante
   // l'aveva premuto un'altra sessione.
+  //
+  // Com'è andata lo dice la settimana, non la risposta della POST: quella viaggia su
+  // una connessione che il proxy ha quasi sempre già chiuso (una generazione dura
+  // minuti). Per questo l'esito va guardato qui, e "non sta più generando" da solo non
+  // vuol dire riuscita: annunciare "Settimana pronta ✓" su un fallimento è come
+  // l'abbiamo scoperto.
   useEffect(() => {
     if (!week?.is_generating) {
       if (wasGenerating.current) {
         wasGenerating.current = false;
-        addToast('Settimana pronta ✓');
+        if (week?.generation_error) addToast(week.generation_error, 'error');
+        else addToast('Settimana pronta ✓');
       }
       return;
     }
     wasGenerating.current = true;
     const timer = setInterval(() => load({ silent: true }), 4000);
     return () => clearInterval(timer);
-  }, [week?.is_generating, load, addToast]);
+  }, [week?.is_generating, week?.generation_error, load, addToast]);
 
   const generate = async (regenerateAll = false) => {
     setGenerating(true);
@@ -191,7 +199,16 @@ export default function PlanningPage() {
           : `${filled} ricette pronte ✓`
       );
     } catch (e) {
-      addToast(e.message, 'error');
+      // La richiesta può morire molto prima della generazione: dura minuti, e davanti
+      // c'è un proxy che chiude (nginx a 300s, Cloudflare a 100s). Un errore qui non
+      // vuol dire che sia fallita — a saperlo è la settimana, non questa fetch — e
+      // dirlo lo stesso manderebbe a ripremere il pulsante, cioè a pagare due volte.
+      const dopo = await load({ silent: true });
+      if (dopo?.is_generating) {
+        addToast('Ci mette più del previsto: resto in ascolto, non serve ripremere');
+      } else {
+        addToast(dopo?.generation_error || e.message, 'error');
+      }
     } finally {
       setGenerating(false);
     }
@@ -355,6 +372,20 @@ export default function PlanningPage() {
             <strong>Settimana passata.</strong> La si legge, si segna com'è andata e si
             corregge come tutte le altre: quello che cambi qui però non entra nella
             lista della spesa, che guarda da oggi in avanti.
+          </div>
+        </div>
+      )}
+
+      {/* L'ultima generazione è fallita. Il toast se n'è andato dopo tre secondi — e
+          quasi sempre nessuno era davanti allo schermo quando è arrivato, perché una
+          generazione dura minuti — quindi il motivo resta scritto qui finché non se ne
+          prova un'altra. Senza, la settimana è solo vuota e non si sa perché. */}
+      {!busy && week.generation_error && (
+        <div className="notice notice-error">
+          <AlertTriangle />
+          <div>
+            <strong>L'ultima generazione non è andata a buon fine.</strong>{' '}
+            {week.generation_error}
           </div>
         </div>
       )}

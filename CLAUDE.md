@@ -353,6 +353,25 @@ seconda generazione in parallelo — che sarebbe una spesa doppia. Dopo
 `GENERATION_TIMEOUT` (15 minuti) il segno si considera morto, così un processo
 riavviato a metà non blocca la settimana per sempre.
 
+**E anche com'è finita è stato del server**, per la stessa ragione portata fino in
+fondo: la risposta della POST quasi mai arriva a destinazione. Una generazione dura
+minuti e davanti c'è un proxy che chiude molto prima — nginx a `proxy_read_timeout
+300s`, Cloudflare a 100 secondi e basta — quindi il messaggio d'errore finiva scritto
+su una connessione morta, e uvicorn non ne lasciava traccia nemmeno nell'access log
+(salta la riga quando il client si è già disconnesso, `h11_impl.py`). Da fuori restava
+una settimana vuota senza spiegazioni, e la pagina, che segue il polling e non la
+risposta, annunciava pure "Settimana pronta ✓". Ora `record_generation_failure` scrive
+il motivo nella stessa colonna del diario — che a generazione ferma è libera — e
+`generation_error(week)` lo espone in `serialize_week` e nell'endpoint del progresso;
+il frontend lo mostra al posto del ✓ e lo lascia in un riquadro finché non si riprova,
+perché un toast di tre secondi scade quando davanti allo schermo non c'è nessuno. Si
+cancella da sé all'inizio del tentativo dopo: racconta l'ultimo tentativo, non è una
+macchia sulla settimana. Due corollari per chi tocca `generate_week`: **quello che può
+fallire sta dentro il `try`**, applicazione della risposta compresa (una risposta
+parsabile ma di forma sbagliata sollevava fuori di lì e lasciava la settimana ferma su
+"sto generando" per un quarto d'ora), e il fallimento **si logga** — è l'unico posto
+dove quel messaggio arriva a qualcuno che possa leggerlo.
+
 **La generazione si può guardare mentre succede.** Dura minuti e si paga: una
 schermata ferma non permette di distinguere un modello che ragiona da uno piantato.
 `ai_client` accetta un `on_progress(kind, delta)` che riceve i pezzi già in streaming

@@ -1941,6 +1941,29 @@ textarea {
   border-bottom: none;
 }
 
+.day-compliance-name {
+  min-width: 92px;
+}
+
+.day-compliance.skipped .day-compliance-name,
+.day-compliance.skipped .day-compliance-kcal {
+  color: var(--text-muted);
+}
+
+.day-compliance-kcal {
+  color: var(--text-secondary);
+}
+
+.day-compliance-delta {
+  margin-left: auto;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.day-compliance-delta.over {
+  color: var(--terracotta);
+}
+
 .compliance-dot {
   width: 9px;
   height: 9px;
@@ -1986,6 +2009,9 @@ textarea {
 .heatmap-scroll {
   overflow-x: auto;
   padding-bottom: 4px;
+  /* La barra resta visibile — è quella che dice che di lato c'è dell'altro — ma
+     sottile: quella di sistema è alta quanto due righe di caselle. */
+  scrollbar-width: thin;
 }
 
 .heatmap {
@@ -2002,6 +2028,17 @@ textarea {
   display: flex;
   gap: var(--cell-gap);
   margin-bottom: 5px;
+}
+
+/* La colonnina dei giorni resta ferma mentre il calendario scorre di lato: senza,
+   arrivando su agosto le caselle non hanno più un'etichetta a sinistra e non si
+   capisce più quale riga è lunedì. */
+.heatmap-gutter,
+.heatmap-weekdays {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--bg-card);
 }
 
 .heatmap-gutter {
@@ -3342,14 +3379,27 @@ textarea:focus {
   .settings-layout {
     grid-template-columns: minmax(0, 1fr);
   }
+  /* Sette schede in fila non ci stanno, e scorrendo di lato succedeva la cosa
+     peggiore: aprendo "Utenti" la striscia mostrava ancora le prime tre e la scheda
+     accesa era fuori schermo, cioè la pagina non diceva più dove ti trovavi. Vanno
+     a capo: tre righe di pastiglie occupano poco e ci sono tutte, con quella attiva
+     in evidenza. */
   .settings-nav {
     position: static;
     flex-direction: row;
-    overflow-x: auto;
-    padding-bottom: 6px;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 4px;
   }
   .settings-nav a {
     white-space: nowrap;
+    padding: 7px 12px;
+    font-size: 0.82rem;
+    border: 1px solid var(--border);
+    border-radius: 99px;
+  }
+  .settings-nav a.active {
+    border-color: transparent;
   }
 }
 
@@ -3470,6 +3520,37 @@ textarea:focus {
      bottoncini stretti in alto a sinistra. */
   .meal-editor-actions .btn {
     flex: 1;
+  }
+
+  /* Giorno, calorie, scarto e badge su una riga sola stavano in 300px solo andando
+     a capo dentro ogni pezzo: "2232 /" sopra e "2636 kcal" sotto, con le colonne
+     che ballavano da una riga all'altra a seconda che il badge ci fosse o no.
+     Due righe per giorno: sopra il nome (col suo esito), sotto i numeri. */
+  .day-compliance {
+    display: grid;
+    grid-template-columns: 9px minmax(0, 1fr) auto;
+    column-gap: 10px;
+    row-gap: 2px;
+    align-items: center;
+  }
+  .compliance-dot {
+    grid-row: 1;
+  }
+  .day-compliance-name {
+    grid-area: 1 / 2;
+    min-width: 0;
+  }
+  .day-compliance .badge {
+    grid-area: 1 / 3;
+    justify-self: end;
+  }
+  .day-compliance-kcal {
+    grid-area: 2 / 2;
+    font-size: 0.84rem;
+  }
+  .day-compliance-delta {
+    grid-area: 2 / 3;
+    font-size: 0.84rem;
   }
   /* Quattro colonne di totali su un telefono spezzano "Carboidrati" a metà parola. */
   .totals-lock-grid {

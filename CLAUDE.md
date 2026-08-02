@@ -514,6 +514,14 @@ threadpool. La regola non ha eccezioni e `tests/test_concurrency.py` la fa rispe
   `viewport-fit=cover` lascia passare la pagina sotto la tacca. E ciò che compare solo
   `:hover` col dito non compare mai: le correzioni per il touch stanno nel blocco
   `@media (pointer: coarse)` in fondo al foglio, bersagli da 44px compresi.
+- **Una striscia che scorre di lato deve arrivare dove sei.** È l'errore che si vede
+  solo aprendo l'app sul telefono: le schede delle impostazioni scorrevano, e su
+  "Utenti" la striscia mostrava ancora le prime tre — la pagina non diceva più dove ti
+  trovavi. Ora vanno a capo (`flex-wrap`), che è la soluzione quando le voci sono
+  poche e contate. Dove andare a capo non si può — il calendario dell'anno, che di
+  colonne ne ha 52 — si scorre da soli fino a oggi al primo render, altrimenti si apre
+  su gennaio, cioè su una griglia vuota; e l'incolonnata dei giorni resta `sticky` a
+  sinistra, o a metà anno le caselle non hanno più un'etichetta.
 - **Una tabella sul telefono diventa una scheda per riga.** Sette colonne in 300px non
   si restringono, si sbriciolano: l'editor della dieta finiva a due campi per riga sotto
   intestazioni che ne annunciavano sei, e quale numero fosse quale non lo diceva più

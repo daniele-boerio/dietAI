@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Flame } from 'lucide-react';
 import { api } from '../api';
 import { useApp } from '../App';
@@ -93,6 +93,25 @@ export default function YearHeatmap() {
     [data, today]
   );
 
+  // Cinquantadue settimane in un riquadro che sul telefono ne mostra venti: aperto a
+  // gennaio, il calendario dell'anno in corso è una griglia vuota, perché quello che
+  // si è appena segnato sta a destra fuori campo. Si arriva su oggi (sugli anni
+  // passati no: lì l'inizio dell'anno è l'inizio della storia).
+  const scroller = useRef(null);
+  useEffect(() => {
+    const box = scroller.current;
+    if (!box || !calendar) return;
+    if (data.year !== new Date().getFullYear()) {
+      box.scrollLeft = 0;
+      return;
+    }
+    const settimane = Math.round(
+      (mondayOf(today) - mondayOf(new Date(data.year, 0, 1))) / (7 * 86400000)
+    );
+    const larghezza = box.scrollWidth / calendar.columns.length;
+    box.scrollLeft = Math.max(0, (settimane + 1) * larghezza - box.clientWidth);
+  }, [calendar, data, today]);
+
   if (loading && !data) return <div className="spinner" />;
   if (!data) return null;
 
@@ -153,7 +172,7 @@ export default function YearHeatmap() {
           </div>
 
           <div className="card heatmap-card">
-            <div className="heatmap-scroll">
+            <div className="heatmap-scroll" ref={scroller}>
               <div className="heatmap">
                 <div className="heatmap-months">
                   <div className="heatmap-gutter" />

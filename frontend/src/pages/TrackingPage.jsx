@@ -217,29 +217,22 @@ function WeeklyView() {
               // Un giorno saltato non ha uno scarto da mostrare: non è andato male,
               // non c'è proprio stato.
               day.is_skipped || day.meals.every((m) => m.is_skipped) ? (
-                <div key={day.date} className="day-compliance">
+                <div key={day.date} className="day-compliance skipped">
                   <span className="compliance-dot grey" />
-                  <strong style={{ minWidth: 92, color: 'var(--text-muted)' }}>
-                    {day.day_name}
-                  </strong>
-                  <span style={{ color: 'var(--text-muted)' }}>
+                  <strong className="day-compliance-name">{day.day_name}</strong>
+                  <span className="day-compliance-kcal">
                     Giornata saltata: non entra nelle medie
                   </span>
                 </div>
               ) : (
                 <div key={day.date} className="day-compliance">
                   <span className={`compliance-dot ${day.totals.color}`} />
-                  <strong style={{ minWidth: 92 }}>{day.day_name}</strong>
-                  <span style={{ color: 'var(--text-secondary)' }}>
+                  <strong className="day-compliance-name">{day.day_name}</strong>
+                  <span className="day-compliance-kcal">
                     {day.totals.planned_calories} / {day.totals.target_calories} kcal
                   </span>
                   <span
-                    style={{
-                      marginLeft: 'auto',
-                      color:
-                        day.totals.delta > 0 ? 'var(--terracotta)' : 'var(--text-secondary)',
-                      fontVariantNumeric: 'tabular-nums',
-                    }}
+                    className={`day-compliance-delta ${day.totals.delta > 0 ? 'over' : ''}`}
                   >
                     {day.totals.delta > 0 ? '+' : ''}
                     {day.totals.delta} kcal

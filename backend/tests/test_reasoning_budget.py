@@ -24,7 +24,13 @@ class _Response:
 
 
 class _Completions:
-    """Finto endpoint chat/completions: registra come è stato chiamato."""
+    """Finto endpoint chat/completions: registra come è stato chiamato.
+
+    Serve la stessa risposta in tutte e due le forme perché sopra gli 8.000 token il
+    client passa da solo in streaming: senza il ramo `stream`, i test sul budget si
+    potrebbero scrivere solo sotto quella soglia — cioè su una strada che la
+    pianificazione, che di token ne chiede 24.000, non prende mai.
+    """
 
     def __init__(self, response):
         self.response = response
@@ -32,7 +38,12 @@ class _Completions:
 
     def create(self, **kwargs):
         self.kwargs = kwargs
-        return self.response
+        if not kwargs.get("stream"):
+            return self.response
+        choice = self.response.choices[0]
+        delta = type("D", (), {"content": choice.message.content, "model_extra": None})()
+        pezzo = type("Ch", (), {"delta": delta, "finish_reason": choice.finish_reason})()
+        return iter([type("C", (), {"choices": [pezzo]})()])
 
 
 def _backend(response):
@@ -66,13 +77,38 @@ def test_i_compiti_brevi_chiedono_ragionamento_basso():
     assert completions.kwargs["extra_body"] == {"reasoning": {"effort": "low"}}
 
 
-def test_la_pianificazione_chiede_ragionamento_alto():
-    """Incastrare trenta pasti nei macro è l'unico punto in cui ragionare paga."""
+def test_la_pianificazione_chiede_il_ragionamento_in_token_non_in_effort():
+    """Incastrare trenta pasti nei macro è l'unico punto in cui ragionare paga — ma
+    chiederlo con `effort: high` era una condanna, non un permesso.
+
+    Su OpenRouter `high` riserva al ragionamento ~l'80% di max_tokens, e max_tokens è
+    dimensionato per il solo contenuto: al modello restava un quinto dello spazio che
+    serviva per scrivere le ricette, e finiva ogni volta con `length` e contenuto
+    vuoto. In token il patto è esplicito, e al contenuto resta la parte grossa.
+    """
     backend, completions = _backend(_Response("{}"))
 
-    _call(backend, thinking=True)
+    _call(backend, thinking=True, max_tokens=24000)
 
-    assert completions.kwargs["extra_body"] == {"reasoning": {"effort": "high"}}
+    assert completions.kwargs["extra_body"] == {"reasoning": {"max_tokens": 6000}}
+
+
+def test_al_contenuto_resta_sempre_la_maggioranza_del_budget():
+    """La garanzia vera, quella che regge a qualunque numero di pasti."""
+    for max_tokens in (8000, 12000, 24000, 64000):
+        backend, completions = _backend(_Response("{}"))
+        _call(backend, thinking=True, max_tokens=max_tokens)
+        ragionamento = completions.kwargs["extra_body"]["reasoning"]["max_tokens"]
+        assert ragionamento < max_tokens - ragionamento
+
+
+def test_il_ragionamento_non_scende_sotto_il_minimo_di_anthropic():
+    """Sotto i 1024 token di budget l'API rifiuta la richiesta."""
+    backend, completions = _backend(_Response("{}"))
+
+    _call(backend, thinking=True, max_tokens=2000)
+
+    assert completions.kwargs["extra_body"]["reasoning"]["max_tokens"] == 1024
 
 
 def test_il_budget_di_token_arriva_al_fornitore():

@@ -331,12 +331,23 @@ user, role)` costruisce il client col modello scelto dall'**amministratore**
 indipendente dal modello (funziona anche senza vista) ed è gratis. Solo se il PDF è una
 scansione (`looks_scanned`) serve il backend Anthropic, che lo legge nativamente.
 
-**Il ragionamento va tenuto a bada.** Su OpenRouter i modelli che ragionano lo fanno
-di default, spesso a effort alto, e i token di ragionamento si scalano da `max_tokens`:
-un modello può bruciare l'intero budget pensando e restituire contenuto vuoto. Il
-backend manda sempre `reasoning.effort` — `high` solo per la pianificazione, `low` per
-chat, rigenerazione e lettura della dieta — e su risposta vuota diagnostica il
-`finish_reason` invece di dire genericamente "riprova".
+**Il ragionamento si chiede in token, non in "effort".** Su OpenRouter i modelli che
+ragionano lo fanno di default e i token di ragionamento **si scalano da `max_tokens`**:
+un modello può bruciare l'intero budget pensando e restituire contenuto vuoto. Il freno
+c'era già, ma era `reasoning.effort: high` per la pianificazione — ed è stata la
+trappola: `high` riserva al ragionamento **circa l'80% di `max_tokens`**, mentre
+`max_tokens` è calcolato sul solo contenuto (~2.000 token a ricetta). Su una settimana
+da nove pasti — 24.000 token — al modello restavano ~4.800 per scriverne nove: ogni
+generazione finiva con `finish_reason` "length" e contenuto vuoto, dopo minuti di
+attesa e a chiamata pagata. Non era un modello sbagliato, era una richiesta
+impossibile, e **non è una questione di scala**: spezzare la settimana in giorni
+riproduce lo stesso rapporto più in piccolo (12.000 token → ~2.400 per tre ricette).
+Ora `thinking=True` manda `reasoning.max_tokens` a un quarto del budget, così al
+contenuto resta sempre la maggioranza; `thinking=False` resta `effort: low`, che sui
+compiti brevi va bene. La garanzia sta in `tests/test_reasoning_budget.py`, che la
+verifica sulla strada dello streaming — l'unica che la pianificazione prende davvero.
+Su risposta vuota si diagnostica comunque il `finish_reason` invece di dire
+genericamente "riprova".
 
 **Generare di default riempie solo i buchi.** `generate_week(..., only_missing=True)`
 è il default perché ogni chiamata si paga e quella sulla settimana intera è la più

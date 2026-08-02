@@ -282,11 +282,24 @@ class _OpenAICompatibleBackend:
         payload = [{"role": "system", "content": system}, *messages]
 
         # Sui modelli che ragionano (GLM, Hy3, o-series...) il ragionamento è ACCESO
-        # di default, spesso a effort alto, e i suoi token si scalano da max_tokens.
-        # Senza questo limite un modello può bruciare l'intero budget pensando e
-        # restituire contenuto vuoto: è esattamente ciò che succedeva in chat.
-        # Chi non supporta il parametro lo ignora, quindi si può mandare sempre.
-        extra_body = {"reasoning": {"effort": "high" if thinking else "low"}}
+        # di default e i suoi token si scalano da max_tokens: senza un freno un modello
+        # brucia l'intero budget pensando e restituisce contenuto vuoto.
+        #
+        # Il freno però va chiesto in TOKEN, non in "effort", e questa è la lezione che
+        # è costata una settimana di generazioni fallite. Su OpenRouter `effort: high`
+        # riserva al ragionamento circa l'80% di max_tokens — e max_tokens qui è
+        # dimensionato per il solo contenuto. Su una richiesta da 24.000 token per nove
+        # ricette ne restavano ~4.800 per scriverle: non è andata male, non poteva
+        # andare bene, e il conto non torna a nessuna scala (spezzare la settimana in
+        # giorni lo riproduce identico, più piccolo). Con `max_tokens` il patto è
+        # esplicito: pensa quanto vuoi fin qui, il resto serve per rispondere.
+        #
+        # Chi il parametro non lo supporta lo ignora, e chi accetta solo l'effort se lo
+        # fa riconvertire da OpenRouter: si può mandare sempre.
+        if thinking:
+            extra_body = {"reasoning": {"max_tokens": max(1024, max_tokens // 4)}}
+        else:
+            extra_body = {"reasoning": {"effort": "low"}}
 
         openai = self._openai
         try:

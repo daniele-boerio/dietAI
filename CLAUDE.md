@@ -132,7 +132,7 @@ dizionario di nomi, reparti e prezzi al kg, non un dato personale. Se un utente
 corregge il prezzo del pane, il pane costa quello per tutti.
 
 **Chi non ha una dieta scritta la calcola.** `POST /api/diet/questionnaire` prende
-sesso, età, altezza, peso, attività, obiettivo e numero di pasti, e ne ricava una
+sesso, età, altezza, peso, attività e obiettivo, e ne ricava una
 `DietPlan` **identica alle altre** — stessi `MealSlot`, stessi target, stessa
 modificabilità: da lì in poi l'app non sa e non deve sapere da dove vengono i numeri.
 Il conto lo fa una formula (`utils/nutrition.py`: Mifflin-St Jeor → fattore di
@@ -143,9 +143,24 @@ darebbe risposte diverse a parità di risposte. Due pavimenti che non si tolgono
 si scende mai sotto il metabolismo basale né sotto il minimo per sesso, perché un
 calcolo automatico che sbaglia in difetto fa danno. Le risposte restano in
 `parsed_data["profile"]` (esposto come `profile` da `_serialize_diet`): il peso
-cambia, e riaprire il questionario già compilato deve costare tre secondi. La divisione
-fra i pasti usa la stessa aritmetica di `lib/macros.js` — quote arrotondate e resto
-sulla più grande — così la somma dei pasti è **esattamente** il totale del giorno.
+cambia, e riaprire il questionario già compilato deve costare tre secondi.
+
+**Il questionario si fa in due tempi, e il secondo è "quali pasti".** Prima i dati
+della persona, che danno i totali del giorno; poi si spuntano i pasti che si fanno
+davvero — chi la colazione la salta non deve ritrovarsela in griglia tutti i giorni —
+e i totali si dividono su quelli. In mezzo serve `POST
+/api/diet/questionnaire/preview`, che calcola **senza salvare**: creare la dieta al
+primo passo per sostituirla al secondo vorrebbe dire archiviare una dieta mai vista da
+nessuno a ogni ripensamento. Il peso di ogni pasto sta in `MEAL_CATALOG`, **uno solo
+per pasto e non per combinazione**: `_share_out` normalizza sulla somma di quelli
+scelti, quindi togliere la colazione manda il suo 20% sugli altri in proporzione senza
+una tabella per ciascuna delle 63 combinazioni. Le chiavi scelte finiscono nel profilo
+anche quando la richiesta diceva solo `meals_count`, così riaprendo il questionario le
+caselle sono già quelle di prima. La divisione usa la stessa aritmetica di
+`lib/macros.js` — quote arrotondate e resto sulla più grande — così la somma dei pasti
+è **esattamente** il totale del giorno; il frontend divide in locale mentre si spunta
+(`splitByWeights`, coi pesi serviti da `/questionnaire/options`) invece di chiamare il
+server a ogni clic, e quello che si vede è quello che verrà salvato.
 
 **La settimana esiste sempre.** `GET /api/planning/weeks/current` crea al volo
 `WeekPlan` + 7 `DayPlan` + una `PlannedMeal` per ogni incrocio giorno × pasto, anche
@@ -364,12 +379,32 @@ quindi trasformare "carne rossa al massimo due volte a settimana" in caselle
 perderebbe sfumature senza guadagnare niente. Vale per generazione, rigenerazione e
 chat, perché tutte e tre passano da `build_context`.
 
-**Il totale giornaliero è invariante.** Aggiungere o togliere un pasto dall'editor
-della dieta non cambia quanto si mangia in un giorno, cambia come lo si divide:
-`lib/macros.js` ridistribuisce calorie e macro sugli altri pasti in proporzione a
-quanto pesavano, con l'ultimo arrotondamento aggiustato perché la somma torni esatta.
-Il backend non impone la regola — riceve i pasti e li salva — perché l'editor è un
-foglio di lavoro locale e l'utente deve poter correggere prima di salvare.
+**Il totale giornaliero è invariante finché il lucchetto è chiuso.** Sono due domande
+diverse — *quanto* mangio in un giorno e *come* lo divido — e confonderle si paga:
+togliendo la colazione perché non la si fa ci si ritroverebbe con 400 kcal in meno al
+giorno, cioè con una dieta diversa da quella prescritta. Perciò i totali stanno chiusi
+a chiave e i pasti no. Col lucchetto chiuso (il default, a ogni apertura della pagina)
+aggiungere o togliere un pasto ridistribuisce calorie e macro sugli altri in
+proporzione a quanto pesavano, e **anche correggere un singolo pasto** manda la
+differenza sugli altri (`rebalanceField`), col valore scritto fermato al totale perché
+gli altri non vadano in negativo. Aperto, i campi sono liberi ed è il totale a
+cambiare: è la strada di chi ha numeri nuovi, non di chi riorganizza la giornata.
+Richiudendolo, i totali di adesso diventano il nuovo vincolo.
+
+Il riallineamento aspetta il `blur`, non il tasto: ridistribuire a ogni battuta farebbe
+ballare gli altri pasti su "6" e su "60" mentre si scrive "600", e un pasto che passa
+da zero perderebbe per strada le proporzioni. Nel frattempo il totale in fondo mostra
+lo scarto — è il modo più corto per dire perché gli altri stanno per muoversi. Da qui
+il `draft` in `DietPage`: `commit()` chiude la modifica **e restituisce** i pasti
+aggiornati, perché premendo "Salva" da dentro un campo il blur e il clic arrivano nello
+stesso batch di React e lo stato sarebbe ancora quello di prima.
+
+Il backend non impone niente di tutto questo — riceve i pasti e li salva — perché
+l'editor è un foglio di lavoro locale e l'utente deve poter correggere prima di
+salvare. L'unico posto dove i totali forzati arrivano al server è il questionario, che
+li accetta come `targets` e ci divide sopra i pasti: lì i pavimenti della formula (mai
+sotto il metabolismo basale) **non si applicano**, perché difendono un calcolo
+automatico, non discutono i numeri di chi li sta scrivendo a mano.
 
 **I nomi degli ingredienti si normalizzano.** `services/ingredients.normalize_name`
 mette in minuscolo e toglie i qualificatori: senza, la lista della spesa avrebbe tre
@@ -479,6 +514,12 @@ threadpool. La regola non ha eccezioni e `tests/test_concurrency.py` la fa rispe
   `viewport-fit=cover` lascia passare la pagina sotto la tacca. E ciò che compare solo
   `:hover` col dito non compare mai: le correzioni per il touch stanno nel blocco
   `@media (pointer: coarse)` in fondo al foglio, bersagli da 44px compresi.
+- **Una tabella sul telefono diventa una scheda per riga.** Sette colonne in 300px non
+  si restringono, si sbriciolano: l'editor della dieta finiva a due campi per riga sotto
+  intestazioni che ne annunciavano sei, e quale numero fosse quale non lo diceva più
+  niente. Il modo che regge senza duplicare il markup: ogni cella si porta dentro la
+  propria etichetta (`.meal-editor-cell > span`), invisibile finché la riga di
+  intestazione c'è, e sul telefono l'intestazione sparisce e le etichette escono fuori.
 - **Indietro non deve mai uscire dall'app**, e va sempre da `useGoBack(fallback)`
   (`lib/navigation.js`), mai `navigate(-1)` da solo. Sulla prima pagina della
   sessione dietro non c'è niente, e su iPhone — dove DietAI si apre a schermo intero

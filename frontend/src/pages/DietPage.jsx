@@ -1,9 +1,26 @@
 import { useEffect, useState } from 'react';
-import { Calculator, FileUp, MessageSquare, Save, Sparkles, User, X } from 'lucide-react';
+import {
+  Calculator,
+  FileUp,
+  Lock,
+  MessageSquare,
+  Save,
+  Sparkles,
+  Unlock,
+  User,
+  X,
+} from 'lucide-react';
 import { api } from '../api';
 import { useApp } from '../App';
 import Questionnaire from '../components/Questionnaire';
-import { addMeal, dailyTotals, removeMeal } from '../lib/macros';
+import { addMeal, dailyTotals, rebalanceField, removeMeal } from '../lib/macros';
+
+const CAMPI = [
+  { key: 'calories', label: 'kcal' },
+  { key: 'protein_g', label: 'Prot.' },
+  { key: 'carbs_g', label: 'Carb.' },
+  { key: 'fat_g', label: 'Grassi' },
+];
 
 // La dieta è una pagina sua e non una scheda delle impostazioni: non è una preferenza,
 // è l'ingresso da cui passa tutto il resto — le ricette nascono da questi numeri, la
@@ -17,12 +34,27 @@ export default function DietPage() {
   const [busy, setBusy] = useState(false);
   const [file, setFile] = useState(null);
 
+  // Il lucchetto: chiuso, il totale del giorno non si muove — si sposta soltanto fra i
+  // pasti. Nasce chiuso a ogni apertura della pagina perché è la cosa che si vuole nel
+  // 90% dei casi (aggiungo uno spuntino, cambio gli orari) e perché cambiare la dieta
+  // per sbaglio non si nota subito: si nota fra due settimane, dal peso.
+  const [locked, setLocked] = useState(true);
+  const [target, setTarget] = useState(null);
+
+  // Quello che si sta battendo adesso, prima che il lucchetto lo rimetta a posto.
+  // Ridistribuire a ogni tasto sarebbe illeggibile — scrivendo "600" gli altri pasti
+  // ballerebbero su "6" e su "60" — quindi il riallineamento aspetta di uscire dal
+  // campo. Finché si scrive, il totale in fondo mostra lo scarto: è il modo più corto
+  // per dire perché gli altri pasti stanno per muoversi.
+  const [draft, setDraft] = useState(null);
+
   const load = () =>
     api
       .getDiet()
       .then((d) => {
         setDiet(d);
         setMeals(d.meals);
+        setTarget(dailyTotals(d.meals));
       })
       .catch(() => setDiet(null))
       .finally(() => setLoading(false));
@@ -31,17 +63,35 @@ export default function DietPage() {
     load();
   }, []);
 
-  const updateMeal = (index, field, value) =>
-    setMeals((prev) =>
-      prev.map((m, i) =>
-        i === index ? { ...m, [field]: field === 'name' ? value : Number(value) } : m
+  const withDraft = draft
+    ? meals.map((m, i) =>
+        i === draft.index ? { ...m, [draft.field]: Number(draft.value) || 0 } : m
       )
-    );
+    : meals;
+
+  // Chiude la modifica in corso e restituisce i pasti aggiornati, perché chi salva
+  // possa mandarli senza aspettare il giro di render: premendo "Salva" da dentro un
+  // campo il blur e il clic arrivano nello stesso batch, e `meals` sarebbe ancora
+  // quello di prima.
+  const commit = () => {
+    if (!draft) return meals;
+    const next =
+      locked && target
+        ? rebalanceField(withDraft, draft.index, draft.field, target[draft.field])
+        : withDraft;
+    setMeals(next);
+    setDraft(null);
+    return next;
+  };
+
+  const rename = (index, value) =>
+    setMeals((prev) => prev.map((m, i) => (i === index ? { ...m, name: value } : m)));
 
   const save = async () => {
+    const finali = commit();
     setBusy(true);
     try {
-      const payload = meals.map((m, i) => ({
+      const payload = finali.map((m, i) => ({
         name: m.name,
         order: i,
         calories: Number(m.calories) || 0,
@@ -54,6 +104,7 @@ export default function DietPage() {
       const updated = await api.updateDietMeals(diet.id, payload);
       setDiet(updated);
       setMeals(updated.meals);
+      setTarget(dailyTotals(updated.meals));
       // Le ricette già assegnate restano quelle di prima: se i target sono cambiati
       // non sono più in bersaglio, e conviene dirlo subito invece di farlo scoprire
       // dalla percentuale di aderenza in Andamento.
@@ -72,6 +123,7 @@ export default function DietPage() {
       const updated = await api.uploadDiet(file);
       setDiet(updated);
       setMeals(updated.meals);
+      setTarget(dailyTotals(updated.meals));
       setFile(null);
       addToast(`Nuova dieta caricata: ${updated.meals.length} pasti ✓`);
     } catch (e) {
@@ -81,25 +133,54 @@ export default function DietPage() {
     }
   };
 
-  // Togliere o aggiungere un pasto non cambia quanto si mangia in un giorno: cambia
-  // come lo si divide. Le calorie e i macro del pasto rimosso si ridistribuiscono
-  // sugli altri, in proporzione a quanto pesavano già.
+  // Col lucchetto chiuso, togliere o aggiungere un pasto non cambia quanto si mangia
+  // in un giorno: cambia come lo si divide. Le calorie e i macro del pasto rimosso si
+  // ridistribuiscono sugli altri, in proporzione a quanto pesavano già. Aperto, invece,
+  // si toglie davvero: è il caso di chi sta riscrivendo la dieta, non di chi la
+  // riorganizza.
   const dropMeal = (index) => {
-    if (meals.length <= 1) {
+    const base = commit();
+    if (base.length <= 1) {
       addToast('La dieta deve avere almeno un pasto', 'error');
       return;
     }
-    const removed = meals[index];
-    setMeals(removeMeal(meals, index));
+    const removed = base[index];
+    const kcal = Math.round(removed.calories) || 0;
+    setMeals(locked ? removeMeal(base, index) : base.filter((_, i) => i !== index));
     addToast(
-      `${removed.name || 'Pasto'} rimosso: le sue ${Math.round(removed.calories) || 0} kcal ` +
-        'sono andate sugli altri pasti'
+      locked
+        ? `${removed.name || 'Pasto'} rimosso: le sue ${kcal} kcal sono andate sugli altri pasti`
+        : `${removed.name || 'Pasto'} rimosso: la giornata cala di ${kcal} kcal`
     );
   };
 
   const appendMeal = () => {
-    setMeals(addMeal(meals, 'Nuovo pasto'));
-    addToast('Pasto aggiunto: la giornata è stata ridivisa fra tutti');
+    const base = commit();
+    setMeals(
+      locked
+        ? addMeal(base, 'Nuovo pasto')
+        : [...base, { name: 'Nuovo pasto', calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }]
+    );
+    addToast(
+      locked
+        ? 'Pasto aggiunto: la giornata è stata ridivisa fra tutti'
+        : 'Pasto aggiunto a zero: scrivi tu quanto vale'
+    );
+  };
+
+  // Chiudere il lucchetto prende per buoni i totali di adesso: da lì in poi sono quelli
+  // il vincolo. Aprirlo non tocca niente — dice solo che i numeri smettono di essere
+  // una prescrizione e tornano a essere campi.
+  const toggleLock = () => {
+    const base = commit();
+    if (locked) {
+      setLocked(false);
+      addToast('Totali sbloccati: adesso cambiare un pasto cambia la giornata');
+    } else {
+      setTarget(dailyTotals(base));
+      setLocked(true);
+      addToast(`Totali bloccati a ${dailyTotals(base).calories} kcal al giorno ✓`);
+    }
   };
 
   // "Lo faccio io": DietAI smette di generarlo, ma i macro restano nel conto della
@@ -116,7 +197,9 @@ export default function DietPage() {
     );
   };
 
-  const totals = dailyTotals(meals);
+  // Sul totale si vede anche quello che si sta scrivendo adesso: col lucchetto chiuso
+  // è l'anticipo di quanto stanno per muoversi gli altri pasti.
+  const totals = dailyTotals(withDraft);
 
   return (
     <>
@@ -144,10 +227,9 @@ export default function DietPage() {
 
             <div className="meal-editor-row meal-editor-head">
               <span>Pasto</span>
-              <span>kcal</span>
-              <span>Prot.</span>
-              <span>Carb.</span>
-              <span>Grassi</span>
+              {CAMPI.map(({ key, label }) => (
+                <span key={key}>{label}</span>
+              ))}
               <span>Chi lo prepara</span>
               <span />
             </div>
@@ -159,30 +241,33 @@ export default function DietPage() {
                   meal.auto_generate === false ? 'self-managed' : ''
                 }`}
               >
-                <input
-                  value={meal.name}
-                  onChange={(e) => updateMeal(i, 'name', e.target.value)}
-                />
-                <input
-                  type="number"
-                  value={meal.calories}
-                  onChange={(e) => updateMeal(i, 'calories', e.target.value)}
-                />
-                <input
-                  type="number"
-                  value={meal.protein_g}
-                  onChange={(e) => updateMeal(i, 'protein_g', e.target.value)}
-                />
-                <input
-                  type="number"
-                  value={meal.carbs_g}
-                  onChange={(e) => updateMeal(i, 'carbs_g', e.target.value)}
-                />
-                <input
-                  type="number"
-                  value={meal.fat_g}
-                  onChange={(e) => updateMeal(i, 'fat_g', e.target.value)}
-                />
+                {/* L'etichetta sta dentro ogni cella e su desktop non si vede: lassù
+                    la dà l'intestazione della tabella, che sul telefono sparisce —
+                    in due colonne non ci sono sei intestazioni da allineare, e senza
+                    si finisce a scrivere le proteine nella casella dei grassi. */}
+                <label className="meal-editor-cell wide">
+                  <span>Pasto</span>
+                  <input value={meal.name} onChange={(e) => rename(i, e.target.value)} />
+                </label>
+                {CAMPI.map(({ key, label }) => (
+                  <label className="meal-editor-cell" key={key}>
+                    <span>{label}</span>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      value={
+                        draft && draft.index === i && draft.field === key
+                          ? draft.value
+                          : meal[key]
+                      }
+                      onChange={(e) =>
+                        setDraft({ index: i, field: key, value: e.target.value })
+                      }
+                      onBlur={commit}
+                      onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+                    />
+                  </label>
+                ))}
                 <button
                   className={`who-toggle ${meal.auto_generate === false ? 'mine' : 'ai'}`}
                   onClick={() => toggleWho(i)}
@@ -206,30 +291,63 @@ export default function DietPage() {
                 <button
                   className="icon-button danger"
                   onClick={() => dropMeal(i)}
-                  title="Rimuovi il pasto (le sue calorie vanno sugli altri)"
+                  title={
+                    locked
+                      ? 'Rimuovi il pasto (le sue calorie vanno sugli altri)'
+                      : 'Rimuovi il pasto (la giornata cala delle sue calorie)'
+                  }
                 >
                   <X size={15} />
                 </button>
               </div>
             ))}
 
-            <div
-              className="meal-editor-row"
-              style={{ borderTop: '1px solid var(--border)', paddingTop: 10, marginTop: 6 }}
-            >
-              <strong>Totale giornaliero</strong>
-              <strong>{totals.calories}</strong>
-              <strong>{totals.protein_g}</strong>
-              <strong>{totals.carbs_g}</strong>
-              <strong>{totals.fat_g}</strong>
+            <div className="meal-editor-row totals-row">
+              <strong className="totals-row-label">Totale giornaliero</strong>
+              {CAMPI.map(({ key, label }) => {
+                const fuori = locked && target && totals[key] !== target[key];
+                return (
+                  <div className="meal-editor-cell" key={key}>
+                    <span>{label}</span>
+                    <strong className={fuori ? 'off-target' : ''}>
+                      {totals[key]}
+                      {fuori && <em>torna a {target[key]}</em>}
+                    </strong>
+                  </div>
+                );
+              })}
+              <button
+                className={`lock-toggle ${locked ? '' : 'open'}`}
+                onClick={toggleLock}
+                title={
+                  locked
+                    ? 'Il totale del giorno non si muove: quello che togli a un pasto va sugli altri. Clicca per sbloccarlo.'
+                    : 'I totali sono liberi: quello che scrivi cambia la giornata. Clicca per ribloccarli su questi numeri.'
+                }
+              >
+                {locked ? <Lock size={13} /> : <Unlock size={13} />}
+                {locked ? 'Bloccato' : 'Libero'}
+              </button>
               <span />
             </div>
 
             <p className="field-hint" style={{ marginTop: 10 }}>
-              Aggiungendo o togliendo un pasto il totale giornaliero non cambia: calorie e
-              macro vengono ridistribuiti sugli altri pasti in proporzione a quanto già
-              pesavano. Se invece è cambiata la dieta e i totali sono diversi, correggi i
-              valori riga per riga.
+              {locked ? (
+                <>
+                  <strong>Totale bloccato:</strong> quanto mangi in un giorno è deciso, e
+                  qui si decide solo come dividerlo. Cambiando un pasto la differenza va
+                  sugli altri, e aggiungendone o togliendone uno la giornata si ridivide
+                  fra quelli rimasti — a somma zero. Se invece è cambiata la dieta, apri il
+                  lucchetto: i campi diventano liberi e il totale è quello che scrivi tu.
+                </>
+              ) : (
+                <>
+                  <strong>Totale libero:</strong> stai cambiando quanto mangi in un giorno,
+                  non come lo dividi — è la strada giusta se il nutrizionista ti ha dato
+                  numeri nuovi. Quando i conti tornano richiudi il lucchetto: da lì in poi
+                  saranno questi i totali da difendere.
+                </>
+              )}
             </p>
 
             <p className="field-hint">
@@ -239,7 +357,7 @@ export default function DietPage() {
               mangi, e centra i suoi target.
             </p>
 
-            <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
+            <div className="meal-editor-actions">
               <button className="btn btn-secondary btn-sm" onClick={appendMeal}>
                 Aggiungi pasto
               </button>
@@ -257,6 +375,9 @@ export default function DietPage() {
             onDone={(updated) => {
               setDiet(updated);
               setMeals(updated.meals);
+              // Il questionario ha appena deciso i totali: sono loro il nuovo vincolo.
+              setTarget(dailyTotals(updated.meals));
+              setLocked(true);
               addToast(
                 `Ricalcolata: ${updated.total_daily_calories} kcal al giorno ✓ — ` +
                   'rigenera la settimana per adeguare le ricette'

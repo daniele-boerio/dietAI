@@ -55,34 +55,36 @@ _MIN_CALORIES = {"uomo": 1500, "donna": 1200}
 
 KCAL_PER_G = {"protein_g": 4.0, "carbs_g": 4.0, "fat_g": 9.0}
 
-# Come si divide la giornata, per numero di pasti. I nomi sono quelli che l'utente si
-# ritrova nella griglia della settimana, quindi vanno scritti come si dicono.
-_MEAL_SPLITS = {
-    3: [("Colazione", 0.25), ("Pranzo", 0.40), ("Cena", 0.35)],
-    4: [
-        ("Colazione", 0.22),
-        ("Pranzo", 0.35),
-        ("Spuntino pomeriggio", 0.13),
-        ("Cena", 0.30),
-    ],
-    5: [
-        ("Colazione", 0.20),
-        ("Spuntino mattina", 0.10),
-        ("Pranzo", 0.32),
-        ("Spuntino pomeriggio", 0.10),
-        ("Cena", 0.28),
-    ],
-    6: [
-        ("Colazione", 0.18),
-        ("Spuntino mattina", 0.08),
-        ("Pranzo", 0.30),
-        ("Spuntino pomeriggio", 0.09),
-        ("Cena", 0.27),
-        ("Spuntino sera", 0.08),
-    ],
+# I pasti possibili, in ordine di giornata, col peso che ciascuno ha sul totale. I nomi
+# sono quelli che l'utente si ritrova nella griglia della settimana, quindi vanno
+# scritti come si dicono.
+#
+# Il peso è **uno solo per pasto** e non dipende da quanti se ne fanno: `_share_out`
+# normalizza sulla somma di quelli scelti, quindi saltare la colazione ridistribuisce
+# il suo 20% sugli altri in proporzione. È il motivo per cui qui non c'è una tabella
+# per ogni combinazione: di combinazioni ce ne sono 63, e sceglierle una per una
+# vorrebbe dire mantenere sessanta numeri che nessuno rileggerà mai.
+MEAL_CATALOG = (
+    ("colazione", "Colazione", 0.20),
+    ("spuntino_mattina", "Spuntino mattina", 0.08),
+    ("pranzo", "Pranzo", 0.33),
+    ("spuntino_pomeriggio", "Spuntino pomeriggio", 0.09),
+    ("cena", "Cena", 0.30),
+    ("spuntino_sera", "Spuntino sera", 0.08),
+)
+
+MEAL_KEYS = tuple(key for key, _, _ in MEAL_CATALOG)
+
+# Quali pasti proporre quando si dice soltanto *quanti* se ne fanno. Serve al primo
+# giro — la scelta vera la fa l'utente subito dopo, spuntandoli uno per uno.
+_DEFAULT_SELECTION = {
+    3: ("colazione", "pranzo", "cena"),
+    4: ("colazione", "pranzo", "spuntino_pomeriggio", "cena"),
+    5: ("colazione", "spuntino_mattina", "pranzo", "spuntino_pomeriggio", "cena"),
+    6: MEAL_KEYS,
 }
 
-MEAL_COUNTS = tuple(sorted(_MEAL_SPLITS))
+MEAL_COUNTS = tuple(sorted(_DEFAULT_SELECTION))
 
 
 def basal_metabolic_rate(sex: str, age: int, height_cm: float, weight_kg: float) -> float:
@@ -108,6 +110,60 @@ def _share_out(total: float, weights: list[float], decimals: int) -> list[float]
     return [int(v) if decimals == 0 else v for v in shares]
 
 
+def default_selection(meals_count: int) -> list[str]:
+    """I pasti da proporre spuntati a chi dice solo quanti ne fa."""
+    if meals_count not in _DEFAULT_SELECTION:
+        raise ValueError(f"Numero di pasti non gestito: {meals_count!r}")
+    return list(_DEFAULT_SELECTION[meals_count])
+
+
+def split_meals(
+    meal_keys: list[str],
+    *,
+    calories: int,
+    protein_g: float,
+    carbs_g: float,
+    fat_g: float,
+) -> list[dict]:
+    """Divide i totali del giorno fra i pasti scelti, ciascuno col suo peso.
+
+    L'ordine è quello del catalogo, cioè quello della giornata: l'utente sceglie
+    *quali* pasti fa, non in che ordine — la colazione resta la prima casella anche
+    se è l'ultima che ha spuntato.
+    """
+    wanted = set(meal_keys)
+    sconosciuti = wanted - set(MEAL_KEYS)
+    if sconosciuti:
+        raise ValueError(f"Pasto non riconosciuto: {sorted(sconosciuti)[0]!r}")
+
+    chosen = [(key, name, weight) for key, name, weight in MEAL_CATALOG if key in wanted]
+    if not chosen:
+        raise ValueError("Serve almeno un pasto al giorno.")
+
+    weights = [weight for _, _, weight in chosen]
+    shares = {
+        "calories": _share_out(calories, weights, 0),
+        "protein_g": _share_out(protein_g, weights, 1),
+        "carbs_g": _share_out(carbs_g, weights, 1),
+        "fat_g": _share_out(fat_g, weights, 1),
+    }
+
+    return [
+        {
+            "key": key,
+            "name": name,
+            "order": index,
+            "calories": shares["calories"][index],
+            "protein_g": shares["protein_g"][index],
+            "carbs_g": shares["carbs_g"][index],
+            "fat_g": shares["fat_g"][index],
+            "notes": None,
+            "auto_generate": True,
+        }
+        for index, (key, name, _) in enumerate(chosen)
+    ]
+
+
 def compute_plan(
     *,
     sex: str,
@@ -117,11 +173,18 @@ def compute_plan(
     activity: str,
     goal: str,
     meals_count: int = 4,
+    meals: list[str] | None = None,
+    targets: dict | None = None,
 ) -> dict:
     """Il piano completo: totali del giorno, come ci si è arrivati, e i pasti.
 
     Il "come ci si è arrivati" (bmr, tdee) non è decorazione: sono le due cifre che
     permettono all'utente di capire se il risultato ha senso prima di fidarsene.
+
+    `meals` sono le chiavi dei pasti scelti (chi la colazione non la fa non ce l'ha);
+    senza, si propongono quelli di `meals_count`. `targets` sono i totali corretti a
+    mano — il lucchetto aperto nella UI: la formula resta calcolata (bmr e tdee dicono
+    da cosa ci si sta allontanando) ma a dividersi fra i pasti sono questi numeri.
     """
     if sex not in SEXES:
         raise ValueError(f"Sesso non valido: {sex!r}")
@@ -129,8 +192,6 @@ def compute_plan(
         raise ValueError(f"Livello di attività non valido: {activity!r}")
     if goal not in GOALS:
         raise ValueError(f"Obiettivo non valido: {goal!r}")
-    if meals_count not in _MEAL_SPLITS:
-        raise ValueError(f"Numero di pasti non gestito: {meals_count!r}")
 
     bmr = basal_metabolic_rate(sex, age, height_cm, weight_kg)
     tdee = bmr * ACTIVITY_LEVELS[activity][0]
@@ -148,28 +209,29 @@ def compute_plan(
     carbs_kcal = calories - protein_g * KCAL_PER_G["protein_g"] - fat_g * KCAL_PER_G["fat_g"]
     carbs_g = round(max(carbs_kcal, 0) / KCAL_PER_G["carbs_g"], 1)
 
-    split = _MEAL_SPLITS[meals_count]
-    weights = [share for _, share in split]
-    shares = {
-        "calories": _share_out(calories, weights, 0),
-        "protein_g": _share_out(protein_g, weights, 1),
-        "carbs_g": _share_out(carbs_g, weights, 1),
-        "fat_g": _share_out(fat_g, weights, 1),
+    # I pavimenti valgono per la formula, non per le dita dell'utente: chi apre il
+    # lucchetto ha davanti i numeri di una dieta che gli ha scritto qualcun altro, e
+    # correggere 1400 in 1350 non deve trovare un muro.
+    proposti = {
+        "daily_calories": calories,
+        "protein_g": protein_g,
+        "carbs_g": carbs_g,
+        "fat_g": fat_g,
     }
+    if targets:
+        calories = int(round(targets.get("calories", calories)))
+        protein_g = round(float(targets.get("protein_g", protein_g)), 1)
+        carbs_g = round(float(targets.get("carbs_g", carbs_g)), 1)
+        fat_g = round(float(targets.get("fat_g", fat_g)), 1)
 
-    meals = [
-        {
-            "name": name,
-            "order": index,
-            "calories": shares["calories"][index],
-            "protein_g": shares["protein_g"][index],
-            "carbs_g": shares["carbs_g"][index],
-            "fat_g": shares["fat_g"][index],
-            "notes": None,
-            "auto_generate": True,
-        }
-        for index, (name, _) in enumerate(split)
-    ]
+    chosen = list(meals) if meals is not None else default_selection(meals_count)
+    split = split_meals(
+        chosen,
+        calories=calories,
+        protein_g=protein_g,
+        carbs_g=carbs_g,
+        fat_g=fat_g,
+    )
 
     return {
         "bmr": int(round(bmr)),
@@ -178,7 +240,10 @@ def compute_plan(
         "protein_g": protein_g,
         "carbs_g": carbs_g,
         "fat_g": fat_g,
-        "meals": meals,
+        # Cosa direbbe la formula, se i totali sono stati corretti a mano: è quello
+        # che permette alla UI di dire «hai messo 300 kcal più del calcolato».
+        "proposed": proposti,
+        "meals": split,
     }
 
 
@@ -195,4 +260,14 @@ def options() -> dict:
             for key, (_, hint) in GOALS.items()
         ],
         "meal_counts": list(MEAL_COUNTS),
+        # Il catalogo con i pesi: il frontend divide in locale mentre si spuntano i
+        # pasti (stessa aritmetica di `_share_out`, vedi lib/macros.js) invece di
+        # chiedere al server a ogni clic.
+        "meals": [
+            {"key": key, "name": name, "weight": weight}
+            for key, name, weight in MEAL_CATALOG
+        ],
+        "default_meals": {
+            str(count): list(keys) for count, keys in sorted(_DEFAULT_SELECTION.items())
+        },
     }

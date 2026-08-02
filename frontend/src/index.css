@@ -2586,6 +2586,35 @@ textarea:focus {
   margin-bottom: 8px;
 }
 
+/* Le frecette su e giù di `input[type=number]` qui non servono a niente — nessuno
+   corregge 552 kcal a colpi di uno — e si prendono un terzo di una casella larga
+   67px: i grassi a 156,5 finivano sotto la freccia. Il tastierino numerico sul
+   telefono lo dà `inputMode`, non lo spinner. */
+.meal-editor-row input[type='number'] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.meal-editor-row input[type='number']::-webkit-outer-spin-button,
+.meal-editor-row input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Ogni campo si porta dietro la sua etichetta, che qui non si vede: su desktop è
+   una tabella, e le intestazioni le dà la riga in cima. Sul telefono la riga in
+   cima sparisce (sette colonne non ci stanno) e l'etichetta esce fuori. */
+.meal-editor-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.meal-editor-cell > span {
+  display: none;
+}
+
 /* Chi prepara il pasto: l'AI o l'utente. Un pasto "mio" non viene mai generato,
    ma i suoi macro continuano a contare nella giornata. */
 .who-toggle {
@@ -2631,6 +2660,204 @@ textarea:focus {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+.meal-editor-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+/* ── Il lucchetto sui totali ──────────────────────────────────────────────────
+   Chiuso, il totale del giorno è un vincolo: quello che si toglie a un pasto va
+   sugli altri. Aperto, i numeri sono campi come tutti gli altri. Il pulsante deve
+   dire da lontano in quale dei due stati si è — chi apre il lucchetto e se ne
+   dimentica riscrive la dieta credendo di riorganizzarla. */
+.lock-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 99px;
+  border: 1px solid transparent;
+  background: var(--bg-surface);
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  transition: all var(--transition);
+}
+
+.lock-toggle:hover {
+  border-color: var(--border-light);
+}
+
+.lock-toggle.open {
+  background: rgba(201, 144, 43, 0.14);
+  color: var(--warning);
+}
+
+.totals-row {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+  margin-top: 6px;
+}
+
+.totals-row strong {
+  transition: color var(--transition);
+}
+
+/* Mentre si scrive il totale esce dal seminato: dirlo subito, e dire su quale
+   numero tornerà, spiega da solo perché gli altri pasti stanno per muoversi. */
+.totals-row strong.off-target {
+  color: var(--warning);
+}
+
+.totals-row strong.off-target em {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 600;
+  font-style: normal;
+  color: var(--text-muted);
+}
+
+/* ── Questionario, secondo passo: i totali e i pasti su cui si dividono ─────── */
+.totals-lock {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  background: var(--bg-surface);
+  margin-bottom: 14px;
+}
+
+.totals-lock.open {
+  border-color: var(--warning);
+}
+
+.totals-lock-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.totals-lock-head strong {
+  display: block;
+  font-size: 0.95rem;
+}
+
+.totals-lock-head span {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.totals-lock-head .lock-toggle {
+  width: auto;
+  flex: 0 0 auto;
+  background: var(--bg-card);
+  border-color: var(--border);
+}
+
+.totals-lock-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.totals-lock-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.totals-lock-cell span {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.totals-lock-cell strong {
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.meal-pick-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.meal-pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  text-align: left;
+  transition: all var(--transition);
+}
+
+.meal-pick:hover {
+  border-color: var(--border-light);
+}
+
+.meal-pick.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* La casella di spunta è un <i>: il bersaglio da toccare è tutta la riga, e un
+   input dentro un button non si può mettere. */
+.meal-pick i {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: 1.5px solid var(--border-light);
+  color: var(--accent-contrast);
+}
+
+.meal-pick.on i {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.meal-pick-name {
+  flex: 1;
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+.meal-pick-macros {
+  text-align: right;
+  font-size: 0.8rem;
+}
+
+.meal-pick-macros strong {
+  display: block;
+  font-variant-numeric: tabular-nums;
+}
+
+.meal-pick-macros em {
+  font-style: normal;
+  font-size: 0.74rem;
+  color: var(--text-secondary);
+}
+
+.meal-pick-macros.off {
+  color: var(--text-muted);
+  font-size: 0.78rem;
 }
 
 /* È un <label>, e i label sono display:inline: senza questo il bordo tratteggiato
@@ -3175,11 +3402,78 @@ textarea:focus {
   .nutrition-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+  /* ── L'editor della dieta sul telefono ────────────────────────────────────
+     Sette colonne su 300px di larghezza non sono una tabella, sono un imbuto: i
+     campi finivano a due per riga sotto intestazioni che ne annunciavano sei, e
+     quale numero fosse quale non lo diceva più niente. Ogni pasto diventa una
+     scheda a sé — il nome sopra, i quattro numeri in fila con la loro etichetta,
+     e sotto chi lo prepara. Le etichette scendono nelle celle (`.meal-editor-cell
+     > span`), quindi la riga di intestazione qui non serve più. */
+  .meal-editor-head {
+    display: none;
+  }
   .meal-editor-row {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px 5px;
+    padding: 12px;
+    margin-bottom: 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-surface);
+  }
+  .meal-editor-cell > span {
+    display: block;
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .meal-editor-cell.wide {
+    grid-column: 1 / -1;
+  }
+  /* Quattro caselle in fila su 300px: il respiro ai lati del numero è la prima
+     cosa che si può togliere, e centrato si legge meglio di così. */
+  .meal-editor-row input[type='number'] {
+    padding-left: 6px;
+    padding-right: 6px;
+    text-align: center;
   }
   .meal-editor-row .who-toggle {
+    grid-column: 1 / 4;
+  }
+  .meal-editor-row .icon-button {
+    justify-self: end;
+  }
+  /* Il totale non è un pasto: niente scheda — solo il filo che lo separa da loro —
+     e l'etichetta si prende la sua riga. Il fianco resta quello delle schede
+     (12px di padding più 1px di bordo) perché le sue quattro colonne cadano sotto
+     i campi che sta sommando. */
+  .totals-row {
+    border: none;
+    border-top: 1px solid var(--border);
+    border-radius: 0;
+    background: none;
+    padding: 12px 13px 0;
+  }
+  .totals-row-label {
     grid-column: 1 / -1;
+  }
+  .totals-row .lock-toggle {
+    grid-column: 1 / -1;
+    margin-top: 4px;
+  }
+  /* "Salva" è il pulsante che si viene a premere: mezza riga per uno invece di due
+     bottoncini stretti in alto a sinistra. */
+  .meal-editor-actions .btn {
+    flex: 1;
+  }
+  /* Quattro colonne di totali su un telefono spezzano "Carboidrati" a metà parola. */
+  .totals-lock-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
   .shopping-footer {
     flex-direction: column;

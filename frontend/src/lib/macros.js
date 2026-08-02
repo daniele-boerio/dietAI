@@ -87,6 +87,52 @@ export function removeMeal(meals, index) {
 }
 
 /**
+ * Riporta la somma di un campo al totale bloccato dopo che un pasto è stato
+ * modificato: la differenza va sugli **altri**, in proporzione a quanto pesano.
+ *
+ * È il lucchetto chiuso: alzare la colazione ridivide la giornata, non la allunga.
+ * Il valore scritto si ferma al totale — chi batte 5000 kcal in un pasto solo non
+ * vuole gli altri in negativo, vuole gli altri a zero.
+ */
+export function rebalanceField(meals, index, field, total) {
+  const decimals = DECIMALS[field];
+  const target = round(num(total), decimals);
+  const edited = round(Math.min(num(meals[index][field]), target), decimals);
+
+  // Con un pasto solo non c'è nessuno su cui spostare la differenza: il valore torna
+  // ad essere il totale, che è l'unica cosa che il lucchetto promette.
+  if (meals.length === 1) return meals.map((meal) => ({ ...meal, [field]: target }));
+
+  const shares = shareOut(
+    meals.filter((_, i) => i !== index).map((meal) => num(meal[field])),
+    round(target - edited, decimals),
+    decimals
+  );
+
+  let next = 0;
+  return meals.map((meal, i) =>
+    i === index ? { ...meal, [field]: edited } : { ...meal, [field]: shares[next++] }
+  );
+}
+
+/**
+ * Divide i totali fra i pasti dati, ciascuno col peso che si porta dietro.
+ *
+ * È la stessa aritmetica di `_share_out` nel backend (utils/nutrition.py) applicata
+ * agli stessi pesi, che arrivano da `/diet/questionnaire/options`: il questionario
+ * può mostrare la divisione mentre si spuntano i pasti, senza una chiamata per clic,
+ * e quello che si vede è quello che verrà salvato.
+ */
+export function splitByWeights(meals, totals) {
+  return rescaleToTotals(
+    meals.map((meal) =>
+      FIELDS.reduce((acc, field) => ({ ...acc, [field]: meal.weight }), { ...meal })
+    ),
+    FIELDS.reduce((acc, field) => ({ ...acc, [field]: num(totals[field]) }), {})
+  );
+}
+
+/**
  * Aggiunge un pasto prendendo una quota media dagli altri, che si stringono in
  * proporzione. Anche qui il totale giornaliero non cambia: aggiungere uno spuntino
  * significa ridistribuire la giornata, non mangiare di più.

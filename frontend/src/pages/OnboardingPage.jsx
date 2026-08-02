@@ -193,9 +193,9 @@ function DietStep({ onNext, addToast }) {
       <>
         <h1 className="onboarding-title">Due dati e ti dico quanto mangiare</h1>
         <p className="onboarding-text">
-          Da questi calcolo il fabbisogno giornaliero e lo divido fra i pasti. È
-          aritmetica, non un modello: nessuna chiamata AI, e i numeri restano tuoi da
-          correggere.
+          Da questi calcolo il fabbisogno giornaliero; al passo dopo scegli quali pasti
+          fai e ce lo divido sopra. È aritmetica, non un modello: nessuna chiamata AI, e
+          i numeri restano tuoi da correggere.
         </p>
         <div className="card">
           <Questionnaire
@@ -239,7 +239,8 @@ function DietStep({ onNext, addToast }) {
           <strong>Non ho una dieta</strong>
           <span>
             Sei domande — sesso, età, altezza, peso, quanto ti muovi, che obiettivo hai
-            — e calcolo calorie e macro con la formula standard.
+            — e calcolo calorie e macro con la formula standard. Poi mi dici quali pasti
+            fai e li divido su quelli.
           </span>
         </button>
       </div>

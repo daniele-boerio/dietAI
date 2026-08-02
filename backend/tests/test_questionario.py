@@ -85,6 +85,73 @@ def test_valori_fuori_elenco(campo, valore):
         compute_plan(**{**RISPOSTE, campo: valore})
 
 
+# ── Quali pasti si fanno ───────────────────────────────────────────────────────
+
+
+def test_i_pasti_si_scelgono_uno_per_uno():
+    piano = compute_plan(**RISPOSTE, meals=["pranzo", "cena"])
+
+    assert [m["key"] for m in piano["meals"]] == ["pranzo", "cena"]
+    assert sum(m["calories"] for m in piano["meals"]) == piano["daily_calories"]
+
+
+def test_saltare_la_colazione_non_accorcia_la_giornata():
+    """Chi non fa colazione mangia le stesse calorie in meno volte, non di meno."""
+    con = compute_plan(**RISPOSTE, meals=["colazione", "pranzo", "cena"])
+    senza = compute_plan(**RISPOSTE, meals=["pranzo", "cena"])
+
+    assert senza["daily_calories"] == con["daily_calories"]
+    assert sum(m["calories"] for m in senza["meals"]) == senza["daily_calories"]
+    # Le calorie della colazione sono andate sugli altri due, in proporzione.
+    per_nome = {m["key"]: m["calories"] for m in con["meals"]}
+    assert all(m["calories"] > per_nome[m["key"]] for m in senza["meals"])
+
+
+def test_l_ordine_e_quello_della_giornata_non_quello_dei_clic():
+    piano = compute_plan(**RISPOSTE, meals=["cena", "colazione", "spuntino_mattina"])
+
+    assert [m["key"] for m in piano["meals"]] == ["colazione", "spuntino_mattina", "cena"]
+    assert [m["order"] for m in piano["meals"]] == [0, 1, 2]
+
+
+def test_un_pasto_inventato_e_un_errore():
+    with pytest.raises(ValueError):
+        compute_plan(**RISPOSTE, meals=["merenda_di_mezzanotte"])
+
+
+def test_zero_pasti_non_e_una_dieta():
+    with pytest.raises(ValueError):
+        compute_plan(**RISPOSTE, meals=[])
+
+
+# ── Il lucchetto: i totali scritti a mano ──────────────────────────────────────
+
+
+def test_i_totali_corretti_a_mano_vincono_sulla_formula():
+    piano = compute_plan(
+        **RISPOSTE,
+        meals=["colazione", "pranzo", "cena"],
+        targets={"calories": 2400, "protein_g": 180, "carbs_g": 240, "fat_g": 70},
+    )
+
+    assert piano["daily_calories"] == 2400
+    assert piano["protein_g"] == 180
+    assert sum(m["calories"] for m in piano["meals"]) == 2400
+    # Quello che direbbe la formula resta a disposizione: è il metro di paragone.
+    assert piano["proposed"]["daily_calories"] != 2400
+
+
+def test_a_mano_si_scende_anche_sotto_i_pavimenti_della_formula():
+    """I minimi difendono un calcolo automatico, non discutono una dieta scritta."""
+    piano = compute_plan(
+        sex="donna", age=30, height_cm=165, weight_kg=60,
+        activity="sedentario", goal="dimagrire",
+        meals=["pranzo", "cena"],
+        targets={"calories": 1100, "protein_g": 90, "carbs_g": 100, "fat_g": 35},
+    )
+    assert piano["daily_calories"] == 1100
+
+
 # ── L'endpoint ─────────────────────────────────────────────────────────────────
 
 
@@ -139,3 +206,70 @@ def test_le_opzioni_del_questionario_le_serve_il_backend(client):
     assert "uomo" in opzioni["sexes"]
     assert {o["key"] for o in opzioni["goals"]} == {"dimagrire", "mantenere", "aumentare"}
     assert all(o["hint"] for o in opzioni["activity_levels"])
+
+
+def test_le_opzioni_portano_i_pesi_dei_pasti(client):
+    """Col peso il frontend divide in locale mentre si spuntano, senza una chiamata a clic."""
+    opzioni = client.get("/api/diet/questionnaire/options").json()
+
+    assert [m["key"] for m in opzioni["meals"]][:2] == ["colazione", "spuntino_mattina"]
+    assert all(m["weight"] > 0 and m["name"] for m in opzioni["meals"])
+    assert opzioni["default_meals"]["3"] == ["colazione", "pranzo", "cena"]
+
+
+def test_l_anteprima_non_salva_niente(client):
+    """In mezzo ai due passi non deve nascere una dieta che nessuno ha ancora visto."""
+    res = client.post("/api/diet/questionnaire/preview", json=RISPOSTE)
+
+    assert res.status_code == 200, res.text
+    assert res.json()["daily_calories"] > 0
+    assert client.get("/api/diet/current").status_code == 404
+
+
+def test_i_pasti_scelti_diventano_le_caselle_della_settimana(client):
+    dieta = client.post(
+        "/api/diet/questionnaire", json={**RISPOSTE, "meals": ["pranzo", "cena"]}
+    ).json()
+
+    assert [m["name"] for m in dieta["meals"]] == ["Pranzo", "Cena"]
+    settimana = client.get("/api/planning/weeks/current").json()
+    assert [m["slot_name"] for m in settimana["days"][0]["meals"]] == ["Pranzo", "Cena"]
+
+
+def test_i_pasti_scelti_restano_per_riaprire_il_questionario(client):
+    client.post("/api/diet/questionnaire", json={**RISPOSTE, "meals": ["pranzo", "cena"]})
+
+    assert client.get("/api/diet/current").json()["profile"]["meals"] == ["pranzo", "cena"]
+
+
+def test_i_pasti_restano_scritti_anche_dicendo_solo_quanti(client):
+    """Chi non li sceglie uno per uno riapre comunque il questionario già spuntato."""
+    client.post("/api/diet/questionnaire", json={**RISPOSTE, "meals_count": 3})
+
+    assert client.get("/api/diet/current").json()["profile"]["meals"] == [
+        "colazione",
+        "pranzo",
+        "cena",
+    ]
+
+
+def test_i_totali_sbloccati_arrivano_fino_ai_pasti(client):
+    dieta = client.post(
+        "/api/diet/questionnaire",
+        json={
+            **RISPOSTE,
+            "meals": ["colazione", "pranzo", "cena"],
+            "targets": {"calories": 2400, "protein_g": 180, "carbs_g": 240, "fat_g": 70},
+        },
+    ).json()
+
+    assert dieta["total_daily_calories"] == 2400
+    assert sum(m["calories"] for m in dieta["meals"]) == 2400
+    assert sum(m["protein_g"] for m in dieta["meals"]) == pytest.approx(180, abs=0.05)
+    # Nelle note resta scritto che i numeri sono stati forzati, e da cosa.
+    assert "a mano" in dieta["notes"]
+
+
+def test_un_pasto_inventato_dal_client_e_un_400(client):
+    res = client.post("/api/diet/questionnaire", json={**RISPOSTE, "meals": ["brunch"]})
+    assert res.status_code == 400

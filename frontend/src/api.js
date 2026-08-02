@@ -96,6 +96,11 @@ export const api = {
   // macro con una formula, senza chiamare nessun modello.
   getQuestionnaireOptions: () => request('/diet/questionnaire/options'),
 
+  // I numeri prima di salvarli: servono al secondo passo del questionario, dove si
+  // scelgono i pasti su cui dividerli. Non tocca il database.
+  previewQuestionnaire: (payload) =>
+    request('/diet/questionnaire/preview', { method: 'POST', body: JSON.stringify(payload) }),
+
   createDietFromQuestionnaire: (payload) =>
     request('/diet/questionnaire', { method: 'POST', body: JSON.stringify(payload) }),
 

@@ -202,6 +202,39 @@ def questionnaire_options(_user: User = Depends(get_current_user)):
     return nutrition.options()
 
 
+def _compute(body: QuestionnaireRequest) -> dict:
+    """Il calcolo, con gli errori di elenco tradotti in 400 leggibili."""
+    try:
+        return nutrition.compute_plan(
+            sex=body.sex,
+            age=body.age,
+            height_cm=body.height_cm,
+            weight_kg=body.weight_kg,
+            activity=body.activity,
+            goal=body.goal,
+            meals_count=body.meals_count,
+            meals=body.meals,
+            targets=body.targets.model_dump() if body.targets else None,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+
+@router.post("/questionnaire/preview")
+def preview_questionnaire(
+    body: QuestionnaireRequest,
+    _user: User = Depends(get_current_user),
+):
+    """Gli stessi numeri, senza salvare niente.
+
+    Il questionario si fa in due tempi: prima i dati della persona, poi *quali* pasti
+    si fanno e come si dividono le calorie. In mezzo servono i totali, e crearli come
+    dieta per poi sostituirla al passo dopo vorrebbe dire archiviare una dieta mai
+    vista da nessuno a ogni ripensamento.
+    """
+    return _compute(body)
+
+
 @router.post("/questionnaire")
 def create_diet_from_questionnaire(
     body: QuestionnaireRequest,
@@ -216,21 +249,23 @@ def create_diet_from_questionnaire(
     già compilato quando il peso cambia (e resta scritto, nella dieta archiviata, con
     che dati era stato fatto quel calcolo).
     """
-    try:
-        computed = nutrition.compute_plan(**body.model_dump())
-    except ValueError as exc:
-        raise HTTPException(400, str(exc))
+    computed = _compute(body)
 
     db.query(DietPlan).filter(
         DietPlan.user_id == user.id, DietPlan.is_active.is_(True)
     ).update({"is_active": False})
+
+    # I pasti effettivi finiscono nel profilo anche quando la richiesta diceva solo
+    # quanti erano: riaprendo il questionario le caselle sono già quelle di prima.
+    profile = {**body.model_dump(), "meals": [m["key"] for m in computed["meals"]]}
+    forzati = computed["daily_calories"] != computed["proposed"]["daily_calories"]
 
     diet = DietPlan(
         user_id=user.id,
         filename=None,
         parsed_data={
             "source": "questionario",
-            "profile": body.model_dump(),
+            "profile": profile,
             "computed": {
                 key: computed[key]
                 for key in ("bmr", "tdee", "daily_calories", "protein_g", "carbs_g", "fat_g")
@@ -241,6 +276,12 @@ def create_diet_from_questionnaire(
         notes=(
             f"Calcolata dal questionario: metabolismo basale {computed['bmr']} kcal, "
             f"fabbisogno {computed['tdee']} kcal, obiettivo «{body.goal}»."
+            + (
+                f" Totali corretti a mano: la formula diceva "
+                f"{computed['proposed']['daily_calories']} kcal."
+                if forzati
+                else ""
+            )
         ),
         is_active=True,
     )

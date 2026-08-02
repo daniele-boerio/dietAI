@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { addMeal, dailyTotals, removeMeal, rescaleToTotals } from './macros';
+import {
+  addMeal,
+  dailyTotals,
+  rebalanceField,
+  removeMeal,
+  rescaleToTotals,
+  splitByWeights,
+} from './macros';
 
 const DIETA = [
   { name: 'Colazione', calories: 400, protein_g: 20, carbs_g: 50, fat_g: 12 },
@@ -112,6 +119,110 @@ describe('aggiunta di un pasto', () => {
     expect(addMeal([], 'Colazione')).toEqual([
       { name: 'Colazione', calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 },
     ]);
+  });
+});
+
+describe('lucchetto: un pasto cambia, il totale no', () => {
+  it('sposta sugli altri quello che si è aggiunto a un pasto', () => {
+    // La colazione da 400 passa a 500: le 100 kcal in più le mettono pranzo e cena.
+    const scritta = DIETA.map((m, i) => (i === 0 ? { ...m, calories: 500 } : m));
+    const dopo = rebalanceField(scritta, 0, 'calories', TOTALI.calories);
+
+    expect(dopo[0].calories).toBe(500);
+    expect(dailyTotals(dopo).calories).toBe(TOTALI.calories);
+    expect(dopo[1].calories).toBeLessThan(700);
+    expect(dopo[2].calories).toBeLessThan(600);
+  });
+
+  it('tocca solo il campo modificato', () => {
+    const scritta = DIETA.map((m, i) => (i === 1 ? { ...m, protein_g: 50 } : m));
+    const dopo = rebalanceField(scritta, 1, 'protein_g', TOTALI.protein_g);
+
+    expect(dailyTotals(dopo).protein_g).toBe(TOTALI.protein_g);
+    // Le calorie non le ha chieste nessuno: restano quelle scritte a mano.
+    expect(dopo.map((m) => m.calories)).toEqual([400, 700, 600]);
+  });
+
+  it('mantiene le proporzioni fra gli altri pasti', () => {
+    const scritta = DIETA.map((m, i) => (i === 0 ? { ...m, calories: 300 } : m));
+    const [, pranzo, cena] = rebalanceField(scritta, 0, 'calories', TOTALI.calories);
+
+    // Pranzo pesava 700/1300 di quello che restava, e continua a pesare tanto.
+    expect(pranzo.calories / cena.calories).toBeCloseTo(700 / 600, 1);
+  });
+
+  it('non manda gli altri in negativo quando si esagera', () => {
+    const assurda = DIETA.map((m, i) => (i === 0 ? { ...m, calories: 9000 } : m));
+    const dopo = rebalanceField(assurda, 0, 'calories', TOTALI.calories);
+
+    expect(dopo[0].calories).toBe(TOTALI.calories);
+    expect(dopo[1].calories).toBe(0);
+    expect(dopo[2].calories).toBe(0);
+  });
+
+  it("con un pasto solo il valore torna a essere il totale", () => {
+    const dopo = rebalanceField([{ name: 'Pranzo', calories: 1200 }], 0, 'calories', 1700);
+    expect(dopo[0].calories).toBe(1700);
+  });
+
+  it('riparte da zero senza dividere per zero', () => {
+    const spenti = [
+      { name: 'A', calories: 500 },
+      { name: 'B', calories: 0 },
+      { name: 'C', calories: 0 },
+    ];
+    const dopo = rebalanceField(spenti, 0, 'calories', 1000);
+
+    expect(dopo[1].calories).toBe(250);
+    expect(dopo[2].calories).toBe(250);
+  });
+});
+
+describe('divisione per pesi (i pasti scelti nel questionario)', () => {
+  const CATALOGO = [
+    { key: 'colazione', name: 'Colazione', weight: 0.2 },
+    { key: 'pranzo', name: 'Pranzo', weight: 0.33 },
+    { key: 'cena', name: 'Cena', weight: 0.3 },
+  ];
+
+  it('divide tutto il totale, senza perderne un pezzo', () => {
+    const righe = splitByWeights(CATALOGO, TOTALI);
+
+    expect(righe.map((r) => r.name)).toEqual(['Colazione', 'Pranzo', 'Cena']);
+    expect(dailyTotals(righe)).toEqual(TOTALI);
+  });
+
+  it('rispetta i pesi: il pranzo è il pasto più grande', () => {
+    const [colazione, pranzo, cena] = splitByWeights(CATALOGO, TOTALI);
+
+    expect(pranzo.calories).toBeGreaterThan(cena.calories);
+    expect(cena.calories).toBeGreaterThan(colazione.calories);
+    // 0.2 su 0.83 di peso totale: poco meno di un quarto della giornata.
+    expect(colazione.calories).toBe(Math.round((1700 * 0.2) / 0.83));
+  });
+
+  it('togliendo la colazione la giornata resta intera', () => {
+    const senza = splitByWeights(
+      CATALOGO.filter((m) => m.key !== 'colazione'),
+      TOTALI
+    );
+
+    expect(senza).toHaveLength(2);
+    expect(dailyTotals(senza)).toEqual(TOTALI);
+    // Quello che non si fa a colazione si mangia a pranzo e a cena.
+    expect(senza[0].calories).toBeGreaterThan(splitByWeights(CATALOGO, TOTALI)[1].calories);
+  });
+
+  it('con i totali scritti a mano (stringhe dal form) non esplode', () => {
+    const righe = splitByWeights(CATALOGO, {
+      calories: '1800',
+      protein_g: '',
+      carbs_g: 200,
+      fat_g: 60,
+    });
+
+    expect(dailyTotals(righe).calories).toBe(1800);
+    expect(dailyTotals(righe).protein_g).toBe(0);
   });
 });
 

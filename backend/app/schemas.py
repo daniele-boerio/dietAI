@@ -70,6 +70,19 @@ class DietMealsUpdate(BaseModel):
     meals: list[MealSlotInput] = Field(min_length=1, max_length=20)
 
 
+class DailyTargets(BaseModel):
+    """I totali del giorno scritti a mano: il lucchetto aperto nel questionario.
+
+    Gli estremi sono larghi apposta — servono a fermare gli zeri e i refusi da tastiera
+    (25000 kcal), non a discutere la dieta di chi la sta correggendo.
+    """
+
+    calories: int = Field(ge=500, le=6000)
+    protein_g: float = Field(ge=0, le=500)
+    carbs_g: float = Field(ge=0, le=1000)
+    fat_g: float = Field(ge=0, le=400)
+
+
 class QuestionnaireRequest(BaseModel):
     """Le risposte da cui si calcolano calorie e macro, per chi non ha una dieta.
 
@@ -83,7 +96,11 @@ class QuestionnaireRequest(BaseModel):
     weight_kg: float = Field(ge=35, le=250)
     activity: str = Field(min_length=1, max_length=20)
     goal: str = Field(min_length=1, max_length=20)
+    # Quanti pasti, per chi non li sceglie uno per uno: `meals` (le chiavi del catalogo)
+    # vince quando c'è, ed è la strada che percorre la UI dal secondo passo in poi.
     meals_count: int = Field(default=4, ge=3, le=6)
+    meals: list[str] | None = Field(default=None, max_length=12)
+    targets: DailyTargets | None = None
 
 
 # ── Configurazione ─────────────────────────────────────────────────────────────

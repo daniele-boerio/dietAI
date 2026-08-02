@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   CalendarCheck,
+  CalendarClock,
   Check,
   ChevronDown,
   ChevronRight,
@@ -257,8 +258,8 @@ export default function ShoppingPage() {
   if (loading) return <div className="spinner" />;
   if (!list) return <LoadError message={error} onRetry={load} />;
 
-  // La lista non è "di" una settimana: comprende tutte le ricette da cucinare da oggi
-  // in avanti, quindi il periodo lo dicono i giorni coperti.
+  // La lista non è "di" una settimana: comprende le ricette da cucinare da oggi fino
+  // a domenica otto, quindi il periodo lo dicono i giorni coperti.
   const periodo = list.covers_from
     ? `Dal ${formatDate(list.covers_from)} al ${formatDate(list.covers_to)}`
     : 'Niente da comprare';
@@ -285,15 +286,33 @@ export default function ShoppingPage() {
         </div>
       </div>
 
-      {/* La lista arriva più in là di domenica perché hai già generato oltre: dirlo
-          evita che il totale alto sembri un errore di conto. */}
+      {/* La lista arriva più in là di domenica perché hai già generato la settimana
+          prossima: dirlo evita che il totale alto sembri un errore di conto. */}
       {oltre && (
         <div className="notice notice-skip">
           <CalendarCheck />
           <div>
             <strong>Spesa fino al {formatDate(list.covers_to)}</strong>: la lista
-            comprende tutte le ricette che hai generato, anche quelle delle settimane
-            successive. Una confezione sola invece di due mezze.
+            comprende anche le ricette della settimana prossima, così di una confezione
+            se ne compra una sola invece di due mezze.
+          </div>
+        </div>
+      )}
+
+      {/* Il contrario del riquadro qui sopra, e serve per lo stesso motivo: una lista
+          più corta del piano non deve sembrare una lista che ha perso dei pezzi. */}
+      {list.meals_beyond > 0 && (
+        <div className="notice">
+          <CalendarClock />
+          <div>
+            <strong>Il piano va più avanti della spesa.</strong> Dopo il{' '}
+            {formatDate(list.horizon)} hai{' '}
+            {list.meals_beyond === 1
+              ? 'un pasto pianificato'
+              : `${list.meals_beyond} pasti pianificati`}
+            : non sono in lista e non è una dimenticanza — si comprano quando arriva il
+            loro turno, altrimenti il carrello di oggi sarebbe pieno di roba per fra tre
+            settimane.
           </div>
         </div>
       )}

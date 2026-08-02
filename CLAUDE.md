@@ -189,9 +189,16 @@ resta, perché non l'hai comprato.
 
 `meals_to_buy` è il cuore: pasti con una ricetta, da oggi in avanti, non su un giorno
 saltato, non saltati e **non già segnati come seguiti** — quel piatto è stato
-cucinato, ricomprarlo sarebbe comprarlo due volte. Nessun tetto in avanti: se hai
-generato tre settimane la spesa le comprende tutte, ed è l'anti-spreco portato oltre
-il lunedì (una confezione sola invece di due mezze). Di liste ce n'è una sola
+cucinato, ricomprarlo sarebbe comprarlo due volte. In avanti si arriva a **domenica
+otto** (`shopping_horizon`, `SHOPPING_HORIZON_WEEKS = 2`): due settimane e non una,
+perché il lunedì non è un muro e l'anti-spreco vive lì (una confezione sola invece di
+due mezze); due e non "tutte", perché più in là il piano non è una previsione ma
+un'ipotesi — le settimane future nascono appena le si sfoglia e ci si ricopiano dentro
+i pasti fissi da sole (`apply_recurring_meals`), quindi senza tetto bastava guardare
+avanti nel calendario per far crescere la lista all'infinito, e una lista che comprende
+marzo non dice più cosa comprare oggi. Quello che resta fuori si dichiara
+(`meals_beyond`): una lista più corta del piano, senza una riga che lo spieghi, sembra
+una lista che ha perso dei pezzi. Di liste ce n'è una sola
 (`current_list`, agganciata alla settimana corrente solo perché la riga deve stare da
 qualche parte) e non si chiude mai: `completed_at` dice quand'è stato l'ultimo giro.
 Chi tocca il piano chiama `rebuild_shopping_list(db, user_id)` — la dashboard legge la

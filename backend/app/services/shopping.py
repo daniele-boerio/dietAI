@@ -2,9 +2,9 @@
 
 La lista non è una cosa che l'utente compila e non è nemmeno una cosa che si chiude:
 è una funzione del piano, e dice sempre la stessa cosa — **quello che le ricette da
-oggi in avanti chiedono e che in dispensa non c'è**. Ogni volta che il piano cambia
-viene ricalcolata da zero, sottraendo quello che in casa c'è già (dispensa) e quello
-che c'è sempre (ingredienti di base).
+oggi a domenica otto chiedono e che in dispensa non c'è**. Ogni volta che il piano
+cambia viene ricalcolata da zero, sottraendo quello che in casa c'è già (dispensa) e
+quello che c'è sempre (ingredienti di base).
 
 Da lì viene tutto il resto, senza regole aggiuntive: "ho fatto la spesa" sposta gli
 articoli spuntati in dispensa, e la lista si svuota da sé perché adesso la dispensa
@@ -12,9 +12,9 @@ copre il piano. Una ricetta nuova aggiunge quello che le serve, perché in dispe
 non c'è. Cambiare una ricetta già comprata non toglie niente dalla dispensa: quello
 che è in casa resta in casa, ed è l'utente a correggere la scorta se serve.
 
-Restano fuori dalla lista i giorni già passati (non si compra per ieri) e i pasti già
-segnati come seguiti: sono stati cucinati, quindi comprarli di nuovo sarebbe comprare
-due volte la stessa cena.
+Restano fuori dalla lista i giorni già passati (non si compra per ieri), quelli oltre
+domenica otto (si comprano quando arrivano) e i pasti già segnati come seguiti: sono
+stati cucinati, quindi comprarli di nuovo sarebbe comprare due volte la stessa cena.
 """
 
 from datetime import date, datetime, timedelta, timezone
@@ -89,14 +89,31 @@ def current_list(db: Session, user_id: int) -> tuple[WeekPlan, ShoppingList]:
     return week, get_or_create_list(db, week)
 
 
-def meals_to_buy(db: Session, user_id: int) -> list[tuple[DayPlan, PlannedMeal]]:
-    """I pasti per cui si compra: da oggi in avanti, non saltati, non già mangiati.
+# Fin dove guarda la spesa: questa settimana e la prossima, cioè fino a domenica otto.
+# Due e non una, perché il senso di tutto è la confezione sola invece di due mezze e il
+# lunedì non è un muro. Due e non "tutte", perché più avanti il piano non è una
+# previsione ma un'ipotesi: le settimane future nascono appena le sfogli e ci si
+# ricopiano dentro i pasti fissi da sole (`apply_recurring_meals`), quindi senza tetto
+# bastava guardare avanti nel calendario per far crescere la lista all'infinito — e a
+# quel punto non diceva più cosa comprare oggi.
+SHOPPING_HORIZON_WEEKS = 2
 
-    Non c'è nessun limite in avanti — se hai generato tre settimane la spesa le
-    comprende tutte, ed è il punto: una confezione sola invece di due mezze. Restano
-    fuori tre cose, per lo stesso motivo (non comprare quello che non servirà):
+
+def shopping_horizon() -> date:
+    """L'ultimo giorno che la spesa comprende: la domenica della settimana prossima."""
+    from .planner import current_week_start
+
+    return current_week_start() + timedelta(days=7 * SHOPPING_HORIZON_WEEKS - 1)
+
+
+def meals_to_buy(db: Session, user_id: int) -> list[tuple[DayPlan, PlannedMeal]]:
+    """I pasti per cui si compra: da oggi a domenica otto, non saltati, non già mangiati.
+
+    Restano fuori quattro cose, tutte per lo stesso motivo — non comprare quello che
+    non servirà, o che è già servito:
 
     · i giorni già passati, perché per ieri non si cucina più;
+    · quelli oltre l'orizzonte (`shopping_horizon`), che si compreranno a tempo debito;
     · i giorni e i pasti saltati — un pasto saltato ha già la sua ricetta accodata su
       un'altra casella, e comprarlo qui vorrebbe dire comprarlo due volte;
     · i pasti segnati come seguiti: quel piatto è stato cucinato, con quello che c'era
@@ -111,6 +128,7 @@ def meals_to_buy(db: Session, user_id: int) -> list[tuple[DayPlan, PlannedMeal]]
         .filter(
             WeekPlan.user_id == user_id,
             DayPlan.date >= today(),
+            DayPlan.date <= shopping_horizon(),
             DayPlan.is_skipped.is_(False),
             PlannedMeal.is_skipped.is_(False),
             PlannedMeal.recipe_id.isnot(None),
@@ -118,6 +136,27 @@ def meals_to_buy(db: Session, user_id: int) -> list[tuple[DayPlan, PlannedMeal]]
         )
         .order_by(DayPlan.date)
         .all()
+    )
+
+
+def meals_beyond_horizon(db: Session, user_id: int) -> int:
+    """Quanti pasti con una ricetta restano fuori dall'orizzonte.
+
+    Serve solo a dirlo: chi ha pianificato tre settimane e vede in lista gli ingredienti
+    di due deve capire che non manca niente, e che quella roba arriverà quando è ora.
+    """
+    return (
+        db.query(PlannedMeal)
+        .join(DayPlan, DayPlan.id == PlannedMeal.day_plan_id)
+        .join(WeekPlan, WeekPlan.id == DayPlan.week_plan_id)
+        .filter(
+            WeekPlan.user_id == user_id,
+            DayPlan.date > shopping_horizon(),
+            DayPlan.is_skipped.is_(False),
+            PlannedMeal.is_skipped.is_(False),
+            PlannedMeal.recipe_id.isnot(None),
+        )
+        .count()
     )
 
 
@@ -275,7 +314,8 @@ def serialize_shopping_list(db: Session, user_id: int, lst: ShoppingList) -> dic
 
     # Il periodo che la lista sta comprando: dal primo all'ultimo giorno con una
     # ricetta ancora da cucinare. Non è "questa settimana" — se hai generato anche la
-    # prossima, la spesa comprende anche quella, ed è il punto di tutto.
+    # prossima la spesa comprende anche quella, ed è metà del punto di tutto: una
+    # confezione sola invece di due mezze.
     giorni = [day.date for day, _ in meals_to_buy(db, user_id)]
 
     return {
@@ -285,6 +325,10 @@ def serialize_shopping_list(db: Session, user_id: int, lst: ShoppingList) -> dic
         "estimated_cost": lst.estimated_cost,
         "covers_from": min(giorni).isoformat() if giorni else None,
         "covers_to": max(giorni).isoformat() if giorni else None,
+        # Dove si ferma la spesa e quanto piano resta fuori: senza, chi ha pianificato
+        # tre settimane vede meno roba di quella che si aspetta e pensa a un errore.
+        "horizon": shopping_horizon().isoformat(),
+        "meals_beyond": meals_beyond_horizon(db, user_id),
         "total_items": total_items,
         "checked_items": checked_items,
         "priced_items": priced_items,

@@ -1,9 +1,12 @@
-"""La spesa comprende tutto il piano da oggi in avanti, non solo questa settimana.
+"""La spesa comprende questa settimana e la prossima, non solo quella corrente.
 
 La spesa segue il piano e non il calendario: se l'utente ha già generato anche la
 settimana prossima, quegli ingredienti servono davvero e comprarli nello stesso giro è
-tutto l'anti-spreco (una confezione sola invece di due mezze). Quanto avanti spingersi
-lo decide lui, generando quello che vuole.
+tutto l'anti-spreco (una confezione sola invece di due mezze), perché il lunedì non è
+un muro. Ma si ferma lì: oltre, il piano non è una previsione ma un'ipotesi, e siccome
+le settimane future nascono appena le si sfoglia — coi pasti fissi che ci si ricopiano
+dentro da soli — senza un tetto la lista cresceva all'infinito a furia di guardare
+avanti nel calendario.
 
 E siccome la lista è "quello che il piano chiede meno quello che c'è in casa", non ha
 bisogno di essere chiusa: a spesa fatta si svuota da sé, perché la roba comprata è
@@ -86,6 +89,45 @@ def test_una_settimana_creata_ma_vuota_non_pesa(client, questa):
     lst = client.get("/api/shopping/current").json()
     assert quantita(lst, "pasta") == pytest.approx(7 * 100)
     assert lst["covers_to"] == (planner.current_week_start() + timedelta(days=6)).isoformat()
+
+
+# ── Il tetto in avanti ─────────────────────────────────────────────────────────
+
+
+def test_la_spesa_si_ferma_a_domenica_otto(client, prossima, fake_ai):
+    """Due settimane sì, la terza no.
+
+    Le settimane future nascono appena le si sfoglia e ci si ricopiano dentro i pasti
+    fissi da sole: senza un tetto bastava guardare avanti nel calendario per far
+    crescere la lista all'infinito, e una lista che comprende marzo non dice più cosa
+    comprare oggi.
+    """
+    terza = client.get(
+        f"/api/planning/weeks/by-date/{planner.next_week_start() + timedelta(days=7)}"
+    ).json()
+    assert client.post(f"/api/planning/weeks/{terza['id']}/generate").status_code == 200
+
+    lst = client.get("/api/shopping/current").json()
+
+    # Ventuno pranzi in piano, quattordici da comprare: la terza settimana resta fuori.
+    assert quantita(lst, "pasta") == pytest.approx(14 * 100)
+    assert lst["covers_to"] == (planner.next_week_start() + timedelta(days=6)).isoformat()
+    assert lst["horizon"] == (planner.next_week_start() + timedelta(days=6)).isoformat()
+
+
+def test_il_piano_oltre_l_orizzonte_viene_dichiarato(client, prossima, fake_ai):
+    """Vedere meno roba di quella che si è pianificata deve avere una spiegazione,
+    o sembra che la lista abbia perso dei pezzi."""
+    terza = client.get(
+        f"/api/planning/weeks/by-date/{planner.next_week_start() + timedelta(days=7)}"
+    ).json()
+    client.post(f"/api/planning/weeks/{terza['id']}/generate")
+
+    assert client.get("/api/shopping/current").json()["meals_beyond"] > 0
+
+
+def test_senza_niente_oltre_l_orizzonte_non_c_e_niente_da_dire(client, prossima):
+    assert client.get("/api/shopping/current").json()["meals_beyond"] == 0
 
 
 def test_la_dispensa_si_sottrae_una_volta_sola(client, prossima, db):

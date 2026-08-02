@@ -272,9 +272,10 @@ def _editable_meals(
 ) -> dict[int, tuple[PlannedMeal, DayPlan, MealSlot]]:
     """I pasti che la chat della spesa può toccare: esattamente quelli che pesano sulla lista.
 
-    Non solo quelli di questa settimana: la lista comprende tutto il piano da oggi in
-    avanti, e se le zucchine non si trovano vanno tolte da tutte le ricette che le
-    usano, altrimenti restano in lista.
+    Non solo quelli di questa settimana: la lista arriva a domenica otto, e se le
+    zucchine non si trovano vanno tolte da tutte le ricette che quella spesa sta
+    comprando, altrimenti restano in lista. Derivando da `meals_to_buy` la finestra è
+    la stessa per definizione, orizzonte compreso.
     """
     out = {}
     for day, meal in meals_to_buy(db, user_id):

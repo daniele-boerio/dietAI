@@ -92,6 +92,7 @@ CONTEXT_TEMPLATE = """CONTESTO UTENTE
 - Ingredienti di BASE (sempre in casa, non vanno in lista della spesa): {base}
 - Dispensa attuale (da consumare in via prioritaria): {pantry}
 - NOMI: quando usi un ingrediente che è già in dispensa o fra quelli di base, scrivilo con lo STESSO nome che leggi qui sopra — stesse parole, stesso singolare/plurale, senza aggiungere il colore o la varietà ("peperoni", non "peperoni rossi"). Un nome diverso è un altro ingrediente per la lista della spesa, che lo farà ricomprare pur essendo già in casa.
+- UNITÀ: quello che al supermercato si compra a pezzo (limoni, uova, avocado, cipolle) va in "unità" anche quando ne serve solo una parte — "limone: 0.5 unità", mai "limone: 15 ml" per dirne il succo, che è la stessa cosa scritta in un modo che al banco non si compra. Il succo, la scorza o il modo di usarlo si scrivono nelle note dell'ingrediente e nel procedimento. Lo stesso ingrediente misurato in due unità diverse fa due voci nella lista della spesa, e la dispensa non ne copre nessuna delle due.
 - Cucina preferita: {cuisine}
 - Stagionalità: {seasonality}
 - Tempo massimo di preparazione: {max_prep}

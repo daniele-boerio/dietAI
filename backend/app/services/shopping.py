@@ -250,6 +250,38 @@ def rebuild_shopping_list(db: Session, user_id: int) -> ShoppingList:
     return lst
 
 
+def _pantry_note(scorta: PantryItem | None, item: ShoppingListItem) -> dict | None:
+    """Perché questo articolo è in lista pur essendoci qualcosa in dispensa.
+
+    Una voce in lista ha per definizione `net > 0`, cioè la scorta compatibile è già
+    stata scalata tutta: la quantità che si legge è quello che *manca*. Detto questo,
+    restano due casi che senza una riga di spiegazione sembrano un errore dell'app:
+
+    · l'unità è la stessa e la scorta non bastava (`usable`) — non c'è niente da
+      riparare, ma sapere che la dispensa è stata contata toglie il dubbio che l'app
+      se ne sia dimenticata;
+    · l'unità non è la stessa, e allora non si è potuto scalare **niente**: 30 ml di
+      limone contro una ricetta che li conta a unità. È l'unico caso in cui la lista
+      chiede davvero una cosa che in casa c'è, ed è quasi sempre correggibile in dieci
+      secondi cambiando l'unità della scorta — ma solo se lo si vede.
+
+    La nota si calcola alla lettura, come il reparto: è un dato derivato, e tenerlo in
+    una colonna di `ShoppingListItem` vorrebbe dire una migrazione e un valore da
+    riallineare a mano ogni volta che la dispensa cambia — cioè un modo per farlo
+    mentire.
+    """
+    if not scorta or not scorta.quantity_available:
+        return None
+
+    quanto, unita = to_base(scorta.quantity_available, scorta.unit or "unità")
+    return {
+        "quantity": round(quanto, 2),
+        "unit": unita,
+        "label": format_quantity(quanto, unita),
+        "usable": unita == item.unit,
+    }
+
+
 def serialize_shopping_list(db: Session, user_id: int, lst: ShoppingList) -> dict:
     rows = (
         db.query(ShoppingListItem, Ingredient)
@@ -257,6 +289,12 @@ def serialize_shopping_list(db: Session, user_id: int, lst: ShoppingList) -> dic
         .filter(ShoppingListItem.shopping_list_id == lst.id)
         .all()
     )
+
+    # In dispensa c'è una riga sola per ingrediente (UNIQUE user_id + ingredient_id).
+    scorte = {
+        p.ingredient_id: p
+        for p in db.query(PantryItem).filter(PantryItem.user_id == user_id).all()
+    }
 
     groups: dict[str, list[dict]] = {}
     summary: dict[str, float] = {}
@@ -290,6 +328,10 @@ def serialize_shopping_list(db: Session, user_id: int, lst: ShoppingList) -> dic
                 ),
                 "unit_price": ingredient.avg_price_per_unit,
                 "price_unit": ingredient.price_unit,
+                # Quello che di questo articolo è già in casa, e se è servito a
+                # qualcosa: senza, una riga che la dispensa copre a metà (o che non
+                # copre per un'unità che non torna) sembra un conto sbagliato.
+                "pantry": _pantry_note(scorte.get(ingredient.id), item),
             }
         )
         if item.estimated_price:

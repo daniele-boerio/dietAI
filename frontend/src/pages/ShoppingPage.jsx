@@ -24,6 +24,7 @@ function domenicaCorrente() {
     domenica.getDate()
   ).padStart(2, '0')}`;
 }
+import { Link } from 'react-router-dom';
 import { api, formatDate, formatMoney } from '../api';
 import { useApp } from '../App';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -427,6 +428,25 @@ export default function ShoppingPage() {
                       >
                         <FolderInput size={15} />
                       </button>
+
+                      {/* Perché l'articolo è in lista pur avendone in casa. Sta qui
+                          in fondo e non dentro il pulsante che spunta la riga: quando
+                          l'unità non torna è un link alla dispensa, e un link dentro
+                          un bottone non si può toccare. Va a capo da solo. */}
+                      {item.pantry &&
+                        (item.pantry.usable ? (
+                          <span className="shopping-pantry">
+                            già in dispensa: {item.pantry.label} — ne serve altro
+                          </span>
+                        ) : (
+                          <Link
+                            className="shopping-pantry fix"
+                            to={`/pantry?fix=${item.ingredient_id}`}
+                          >
+                            in dispensa hai {item.pantry.label}, qui si conta a{' '}
+                            {item.unit}: non posso scalarli — correggi la dispensa
+                          </Link>
+                        ))}
                     </div>
                   ))}
               </div>

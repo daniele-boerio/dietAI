@@ -1602,9 +1602,12 @@ textarea {
   font-variant-numeric: tabular-nums;
 }
 
+/* Va a capo perché la nota della dispensa è una riga a sé, larga quanto tutta la voce:
+   spuntare, quantità e prezzo restano in fila come prima. */
 .shopping-item {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   border-top: 1px solid var(--border);
   font-size: 0.9rem;
   transition: background var(--transition);
@@ -1701,6 +1704,32 @@ textarea {
   font-size: 0.68rem;
   font-weight: 400;
   color: var(--text-muted);
+}
+
+/* Perché l'articolo è in lista pur avendone in casa. Incolonnata sotto il nome, non
+   sotto la spunta: è una nota su quell'alimento, non un comando. */
+.shopping-pantry {
+  flex: 0 0 100%;
+  padding: 0 15px 9px 46px;
+  margin-top: -5px;
+  font-size: 0.73rem;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
+/* L'unica delle due che si può riparare, e si ripara altrove: il colore dice che c'è
+   qualcosa da fare, non che è andato storto qualcosa. */
+.shopping-pantry.fix {
+  color: var(--warning);
+}
+
+.shopping-pantry.fix:hover {
+  text-decoration: underline;
+}
+
+.shopping-item.checked .shopping-pantry {
+  color: var(--text-muted);
+  opacity: 0.6;
 }
 
 .shopping-qty-edit {
@@ -3667,6 +3696,15 @@ textarea:focus {
     padding: 10px 8px;
   }
 
+  /* La nota che porta alla dispensa è un link: col dito, una riga di testo alta
+     quattordici pixel non si prende. */
+  .shopping-pantry.fix {
+    display: block;
+    padding-top: 6px;
+    padding-bottom: 13px;
+    min-height: 44px;
+  }
+
   .category-option {
     padding: 10px 14px;
   }
@@ -3726,5 +3764,11 @@ textarea:focus {
   .meal-meta,
   .chat-hint {
     font-size: 0.82rem;
+  }
+
+  /* Undici pixel letti a braccio teso in un supermercato: la nota della dispensa è
+     proprio quella che si legge lì. */
+  .shopping-pantry {
+    font-size: 0.8rem;
   }
 }

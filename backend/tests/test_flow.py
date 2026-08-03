@@ -193,6 +193,85 @@ def test_la_dispensa_scala_le_quantita(client, diet, fake_ai):
     assert items["zucchine"]["quantity"] == pytest.approx(750)
 
 
+# ── Perché un articolo è in lista pur essendo in dispensa ─────────────────────
+#
+# Un numero che sembra sbagliato senza una riga che lo spieghi è il modo più corto per
+# far dubitare di tutta la lista: "ho un chilo di zucchine in casa, perché me le chiede
+# ancora?". La nota costa una riga e toglie il dubbio — o, quando le unità non si
+# parlano, indica l'unica cosa che c'è davvero da riparare.
+
+
+def _voce(client, nome):
+    lst = client.get("/api/shopping/current").json()
+    return {i["name"]: i for cat in lst["categories"] for i in cat["items"]}[nome]
+
+
+def test_la_lista_dice_quanto_ce_n_e_gia_in_casa(client, diet, fake_ai):
+    client.post(
+        "/api/config/pantry",
+        json={"ingredient_name": "zucchine", "quantity": 1, "unit": "kg"},
+    )
+    week = client.get("/api/planning/weeks/current").json()
+    client.post(f"/api/planning/weeks/{week['id']}/generate")
+
+    voce = _voce(client, "zucchine")
+    # La cifra grande resta quello che manca; la nota dice perché non è tutto.
+    assert voce["quantity"] == pytest.approx(750)
+    assert voce["pantry"] == {
+        "quantity": 1000,
+        "unit": "g",
+        "label": "1 kg",
+        "usable": True,
+    }
+
+
+def test_una_scorta_in_un_altra_unita_si_dichiara_invece_di_sparire(client, diet, fake_ai):
+    """Il caso che senza la nota è muto: la dispensa non si può scalare, la lista
+    chiede tutto, e da fuori sembra che la dispensa non venga contata."""
+    client.post(
+        "/api/config/pantry",
+        json={"ingredient_name": "zucchine", "quantity": 2, "unit": "unità"},
+    )
+    week = client.get("/api/planning/weeks/current").json()
+    client.post(f"/api/planning/weeks/{week['id']}/generate")
+
+    voce = _voce(client, "zucchine")
+    # Non si è scalato niente: le unità non si parlano.
+    assert voce["quantity"] == pytest.approx(1750)
+    assert voce["pantry"]["label"] == "2 unità"
+    assert voce["pantry"]["usable"] is False
+
+
+def test_senza_niente_in_casa_non_c_e_niente_da_spiegare(client, diet, fake_ai):
+    week = client.get("/api/planning/weeks/current").json()
+    client.post(f"/api/planning/weeks/{week['id']}/generate")
+
+    assert _voce(client, "zucchine")["pantry"] is None
+
+
+def test_correggere_l_unita_dalla_dispensa_ripara_la_lista(client, diet, fake_ai):
+    """Il giro completo, che è il motivo per cui la nota esiste: la lista dice che non
+    può scalare quella scorta, si corregge l'unità dalla dispensa, e la lista cala."""
+    riga = client.post(
+        "/api/config/pantry",
+        json={"ingredient_name": "zucchine", "quantity": 2, "unit": "unità"},
+    ).json()
+    week = client.get("/api/planning/weeks/current").json()
+    client.post(f"/api/planning/weeks/{week['id']}/generate")
+    assert _voce(client, "zucchine")["pantry"]["usable"] is False
+
+    client.put(f"/api/config/pantry/{riga['id']}", json={"quantity": 500, "unit": "g"})
+
+    voce = _voce(client, "zucchine")
+    assert voce["quantity"] == pytest.approx(1250)
+    assert voce["pantry"] == {
+        "quantity": 500,
+        "unit": "g",
+        "label": "500 g",
+        "usable": True,
+    }
+
+
 # ── Spesa fatta ───────────────────────────────────────────────────────────────
 
 

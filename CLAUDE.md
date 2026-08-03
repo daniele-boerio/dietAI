@@ -223,6 +223,21 @@ ogni avvio del container** e riallinea l'anagrafica al catalogo — se la ripren
 al primo deploy. Il raggruppamento avviene alla lettura (`serialize_shopping_list`),
 quindi non serve ricostruire niente.
 
+**Un articolo che è anche in dispensa dice perché è in lista lo stesso.** La quantità
+che si legge è già netta della dispensa, e questo rende la nota gratis: se una voce è
+in lista `net > 0`, quindi la scorta compatibile è stata scalata tutta e quella cifra
+è quello che *manca*. Da lì `_pantry_note` distingue i due casi che senza una riga di
+spiegazione sembrano un errore dell'app — la scorta c'era ma non bastava (`usable`:
+niente da riparare, si toglie solo il dubbio che la dispensa non venga contata) e
+**l'unità che non si parla** (30 ml di limone contro una ricetta che li conta a unità:
+lì non si è potuto scalare niente, ed è l'unico caso in cui la lista chiede davvero una
+cosa che in casa c'è). Il secondo è un link a `/pantry?fix=<ingredient_id>`, che apre
+quella riga già in modifica: è riparabile in dieci secondi, ma solo se lo si vede — la
+stessa ragione per cui "l'ho seguito" restituisce `pantry_skipped` col motivo. La nota
+si calcola in `serialize_shopping_list` e non in `rebuild_shopping_list`, come il
+reparto: è un dato derivato, e in una colonna vorrebbe dire una migrazione più un
+valore da riallineare a ogni modifica della dispensa, cioè un modo per farlo mentire.
+
 **"Ho fatto la spesa" non blocca niente: riempie la dispensa.**
 `POST /api/shopping/current/complete` prende gli articoli **spuntati** (senza nemmeno
 uno risponde 400: confermare a vuoto svuoterebbe la lista senza mettere niente in

@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Check, Pencil, Trash2, X } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { useApp } from '../App';
 import IngredientInput from '../components/IngredientInput';
@@ -15,11 +16,29 @@ export default function PantryPage() {
   const [unit, setUnit] = useState('g');
   // La riga aperta in modifica, se c'è: una sola per volta.
   const [editing, setEditing] = useState(null);
+  // `?fix=<ingredient_id>`: si arriva dalla lista della spesa, dalla riga che dice
+  // "non posso scalarli". Quella scorta va aperta in modifica da sé — un link che
+  // cambia pagina e basta lascerebbe il lavoro a metà, con trenta righe da cercare.
+  const [params] = useSearchParams();
+  const fix = params.get('fix');
 
   const load = () => api.getPantry().then(setItems).catch(() => {});
 
   useEffect(() => {
-    load();
+    api
+      .getPantry()
+      .then((rows) => {
+        setItems(rows);
+        const target = rows.find((r) => String(r.ingredient_id) === fix);
+        if (target) setEditing(target.id);
+      })
+      .catch(() => {});
+  }, [fix]);
+
+  // La dispensa a fine settimana è lunga: la riga da correggere va portata sotto gli
+  // occhi, o l'apertura automatica non si vede.
+  const portaInVista = useCallback((node) => {
+    if (node) node.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }, []);
 
   const add = async () => {
@@ -85,6 +104,7 @@ export default function PantryPage() {
               <PantryRowEditor
                 key={i.id}
                 item={i}
+                innerRef={String(i.ingredient_id) === fix ? portaInVista : undefined}
                 onDone={() => {
                   setEditing(null);
                   load();
@@ -139,7 +159,7 @@ export default function PantryPage() {
  * la riga punta a un altro ingrediente dell'anagrafica, ed è da lì che dipende cosa
  * verrà scomputato dalla prossima lista della spesa.
  */
-function PantryRowEditor({ item, onDone, onCancel }) {
+function PantryRowEditor({ item, onDone, onCancel, innerRef }) {
   const { addToast } = useApp();
   const [name, setName] = useState(item.name);
   const [quantity, setQuantity] = useState(item.quantity ?? '');
@@ -168,7 +188,7 @@ function PantryRowEditor({ item, onDone, onCancel }) {
   };
 
   return (
-    <div className="list-row">
+    <div className="list-row" ref={innerRef}>
       <div className="inline-form" style={{ flex: 1 }}>
         <IngredientInput value={name} onChange={setName} />
         <input

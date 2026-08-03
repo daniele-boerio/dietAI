@@ -91,6 +91,7 @@ CONTEXT_TEMPLATE = """CONTESTO UTENTE
 - REGOLE SCRITTE DALL'UTENTE, da rispettare alla lettera come i macro: {extra_rules}
 - Ingredienti di BASE (sempre in casa, non vanno in lista della spesa): {base}
 - Dispensa attuale (da consumare in via prioritaria): {pantry}
+- NOMI: quando usi un ingrediente che è già in dispensa o fra quelli di base, scrivilo con lo STESSO nome che leggi qui sopra — stesse parole, stesso singolare/plurale, senza aggiungere il colore o la varietà ("peperoni", non "peperoni rossi"). Un nome diverso è un altro ingrediente per la lista della spesa, che lo farà ricomprare pur essendo già in casa.
 - Cucina preferita: {cuisine}
 - Stagionalità: {seasonality}
 - Tempo massimo di preparazione: {max_prep}
@@ -239,6 +240,7 @@ REGOLE
 2. Ogni ricetta modificata deve continuare a rispettare i macro target del suo pasto (±10%) e non usare ingredienti esclusi. Ricalcola i valori nutrizionali.
 3. Il sostituto dev'essere reperibile in un supermercato italiano e coerente col piatto.
 4. Pensa a tutto quello che è in lista come a una spesa sola: se puoi, usa lo stesso sostituto in tutte le ricette invece di introdurne uno diverso per ognuna.
+5. Se il sostituto è qualcosa che l'utente ha GIÀ IN DISPENSA, scrivilo con lo stesso identico nome che ha lì (vedi la regola NOMI nel contesto) e non dirgli di comprarlo: quella roba è già in casa, e la lista si aggiorna da sola scomputando la dispensa. Se ne serve più di quanta ne ha, dillo con la quantità che manca — non con l'intera quantità della ricetta.
 
 COME RISPONDERE
 - Sempre in italiano, tono diretto e concreto, poche righe.

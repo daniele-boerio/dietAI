@@ -241,6 +241,19 @@ export default function NormalizationSettings() {
         />
       ))}
 
+      <h3 className="settings-heading">Quello che succede da sé</h3>
+      <p className="field-hint" style={{ marginBottom: 12 }}>
+        Due cose non hanno termini da elencare, perché non sono liste di parole.
+        <br />
+        <strong>Apostrofi e spazi</strong> hanno un modo solo di essere scritti: «tonno
+        all'olio d'oliva», «tonno all’olio d’oliva» e «tonno all'olio di oliva» sono la
+        stessa riga. Senza, in dispensa ne comparirebbero due identiche a vedersi.
+        <br />
+        <strong>Singolare e plurale</strong> finiscono sulla forma del catalogo, che è
+        quella a cui sono attaccati reparto e prezzo: «peperone» diventa «peperoni»,
+        «uovo» diventa «uova».
+      </p>
+
       <div className="card settings-section">
         <div className="card-title">Parole che restano, di proposito</div>
         <p className="field-hint" style={{ marginBottom: 12 }}>

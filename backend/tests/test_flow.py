@@ -161,7 +161,8 @@ def test_la_lista_della_spesa_aggrega_e_sottrae(client, diet, fake_ai):
     assert items["zucchine"]["unit"] == "g"
     assert items["zucchine"]["label"] == "1,8 kg"
     # L'olio è tra gli ingredienti di base? No, in questo test non lo è: deve esserci.
-    assert "olio extravergine di oliva" in items
+    # Il nome arriva elisa dalla normalizzazione, comunque lo scriva la ricetta.
+    assert "olio extravergine d'oliva" in items
     assert lst["estimated_cost"] > 0
 
 
@@ -173,7 +174,7 @@ def test_gli_ingredienti_di_base_non_entrano_in_lista(client, diet, fake_ai):
 
     lst = client.get("/api/shopping/current").json()
     names = [i["name"] for cat in lst["categories"] for i in cat["items"]]
-    assert "olio extravergine di oliva" not in names
+    assert "olio extravergine d'oliva" not in names
     assert "zucchine" in names
 
 

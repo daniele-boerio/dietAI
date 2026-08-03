@@ -80,7 +80,9 @@ def test_un_termine_di_serie_si_spegne_e_si_riaccende(client, db):
 
     res = _regola(client, "off", "sedani")
     assert res.status_code == 201, res.text
-    assert normalize_name("sedani", load_rules(db)) == "sedani"
+    # Spento l'accorpamento, «sedani» torna a essere una verdura — e finisce sul nome
+    # con cui il catalogo la chiama, che è al singolare.
+    assert normalize_name("sedani", load_rules(db)) == "sedano"
 
     # Il termine resta nel codice: quella riga era una sospensione, non una cancellazione.
     client.delete(f"/api/config/normalization/{res.json()['rule']['id']}")

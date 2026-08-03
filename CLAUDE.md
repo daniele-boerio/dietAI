@@ -315,6 +315,14 @@ quelli che pesano sulla spesa, su tutte le settimane che la spesa copre) con i l
 etichette dei pasti portano la data proprio perché "Lunedì / Pranzo" con due settimane
 in lista sarebbe ambiguo. Il prompt (`SHOPPING_CHAT_SYSTEM`) sta in `prompts.py` con gli altri.
 
+Il sostituto viene spesso dalla dispensa — è il posto giusto da cui prenderlo — e lì il
+**nome conta quanto l'alimento**: "peperoni rossi" al posto dei "peperoni" che si hanno
+in casa è un altro ingrediente per la lista, che li farà ricomprare. Per questo la regola
+NOMI sta in `CONTEXT_TEMPLATE` (vale anche per la generazione, che la dispensa ce l'ha
+davanti allo stesso modo) e la chat della spesa ci aggiunge di non consigliare l'acquisto
+di quello che è già in casa. È una cintura sopra una bretella: se il modello scrive lo
+stesso un nome suo, `normalize_name` lo riporta sulla riga giusta.
+
 **In chat la ricetta va dopo il marcatore, mai dentro il messaggio.** `[RECIPE_UPDATE]`
 (o `[RECIPES_UPDATE]`) è l'unico modo che ha il backend di sapere che c'è una modifica
 da applicare. Un modello che riempie lo schema a mano in markdown — con i nomi dei
@@ -465,11 +473,40 @@ mezzo ricettario, e la fusione cancella la riga di anagrafica — il nome origin
 resta solo nel testo della ricetta. Le unificazioni confrontano il **nome intero** e
 non una parola in mezzo, o "grana padano" diventa "formaggio padano".
 
+Prima di tutto il resto viene `_segni`, che dà **un modo solo di scrivere** apostrofi,
+spazi ed elisioni: l'apostrofo tipografico che il modello mette da sé diventa quello
+dritto, gli spazi che non si vedono diventano spazi, e "di" davanti a vocale si elide
+("olio di oliva" → "olio d'oliva", che è anche la forma del catalogo). È il doppione
+peggiore che ci sia: in dispensa compaiono due righe di "tonno all'olio d'oliva"
+identiche a leggersi, e non c'è modo di accorgersene guardando né di correggerle con
+una regola scritta a mano — anche quella andrebbe scritta con l'apostrofo giusto.
+
+`_VARIANTI` è il gradino sotto: la stessa parola scritta in due modi ("couscous" →
+"cous cous"). Non è un accorpamento — non si uniscono due alimenti — e infatti si
+applica **sulla parola** e non sul nome intero, o "couscous integrale" resterebbe una
+riga a sé.
+
+Sempre per lo stesso motivo, **singolare e plurale sono lo stesso alimento** e finiscono
+sulla forma del catalogo, che è quella a cui sono attaccati reparto e prezzo
+(`_CATALOG_FORMS`: "peperone" → "peperoni", "cetriolo" → "cetrioli", "uovo" → "uova").
+La mappa si **deriva** dal catalogo invece di scriverla a mano — un elenco a parte
+resterebbe indietro al primo ingrediente aggiunto — e genera solo le coppie che in
+italiano sono davvero singolare/plurale (o↔i, a↔e, e↔i): senza quel vincolo "pesca" e
+"pesce" avrebbero lo stesso gambo e la frutta diventerebbe pesce. Una forma che porta a
+due nomi del catalogo, o che è già un nome del catalogo, si lascia stare. Il confronto è
+sul nome intero e si fa **per ultimo**, dopo accorpamenti e qualificatori: prima
+"sedani" dev'essere diventato pasta, e "peperone rosso" dev'essere già "peperone".
+
 Chi unisce tocca anche `utils/pricing.py`, in due modi: il nome fabbricato va aggiunto
 (o resta senza prezzo, e sono sempre le voci più care) e quelli che ha inghiottito
 vanno tolti — il seed semina l'anagrafica coi nomi del catalogo così come sono
 scritti, quindi un nome che `normalize_name` non può più produrre diventa una riga che
-nessuna ricetta userà mai, ricreata a ogni avvio del container.
+nessuna ricetta userà mai, ricreata a ogni avvio del container. Non è un promemoria:
+`test_normalizzazione.py` rende ogni nome del catalogo e pretende che esca identico, e
+che due voci non finiscano sulla stessa riga (sarebbero due prezzi per lo stesso nome,
+e a vincere sarebbe l'ultimo seminato). È così che si sono scoperte cinque righe morte
+— "tonno fresco", "manzo macinato", "fave secche", "piselli secchi", "frutta secca
+mista" — che il seed ricreava a ogni avvio mentre l'alimento vero restava senza prezzo.
 
 **Le stesse regole si allargano dalle Impostazioni**, senza deploy (Impostazioni →
 Nomi e accorpamenti, solo amministratore: l'anagrafica è una sola per tutti).

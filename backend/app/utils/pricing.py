@@ -74,7 +74,7 @@ INGREDIENT_CATALOG: dict[str, tuple[str, float, str]] = {
     "lamponi": ("frutta", 22.00, "kg"),
     "ananas": ("frutta", 2.50, "kg"),
     "avocado": ("frutta", 8.00, "kg"),
-    "frutta secca mista": ("frutta", 16.00, "kg"),
+    "frutta mista": ("frutta", 16.00, "kg"),  # "secca" è conservazione: via dal nome
     "mandorle": ("frutta", 16.00, "kg"),
     "noci": ("frutta", 14.00, "kg"),
     "nocciole": ("frutta", 18.00, "kg"),
@@ -85,7 +85,7 @@ INGREDIENT_CATALOG: dict[str, tuple[str, float, str]] = {
     "petto di pollo": ("carne", 9.50, "kg"),
     "cosce di pollo": ("carne", 6.00, "kg"),
     "fesa di tacchino": ("carne", 11.00, "kg"),
-    "manzo macinato": ("carne", 12.00, "kg"),
+    "manzo": ("carne", 12.00, "kg"),  # "macinato" è un taglio: via dal nome
     "fettine di manzo": ("carne", 14.00, "kg"),
     "vitello": ("carne", 18.00, "kg"),
     "lonza di maiale": ("carne", 8.50, "kg"),
@@ -100,7 +100,7 @@ INGREDIENT_CATALOG: dict[str, tuple[str, float, str]] = {
     # ── Pesce ──
     "salmone": ("pesce", 24.00, "kg"),
     "salmone affumicato": ("pesce", 34.00, "kg"),
-    "tonno fresco": ("pesce", 22.00, "kg"),
+    "tonno": ("pesce", 22.00, "kg"),  # quello al banco; in scatola sta qui sotto
     "tonno in scatola": ("pesce", 14.00, "kg"),
     "sgombro": ("pesce", 8.00, "kg"),
     "alici": ("pesce", 9.00, "kg"),
@@ -144,20 +144,23 @@ INGREDIENT_CATALOG: dict[str, tuple[str, float, str]] = {
     "fiocchi d'avena": ("cereali", 3.00, "kg"),
     "pangrattato": ("cereali", 2.50, "kg"),
     "gnocchi": ("cereali", 3.00, "kg"),
-    "couscous integrale": ("cereali", 3.60, "kg"),
+    "cous cous integrale": ("cereali", 3.60, "kg"),
     # ── Legumi ──
     "ceci": ("legumi", 3.00, "kg"),
     "ceci in scatola": ("legumi", 2.20, "kg"),
     "lenticchie": ("legumi", 3.20, "kg"),
     "fagioli borlotti": ("legumi", 3.00, "kg"),
     "fagioli cannellini": ("legumi", 3.00, "kg"),
-    "fave secche": ("legumi", 3.50, "kg"),
-    "piselli secchi": ("legumi", 2.80, "kg"),
+    "fave": ("legumi", 3.50, "kg"),
     "soia": ("legumi", 4.00, "kg"),
     "tofu": ("legumi", 9.00, "kg"),
     "hummus": ("legumi", 10.00, "kg"),
     # ── Condimenti e dispensa ──
-    "olio extravergine di oliva": ("condimenti", 9.00, "l"),
+    # Elisa, come la normalizzazione scrive ogni "di" davanti a vocale: il seed semina
+    # l'anagrafica con questi nomi così come sono scritti, e un nome che
+    # `normalize_name` non può più produrre sarebbe una riga che nessuna ricetta userà
+    # mai — ricreata a ogni avvio del container.
+    "olio extravergine d'oliva": ("condimenti", 9.00, "l"),
     "olio di semi": ("condimenti", 2.50, "l"),
     "aceto di vino": ("condimenti", 2.00, "l"),
     "aceto balsamico": ("condimenti", 6.00, "l"),
@@ -198,7 +201,7 @@ INGREDIENT_CATALOG: dict[str, tuple[str, float, str]] = {
 # Ingredienti proposti come "di base" al primo avvio: quelli che chiunque ha in casa
 # e che in lista della spesa farebbero solo rumore.
 DEFAULT_BASE_INGREDIENTS = [
-    "olio extravergine di oliva",
+    "olio extravergine d'oliva",
     "sale",
     "pepe nero",
     "aceto di vino",
@@ -222,7 +225,7 @@ _CATEGORY_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
                    "scamorza", "provola", "gorgonzola", "feta", "philadelphia",
                    "fiocchi di latte", "caciotta")),
     ("uova", ("uovo", "uova", "albume", "tuorlo")),
-    ("legumi", ("cec", "lentic", "fagiol", "fave", "piselli secchi", "soia", "tofu",
+    ("legumi", ("cec", "lentic", "fagiol", "fave", "soia", "tofu",
                 "tempeh", "hummus", "lupini", "edamame")),
     ("cereali", ("pasta", "riso", "pane", "farina", "farro", "orzo", "quinoa", "avena",
                  "cous", "polenta", "gnocchi", "crackers", "fette biscottate", "cereali",

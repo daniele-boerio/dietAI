@@ -22,7 +22,7 @@ from ..models import (
     RecipeIngredient,
     ShoppingListItem,
 )
-from ..utils.pricing import catalog_entry, guess_category
+from ..utils.pricing import INGREDIENT_CATALOG, catalog_entry, guess_category
 from ..utils.seasonality import season_months_for
 from ..utils.units import to_base
 
@@ -50,6 +50,10 @@ _NOISE_GROUPS = {
     "Conservazione e stato": (
         "fresc[ao]", "fresch[ei]", "secc[ao]", "secch[ei]", "surgelat[oaie]",
         "congelat[oaie]", "sgusciat[oaie]", "sbucciat[oaie]", "maturo", "matura",
+        # Quello che fai tu in cucina prima di pesarlo: il tonno lo compri in scatola
+        # e basta ("tonno al naturale" e "tonno al naturale sgocciolato" erano due
+        # righe, e la dispensa non copriva l'altra).
+        "sgocciolat[oaie]", "scolat[oaie]",
     ),
     "Calibro e qualità": (
         "medi[ao]", "medie", "grande", "grandi", "piccol[oaie]", "bio", "biologic[ao]",
@@ -111,6 +115,20 @@ _OLIVE_QUALIFIERS = (
 # I tre che si dicono anche prima del nome ("olive nere" ma anche "nere olive").
 _OLIVE_PREFISSI = ("taggiasche", "nere", "verdi")
 
+# Varianti di scrittura: la stessa parola scritta in due modi. Non è un accorpamento —
+# non si uniscono due alimenti diversi — è lo stesso identico alimento che il modello
+# scrive come gli viene, e che in anagrafica fa una riga in più (e una dispensa che non
+# copre la ricetta: 865 g di "cous cous" in casa e la lista che chiede "couscous").
+# Vale sulla parola, non sul nome intero, o "couscous integrale" resterebbe fuori.
+_VARIANTI = {"cous cous": ("couscous",)}
+
+# Peperoni: il colore è come il calibro — dice com'è fatto, non cos'è. Rosso e giallo
+# stanno nello stesso banco, costano uguale e in una ricetta si scambiano senza che
+# cambi un macro; tenerli separati vuol dire due righe nella lista della spesa e una
+# dispensa che non copre né l'una né l'altra. Vale anche al singolare, e per più colori
+# di fila ("peperoni rossi e gialli"), perché è così che li scrive il modello.
+_PEPERONI_QUALIFIERS = ("ross[oaie]", "giall[oaie]", "verd[ei]", "mist[oaie]")
+
 # Quello che sta fra parentesi è sempre una glossa, mai l'alimento: "pasta corta
 # (penne)", "legumi (ceci o fagioli)". Si toglie prima dei qualificatori, o resterebbe
 # attaccato al nome e farebbe una riga a sé nella lista della spesa.
@@ -123,6 +141,76 @@ _DANGLING = re.compile(r"\s+(a|di|in|al|alla|con|da)\s*$", re.IGNORECASE)
 # spesa e lo stesso piatto. È l'unica eccezione alla regola per cui "integrale" resta
 # (vale ancora per il pane e per il riso, dove è un altro alimento sullo scaffale).
 _PASTA_INTEGRALE = re.compile(r"\bpasta\s+integral[ei]\b", re.IGNORECASE)
+
+# Segni che a schermo sono lo stesso segno e per il database no. È il doppione
+# peggiore che ci sia: in dispensa compaiono due righe di "tonno all'olio d'oliva"
+# identiche a vedersi — una scritta con l'apostrofo dritto, l'altra con quello
+# tipografico che il modello mette da sé — e non c'è modo di accorgersene guardando,
+# né di correggerle con una regola scritta a mano, perché anche quella andrebbe
+# scritta con l'apostrofo giusto. Qui i due caratteri diventano uno solo, e con loro
+# gli spazi che non si vedono (lo spazio unificatore) e i trattini lunghi.
+_SEGNI = str.maketrans(
+    {
+        "’": "'", "‘": "'", "ʼ": "'", "´": "'", "`": "'",
+        " ": " ", " ": " ", " ": " ",  # spazi che non si vedono
+        "‐": "-", "‑": "-", "–": "-", "—": "-",
+    }
+)
+# Lo spazio attorno all'apostrofo non c'è mai: "all' olio" è "all'olio".
+_APOSTROFO = re.compile(r"\s*'\s*")
+# "olio di oliva" e "olio d'oliva" sono la stessa bottiglia. Si tiene la forma elisa,
+# che è quella che l'italiano scrive davvero e quella che il catalogo usa già
+# ("fiocchi d'avena").
+_ELISIONE = re.compile(r"\bdi\s+(?=[aeiou])")
+
+
+def _segni(name: str) -> str:
+    """Minuscolo e con un solo modo di scrivere apostrofi, spazi ed elisioni."""
+    n = (name or "").strip().lower().translate(_SEGNI)
+    return _ELISIONE.sub("d'", _APOSTROFO.sub("'", n))
+
+
+# Singolare e plurale sono lo stesso alimento, ma il modello scrive ora l'uno ora
+# l'altro: "peperone" oggi, "peperoni" domani, e sono due righe di anagrafica — cioè
+# una dispensa che non copre la ricetta e due voci nella lista della spesa. La forma
+# buona è quella del catalogo, perché è il nome a cui sono attaccati reparto e prezzo.
+#
+# La mappa si **deriva** dal catalogo invece di scriverla a mano: un elenco a parte
+# resterebbe indietro al primo ingrediente aggiunto, e sarebbe una bugia scritta
+# proprio dove si va a capire perché due righe si sono fuse. Si generano solo le
+# coppie che in italiano sono davvero singolare/plurale (o↔i, a↔e, e↔i): senza quel
+# vincolo "pesca" e "pesce" avrebbero lo stesso gambo e la frutta diventerebbe pesce.
+_COPPIE = (("o", "i"), ("i", "o"), ("a", "e"), ("e", "a"), ("e", "i"), ("i", "e"))
+
+# I plurali che nessuna regola sulla vocale finale può indovinare.
+_IRREGOLARI = {"uovo": "uova"}
+
+
+def _catalog_forms() -> dict[str, str]:
+    forme: dict[str, set[str]] = {}
+    for name in INGREDIENT_CATALOG:
+        # Solo i nomi di una parola: "petto di pollo" non lo si scrive al plurale, e
+        # declinare ogni parola di un nome composto moltiplicherebbe le forme senza
+        # che ne serva nemmeno una.
+        if " " in name or len(name) < 4 or name[-1] not in "aeiou":
+            continue
+        for finale, altra in _COPPIE:
+            if name[-1] == finale:
+                forme.setdefault(name[:-1] + altra, set()).add(name)
+
+    # Una forma che porta a due nomi del catalogo non decide niente da sola, e una che
+    # è già un nome del catalogo è già un alimento suo: in tutti e due i casi si lascia
+    # stare, perché unire due alimenti diversi è un danno che si disfa a mano.
+    forms = {
+        forma: next(iter(nomi))
+        for forma, nomi in forme.items()
+        if len(nomi) == 1 and forma not in INGREDIENT_CATALOG
+    }
+    forms.update(_IRREGOLARI)
+    return forms
+
+
+_CATALOG_FORMS = _catalog_forms()
 
 
 def _tidy(n: str) -> str:
@@ -145,6 +233,8 @@ class _Builtin:
     pesce: re.Pattern | None
     gamberi: re.Pattern | None
     olive: re.Pattern | None
+    peperoni: re.Pattern | None
+    varianti: tuple[tuple[str, re.Pattern], ...]
     grattugia: frozenset
 
 
@@ -164,6 +254,7 @@ def _builtin(spenti: frozenset) -> _Builtin:
     gamberi = _alt(tieni(_GAMBERI_QUALIFIERS))
     olive = _alt(tieni(_OLIVE_QUALIFIERS))
     olive_prefissi = _alt(tieni(_OLIVE_PREFISSI))
+    peperoni = _alt(tieni(_PEPERONI_QUALIFIERS))
 
     compila = lambda p: re.compile(p, re.IGNORECASE)  # noqa: E731
     return _Builtin(
@@ -181,6 +272,16 @@ def _builtin(spenti: frozenset) -> _Builtin:
         )
         if olive
         else None,
+        # Il gruppo si ripete perché i colori si elencano ("rossi e gialli"): fermarsi
+        # al primo lascerebbe "peperoni e gialli", che è peggio del nome di partenza.
+        peperoni=compila(rf"\bpeperon[ei](?:\s+(?:e\s+)?(?:{peperoni}))+")
+        if peperoni
+        else None,
+        varianti=tuple(
+            (target, compila(rf"\b({termini})\b"))
+            for target, gruppo in _VARIANTI.items()
+            if (termini := _alt(tieni(gruppo)))
+        ),
         grattugia=frozenset(t for t in _DA_GRATTUGIA if t not in spenti),
     )
 
@@ -188,7 +289,7 @@ def _builtin(spenti: frozenset) -> _Builtin:
 def _builtin_normalize(name: str, spenti: frozenset = frozenset()) -> str:
     regole = _builtin(spenti)
 
-    n = _PARENTESI.sub(" ", (name or "").strip().lower())
+    n = _PARENTESI.sub(" ", _segni(name))
     if regole.pasta:
         n = regole.pasta.sub("pasta", n)
     if regole.pesce:
@@ -197,6 +298,10 @@ def _builtin_normalize(name: str, spenti: frozenset = frozenset()) -> str:
         n = regole.gamberi.sub("gamberi", n)
     if regole.olive:
         n = regole.olive.sub("olive", n)
+    if regole.peperoni:
+        n = regole.peperoni.sub("peperoni", n)
+    for target, variante in regole.varianti:
+        n = variante.sub(target, n)
     if regole.noise:
         n = regole.noise.sub(" ", n)
     n = re.sub(r"[\s,;]+", " ", n).strip(" -,.")
@@ -207,7 +312,11 @@ def _builtin_normalize(name: str, spenti: frozenset = frozenset()) -> str:
     # il rumore qui sopra.
     if n in regole.grattugia or n == "formaggio":
         return "formaggio"
-    return n
+    # Per ultimo il singolare/plurale, che confronta il nome intero: prima devono aver
+    # già fatto il loro lavoro gli accorpamenti (altrimenti "sedani" arriverebbe qui
+    # come sedano invece che come pasta) e i qualificatori (o arriverebbe "peperone
+    # rosso", che non è nessuna delle due forme).
+    return _CATALOG_FORMS.get(n, n)
 
 
 @dataclass(frozen=True)
@@ -305,9 +414,14 @@ def normalize_name(name: str, rules: NormalizationRules | None = None) -> str:
     Oltre a togliere il rumore, unisce sulla stessa riga le cose che per la dieta e
     per la spesa sono lo stesso alimento: i formati della pasta (spaghetti, penne e
     anche "pasta integrale" → `pasta`), i pesci bianchi (`_PESCE_MAGRO`), i formaggi da
-    grattugia (`_DA_GRATTUGIA` → `formaggio`). **Un altro cereale non è pasta**: riso,
-    cous cous, farro e orzo restano quello che sono, e lo stesso vale per la pasta
-    ripiena e gli gnocchi.
+    grattugia (`_DA_GRATTUGIA` → `formaggio`), il colore dei peperoni, e il singolare
+    di quello che il catalogo chiama al plurale (`_CATALOG_FORMS`: "peperone" →
+    "peperoni"). **Un altro cereale non è pasta**: riso, cous cous, farro e orzo
+    restano quello che sono, e lo stesso vale per la pasta ripiena e gli gnocchi.
+
+    Prima di tutto il resto passa da `_segni`, che dà un modo solo di scrivere
+    apostrofi, spazi ed elisioni: "tonno all’olio d’oliva" e "tonno all'olio di oliva"
+    sono la stessa scatoletta, e a schermo sono anche lo stesso nome.
 
     `rules` sono le aggiunte dell'utente (`load_rules`). Chi ha una sessione in mano le
     passa sempre: senza, si otterrebbe la normalizzazione di serie, e due punti dell'app
@@ -404,6 +518,14 @@ def builtin_groups() -> list[dict]:
             "note": "Confrontati per nome intero: sulla pasta ci va quello che c'è in "
             "casa. «Formaggio spalmabile» resta un altro alimento.",
         },
+        *(
+            {
+                "target": target,
+                "terms": [_term(t) for t in sorted(termini)],
+                "note": "Non è un accorpamento: è la stessa parola scritta in due modi.",
+            }
+            for target, termini in _VARIANTI.items()
+        ),
     ]
 
 
@@ -416,6 +538,8 @@ def builtin_terms() -> set[str]:
         | set(_DA_GRATTUGIA)
         | set(_GAMBERI_QUALIFIERS)
         | set(_OLIVE_QUALIFIERS)
+        | set(_PEPERONI_QUALIFIERS)
+        | {t for gruppo in _VARIANTI.values() for t in gruppo}
     )
 
 
@@ -440,6 +564,12 @@ def builtin_rules() -> dict:
                 "target": "olive",
                 "terms": [_term(t) for t in _OLIVE_QUALIFIERS],
                 "note": "Tolti quando seguono «olive».",
+            },
+            {
+                "target": "peperoni",
+                "terms": [_term(t) for t in _PEPERONI_QUALIFIERS],
+                "note": "Il colore non cambia l'alimento: stesso banco, stesso prezzo, "
+                "stessi macro. Tolti quando seguono «peperoni» o «peperone».",
             },
         ],
         "kept": [

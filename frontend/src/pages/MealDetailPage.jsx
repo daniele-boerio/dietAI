@@ -2,12 +2,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
+  BookOpen,
   CalendarOff,
   Check,
   CheckCircle2,
   Heart,
   Pin,
   RefreshCw,
+  Sparkles,
   Trash2,
   X,
 } from 'lucide-react';
@@ -63,9 +65,10 @@ export default function MealDetailPage() {
     meal?.week && !meal.week.is_current ? `/plan/${meal.week.week_start_date}` : '/plan'
   );
 
-  // Due strade dallo stesso pulsante: senza indicazioni sceglie il modello, con
-  // indicazioni ("ho del salmone da finire") sceglie l'utente e l'AI ci pesa sopra i
-  // macro. Il dialogo esiste per questo — chiedere prima di spendere una chiamata.
+  // Due strade, due pulsanti: senza indicazioni sceglie il modello (un clic, niente
+  // dialogo), con indicazioni ("ho del salmone da finire") sceglie l'utente e l'AI ci
+  // pesa sopra i macro. Va chiamata sempre come `regenerate()`: passandola diretta a
+  // un `onClick` arriverebbe qui l'evento del clic al posto della richiesta.
   const regenerate = async (userRequest = null) => {
     setBusy(true);
     try {
@@ -217,14 +220,22 @@ export default function MealDetailPage() {
               </button>
             </>
           )}
-          <button
-            className="btn btn-primary"
-            onClick={() => setGenerator(true)}
-            disabled={busy || frozen}
-          >
-            {busy ? <span className="spinner-inline" /> : <RefreshCw size={16} />}
-            {meal.recipe ? 'Rigenera' : "Genera con l'AI"}
-          </button>
+          {/* Solo a casella piena: quando è vuota le vie per riempirla stanno tutte e
+              tre in fila qui sotto, e un quarto pulsante quassù sarebbe il gemello di
+              uno di quelli — stessa azione, nome quasi uguale, due posti diversi. */}
+          {meal.recipe && (
+            <button
+              className="btn btn-primary"
+              onClick={() => setGenerator(true)}
+              disabled={busy || frozen}
+            >
+              {/* Scintille e non la freccia circolare: qui il verde e questa icona
+                  vogliono dire "chiama il modello", ed è la stessa coppia dei due
+                  pulsanti a casella vuota. */}
+              {busy ? <span className="spinner-inline" /> : <Sparkles size={16} />}
+              Rigenera
+            </button>
+          )}
         </div>
       </div>
 
@@ -315,16 +326,36 @@ export default function MealDetailPage() {
               title="Nessuna ricetta per questo pasto"
               text={`Target: ${meal.target.calories} kcal, proteine ${meal.target.protein_g}g, carboidrati ${meal.target.carbs_g}g, grassi ${meal.target.fat_g}g.`}
               action={
-                <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+                /* I tre modi di riempire la casella, in una riga sola e con tre nomi
+                   diversi: sceglie l'AI, scegli tu cosa e l'AI fa i conti, oppure la
+                   ricetta ce l'hai già. `flex-wrap` perché sul telefono tre pulsanti
+                   in fila non ci stanno, e senza uscirebbero dal bordo. */
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: 8,
+                    justifyContent: 'center',
+                    flexWrap: 'wrap',
+                  }}
+                >
                   <button
                     className="btn btn-primary"
+                    onClick={() => regenerate()}
+                    disabled={busy || frozen}
+                  >
+                    {busy ? <span className="spinner-inline" /> : <Sparkles size={16} />}
+                    Scegli tu il piatto
+                  </button>
+                  <button
+                    className="btn btn-ai"
                     onClick={() => setGenerator(true)}
                     disabled={busy || frozen}
                   >
-                    {busy && <span className="spinner-inline" />}
-                    Generala con l'AI
+                    <Sparkles size={16} />
+                    Genera da una mia idea
                   </button>
                   <button className="btn btn-secondary" onClick={() => setPicker(true)}>
+                    <BookOpen size={16} />
                     Scegli dal ricettario
                   </button>
                 </div>
@@ -405,13 +436,13 @@ Vorrei un piatto unico freddo da portare in ufficio.
 Pasta e ceci, ma con le quantità giuste per i miei macro.`;
 
 /**
- * Le due strade del pulsante «Genera con l'AI», messe una accanto all'altra.
+ * Dove si dice cosa si vuole in quella casella.
  *
- * Lasciando vuoto il campo è la generazione di sempre: sceglie il modello. Scrivendoci
- * dentro si passa il comando all'utente — un'idea, un ingrediente da finire, un piatto
- * preciso — e all'AI resta il mestiere: pesare gli ingredienti perché i macro del pasto
- * tornino e scrivere il procedimento. Il dialogo c'è perché una generazione si paga e
- * dura: chiedere prima costa un clic, riprovare costa una chiamata.
+ * Il comando passa all'utente — un'idea, un ingrediente da finire, un piatto preciso —
+ * e all'AI resta il mestiere: pesare gli ingredienti perché i macro del pasto tornino e
+ * scrivere il procedimento. Il campo lasciato vuoto ricade sulla generazione di sempre,
+ * quella in cui sceglie il modello: è la stessa cosa che fa "Scegli tu il piatto" a
+ * casella vuota, e il pulsante prende quel nome per dirlo.
  */
 function GenerateDialog({ meal, busy, onGenerate, onCancel }) {
   const [testo, setTesto] = useState('');
@@ -455,7 +486,7 @@ function GenerateDialog({ meal, busy, onGenerate, onCancel }) {
             onClick={() => onGenerate(richiesta || null)}
             disabled={busy}
           >
-            {busy && <span className="spinner-inline" />}
+            {busy ? <span className="spinner-inline" /> : <Sparkles size={16} />}
             {richiesta ? 'Genera così' : 'Scegli tu il piatto'}
           </button>
         </div>

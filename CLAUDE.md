@@ -475,9 +475,14 @@ vuota. Nel prompt la richiesta arriva come `RICHIESTA DELL'UTENTE`, e
 "come ieri ma col tacchino" è legittimo), i macro e gli ingredienti esclusi no — se il
 piatto chiesto non ci sta nei target il modello aggiusta le quantità o
 l'accompagnamento e lo scrive nella descrizione, invece di sfondare i numeri.
-Dal frontend è un dialogo con un campo di testo (`GenerateDialog` in `MealDetailPage`),
-non un secondo pulsante: le due strade sono la stessa azione con o senza una frase, e
-il campo vuoto porta al comportamento di prima. Guardie in
+Dal frontend, a casella vuota, le vie per riempirla stanno **tutte e tre in fila** nello
+stato vuoto, con tre nomi diversi perché sono tre cose diverse: *Scegli tu il piatto*
+(genera e basta, un clic), *Genera da una mia idea* (apre `GenerateDialog`, il campo di
+testo) e *Scegli dal ricettario*. Il pulsante primario in cima alla pagina compare solo
+a casella piena, dov'è *Rigenera*: quando la casella è vuota sarebbe il gemello del
+primo dei tre — stessa azione, nome quasi uguale, in un altro punto dello schermo.
+Il campo lasciato vuoto nel dialogo ricade sulla generazione di sempre, e il pulsante
+prende lo stesso nome dell'altra strada (*Scegli tu il piatto*) per dirlo. Guardie in
 `tests/test_genera_su_richiesta.py`.
 
 **La generazione in corso è stato del server, non della pagina.**
@@ -707,6 +712,19 @@ threadpool. La regola non ha eccezioni e `tests/test_concurrency.py` la fa rispe
   `tests/test_dettaglio_pasto.py`.
 - Tutte le chiamate del frontend passano da `api.js` — mai `fetch` nei componenti.
 - Un solo file CSS (`index.css`) con custom properties. Niente CSS modules, niente Tailwind.
+- **Ogni variante di pulsante porta un bordo di 1px**, anche quando non si vede
+  (`border: 1px solid transparent` su `.btn-primary`, `.btn-ai` e `.btn-danger`).
+  Senza, un primario è 2px più basso di un secondario — che il bordo ce l'ha davvero —
+  e la sua scritta sta un pixel più su: in una riga di tre pulsanti si vede, ed è il
+  tipo di disallineamento che si guarda dieci volte senza capire da dove viene.
+- **Quello che chiama il modello si vede che lo chiama:** verde della palette
+  (`.btn-primary` se è l'azione principale, `.btn-ai` — tinta tenue, stessa
+  costruzione di `.btn-danger` — se è l'alternativa) e l'icona `Sparkles`, la stessa
+  di "lo genera DietAI" nell'editor della dieta. Serve perché quelle azioni stanno in
+  fila con azioni che non costano niente: scegliere dal ricettario è istantaneo e
+  gratis, generare dura minuti e si paga. Unica eccezione, l'icona tonda della griglia
+  settimanale, che resta `RefreshCw` perché lì gira su sé stessa mentre lavora — e una
+  scintilla che ruota non dice niente a nessuno.
 - **Il telefono è il caso normale** (lista della spesa al supermercato, "l'ho seguito"
   dopo cena): tre regole che si dimenticano scrivendo su un monitor. Le altezze a
   schermo pieno vanno in `dvh` — `100vh` su iOS comprende la barra degli indirizzi e

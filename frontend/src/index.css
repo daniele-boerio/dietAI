@@ -414,9 +414,13 @@ textarea {
   height: 16px;
 }
 
+/* Il bordo trasparente non è decorazione: senza, un pulsante primario è 2px più basso
+   di uno secondario (che il bordo ce l'ha) e la sua scritta sta 1px più su. In una
+   riga di tre pulsanti si vede, ed è il motivo per cui anche `.btn-danger` ce l'ha. */
 .btn-primary {
   background: var(--accent);
   color: var(--accent-contrast);
+  border: 1px solid transparent;
 }
 
 .btn-primary:hover:not(:disabled) {
@@ -448,6 +452,22 @@ textarea {
   background: var(--danger-soft);
   color: var(--danger);
   border: 1px solid transparent;
+}
+
+/* Le azioni che chiamano il modello si riconoscono a colpo d'occhio: il verde della
+   palette e le scintille, la stessa icona di "lo genera DietAI" nell'editor della
+   dieta. Non è decorazione — accanto stanno azioni che non costano niente (scegliere
+   dal ricettario è istantaneo e gratis), mentre queste durano minuti e si pagano.
+   Stessa costruzione di `.btn-danger`: tinta tenue e testo del colore pieno, così il
+   primario resta l'unico riempito e i due si leggono come una famiglia sola. */
+.btn-ai {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid transparent;
+}
+
+.btn-ai:hover:not(:disabled) {
+  border-color: var(--accent);
 }
 
 .btn-danger:hover:not(:disabled) {

@@ -167,6 +167,26 @@ server a ogni clic, e quello che si vede è quello che verrà salvato.
 vuota. Generare vuol dire riempire le caselle libere. Se la dieta cambia,
 `ensure_week_structure` riallinea le settimane esistenti.
 
+**Cambiare dieta sposta le caselle, non le somma.** Ricalcolare i macro dal
+questionario o caricare un altro PDF non modifica i `MealSlot`: ne crea di nuovi e
+lascia i vecchi attaccati alla dieta archiviata. Le caselle già in griglia puntano a
+quelli, e `ensure_week_structure` aggiunge le sue per i pasti nuovi: senza altro la
+settimana finiva **con due colazioni, due pranzi e due cene** — le vecchie piene, le
+nuove vuote — e la doppia riga si portava dietro totali del giorno, spesa e aderenza.
+Perciò prima di creare il mancante si passa da `realign_to_diet`, che sposta ogni
+casella sul pasto **omonimo** della dieta attiva (`_slot_key`: stesso nome a meno di
+maiuscole e spazi). Si sposta invece di ricominciare da capo perché la ricetta che c'è
+dentro è costata una chiamata al modello e quello che l'utente ha già segnato è storia
+sua: cambiano solo i target. Sparisce solo ciò che nella dieta nuova non ha più un
+posto — chi la colazione smette di farla non se la ritrova in piano tutti i giorni — e,
+se la casella nuova esiste già, sopravvive quella che ha qualcosa da dire
+(`_casella_vissuta`: una ricetta, un "l'ho seguito", un rinvio). Due dettagli:
+`uq_planned_meal` vieta due caselle sullo stesso (giorno, pasto), quindi si cancella e
+si fa `flush()` **prima** di spostare, o la UPDATE arriverebbe prima della DELETE; e il
+riallineamento sta nella lettura, non nella rotta della dieta, così le settimane già
+sdoppiate si rimettono a posto da sole appena le si apre. Guardia in
+`tests/test_cambio_dieta.py`.
+
 **Il piano si sfoglia, e il passato è di sola lettura.** Non ci sono più due schede
 fisse (questa settimana / la prossima): `GET /api/planning/weeks/by-date/{data}`
 apre qualunque lunedì e `/plan/:weekStart` è la pagina, con `/plan` e `/plan/next`

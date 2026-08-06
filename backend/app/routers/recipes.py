@@ -15,7 +15,14 @@ from ..services import prompts
 from ..services.ai_client import AIError, get_client
 from ..services.ingredients import get_or_create_ingredient, normalize_name
 from ..services.planner import DAY_NAMES, build_context
-from ..services.recipes import create_recipe, ingredients_of, recipe_for_prompt, serialize_recipe
+from ..services.recipes import (
+    create_recipe,
+    fork_recipe_for_meal,
+    ingredients_of,
+    recipe_for_prompt,
+    serialize_recipe,
+    settle_recipe,
+)
 from ..services.shopping import rebuild_shopping_list
 
 logger = logging.getLogger(__name__)
@@ -165,8 +172,26 @@ def substitute_ingredient(
 
     L'aggiornamento è immediato: se non piace, l'utente ha comunque la chat del
     pasto e il pulsante di rigenerazione.
+
+    Con `meal_id` la modifica vale per quella casella soltanto: lo stesso piatto in più
+    giorni è una ricetta sola, e chi sta guardando il pasto di lunedì non si aspetta di
+    cambiare anche giovedì. Senza, si sta modificando il piatto in sé (dal ricettario) e
+    la modifica vale ovunque, che è quello che vuol dire modificare una ricetta.
     """
     recipe = _get_recipe(db, user.id, recipe_id)
+    meal = None
+    if body.meal_id is not None:
+        meal = (
+            db.query(PlannedMeal)
+            .join(DayPlan, DayPlan.id == PlannedMeal.day_plan_id)
+            .join(WeekPlan, WeekPlan.id == DayPlan.week_plan_id)
+            .filter(
+                PlannedMeal.id == body.meal_id,
+                PlannedMeal.recipe_id == recipe.id,
+                WeekPlan.user_id == user.id,
+            )
+            .first()
+        )
 
     target_name = normalize_name(body.ingredient_to_replace)
     rows = (
@@ -200,6 +225,21 @@ def substitute_ingredient(
         raise AIError("Claude non ha proposto un sostituto valido.")
 
     substitute = data["substitute"]
+
+    # Se la richiesta arriva da un pasto e quel piatto è in programma anche altrove, la
+    # sostituzione se ne stacca una copia: da qui in poi sono due piatti diversi.
+    if meal is not None:
+        forked = fork_recipe_for_meal(db, meal)
+        if forked is not None and forked.id != recipe.id:
+            recipe = forked
+            match = next(
+                ri
+                for ri in db.query(RecipeIngredient).filter(
+                    RecipeIngredient.recipe_id == recipe.id
+                )
+                if ri.ingredient_id == match.ingredient_id
+            )
+
     new_ingredient = get_or_create_ingredient(db, substitute.get("name") or "")
     match.ingredient_id = new_ingredient.id
     match.quantity = float(substitute.get("quantity") or match.quantity)
@@ -211,6 +251,12 @@ def substitute_ingredient(
         recipe.protein_g = float(nutrition.get("protein_g", recipe.protein_g))
         recipe.carbs_g = float(nutrition.get("carbs_g", recipe.carbs_g))
         recipe.fat_g = float(nutrition.get("fat_g", recipe.fat_g))
+
+    # Se il piatto è appena diventato uguale a un altro che l'utente ha già, si torna a
+    # una riga sola invece di lasciarne due identiche in ricettario.
+    if meal is not None:
+        db.flush()
+        recipe = settle_recipe(db, meal) or recipe
 
     db.commit()
 

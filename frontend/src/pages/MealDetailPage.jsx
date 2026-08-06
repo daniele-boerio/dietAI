@@ -132,7 +132,14 @@ export default function MealDetailPage() {
   const substitute = async (ingredient) => {
     setSubstituting(true);
     try {
-      const result = await api.substituteIngredient(meal.recipe.id, ingredient.name, null);
+      // Il pasto va passato: se lo stesso piatto è in programma anche altri giorni, la
+      // sostituzione vale per questa casella e non per tutte.
+      const result = await api.substituteIngredient(
+        meal.recipe.id,
+        ingredient.name,
+        null,
+        meal.id
+      );
       setSubstitution(result);
       await load();
     } catch (e) {

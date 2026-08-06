@@ -23,7 +23,13 @@ from ..schemas import ChatMessageRequest
 from ..services import prompts
 from ..services.ai_client import _extract_json, get_client
 from ..services.planner import DAY_NAMES, build_context, meal_context_for_chat
-from ..services.recipes import ingredients_of, serialize_recipe, update_recipe_from_ai
+from ..services.recipes import (
+    fork_recipe_for_meal,
+    ingredients_of,
+    serialize_recipe,
+    settle_recipe,
+    update_recipe_from_ai,
+)
 from ..services.shopping import (
     current_list,
     meals_to_buy,
@@ -208,8 +214,15 @@ def send_message(
             try:
                 data = _extract_json(tail)
                 if isinstance(data, dict):
+                    # Lo stesso piatto in due giorni è una riga sola: se questo è il
+                    # caso, la modifica chiesta qui se ne stacca una copia sua invece
+                    # di riscrivere anche gli altri giorni.
+                    recipe = fork_recipe_for_meal(db, meal)
                     update_recipe_from_ai(db, recipe, data)
                     db.flush()
+                    # E se la modifica ha riportato il piatto identico a uno che c'era
+                    # già (o non ha cambiato niente), si torna a una riga sola.
+                    recipe = settle_recipe(db, meal) or recipe
                     recipe_updated = True
             except ValueError:
                 logger.warning("Chat: [RECIPE_UPDATE] senza JSON valido (pasto %s)", meal_id)
@@ -327,8 +340,16 @@ def _apply_recipes_update(
             # inventato): meglio ignorarlo che scrivere una ricetta a caso.
             continue
         meal, day, slot = target
-        recipe = db.get(Recipe, meal.recipe_id)
+        # Come nella chat del pasto: se quel piatto è in programma anche altrove, la
+        # modifica vale per questa casella e non per tutte quelle che lo condividono.
+        recipe = fork_recipe_for_meal(db, meal)
+        if recipe is None:
+            continue
         update_recipe_from_ai(db, recipe, recipe_data)
+        db.flush()
+        # Due caselle che avevano lo stesso piatto ricevono qui la stessa identica
+        # modifica: senza rimetterle insieme, il doppione rientrerebbe da qui.
+        settle_recipe(db, meal)
         meal.is_followed = None  # la ricetta è cambiata: il tracking riparte da zero
         changed.append(_meal_label(day, slot))
     return changed

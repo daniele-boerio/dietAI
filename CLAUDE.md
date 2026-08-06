@@ -58,6 +58,7 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
 │       ├── make_admin.py       # `python -m app.make_admin`: rialza il flag di amministratore
 │       ├── delete_user.py      # `python -m app.delete_user --email ...`: cancella un account
 │       ├── merge_ingredients.py # `python -m app.merge_ingredients`: fonde i doppioni di anagrafica
+│       ├── merge_recipes.py    # `python -m app.merge_recipes`: fonde le ricette identiche
 │       ├── routers/            # auth, admin, diet, config, planning, recipes, chat, shopping, tracking
 │       ├── services/
 │       │   ├── accounts.py     # chi è l'amministratore, creazione di un account
@@ -337,8 +338,53 @@ la ridistribuzione del lucchetto lo salta (vedi *Ma la ridistribuzione salta i p
 faccio io»*).
 
 **I pasti fissi non si rigenerano.** `is_recurring` o `source == 'user_custom'` →
-`_is_fixed()` li salta nella generazione e la settimana successiva se li ricopia
-(`apply_recurring_meals`, con `copy_recipe`: copia, non riferimento).
+`_is_fixed()` li salta nella generazione e la settimana successiva se li ripropone
+(`apply_recurring_meals`, che assegna la **stessa** ricetta: vedi qui sotto).
+
+**Lo stesso piatto è una ricetta sola.** Il ricettario è l'archivio dei piatti, non il
+diario delle caselle: la colazione che si ripete sette giorni è un piatto. Prima ogni
+casella si portava dietro la sua riga — `create_recipe` una per pasto generato,
+`copy_recipe` una per settimana sui pasti fissi (per **giorno**, con la regola
+"daily") — e l'archivio cresceva di una riga al giorno per lo stesso identico piatto,
+con voti e preferiti sparpagliati su dieci copie che nessuno teneva allineate. Ora
+`create_recipe` prima di inserire cerca un gemello (`find_twin`) e se lo trova
+restituisce quello. Identico vuol dire **stesso nome, stessi macro, stessa spesa**
+(l'insieme di ingrediente × quantità × unità, confrontato sull'`ingredient_id` cioè
+dopo la normalizzazione del nome); procedimento e descrizione restano fuori dal
+confronto, perché un modello che riscrive gli stessi passi con altre parole non ha
+inventato un altro piatto — e includerli vorrebbe dire non deduplicare mai niente. Le
+candidate si pescano per calorie, che sono un intero e tagliano l'archivio in un colpo
+solo.
+
+Una riga condivisa però non si può modificare come se fosse di uno solo, ed è qui che
+sta il lavoro vero. **`fork_recipe_for_meal`** è la contropartita: chi modifica *da un
+pasto* — la chat del pasto, quella della spesa, la sostituzione di un ingrediente con
+`meal_id` — se quel piatto è in programma anche altrove ne stacca prima una copia. È la
+stessa garanzia di quando le copie si facevano subito ("modificare la colazione di
+questa settimana non riscrive quella archiviata"), pagata solo quando serve davvero. Le
+caselle **saltate** non contano come uso: la loro `recipe_id` è la memoria di cosa era
+in programma e condividono già la riga con la casella dove il piatto si è accodato.
+E **`settle_recipe`** è il ritorno: dopo la modifica, se il piatto è diventato uguale a
+uno che c'è già si torna a una riga sola. Serve al caso che la chat della spesa produce
+da sé — "le zucchine non le trovo" riscrive tutte le ricette che le usano, e due caselle
+appena staccate ricevono la stessa identica modifica — e a quello, frequente, del
+modello che rimanda la ricetta invariata. La riga lasciata indietro si cancella solo se
+non la usa più nessuno **e** non porta un voto o un preferito: quello è un giudizio
+dell'utente, non un residuo.
+
+Un posto sfruttava "stessa ricetta" come identità e ora non regge più:
+`unskip_meal` cercava la casella dove il piatto saltato si era accodato confrontando le
+`recipe_id`, e con le ricette condivise avrebbe svuotato la prima colazione uguale che
+incontrava. Per questo `PlannedMeal.skipped_to_meal_id` (migrazione `0018`, con
+backfill della vecchia regola finché è ancora univoca) scrive **dove**, invece di
+indovinarlo.
+
+Per l'archivio già gonfio c'è `python -m app.merge_recipes`: senza `--yes` stampa solo
+cosa fonderebbe, con `--yes` tiene la riga con più storia addosso (prima i preferiti,
+poi il voto più alto, poi la più vecchia), ci sposta le caselle del piano e cancella le
+gemelle. Va lanciato **dopo** la migrazione, mai prima: è la migrazione a leggere le
+`recipe_id` ancora tutte diverse. Guardie in `tests/test_ricette_doppie.py`, dove il
+modello finto propone lo stesso piatto tutti i giorni — come fa chiunque a colazione.
 
 **La chat della spesa cambia un ingrediente in tutta la lista.** Oltre alla chat
 sul singolo pasto (`/api/chat/meals/...`, marcatore `[RECIPE_UPDATE]`) c'è la chat "da
@@ -743,3 +789,5 @@ diventerebbe indecifrabile e andrebbe reinserita.
   taglio che non era in elenco): Impostazioni → Nomi e accorpamenti, che salva la
   regola e rifà l'anagrafica. Nel codice si scende solo per cambiare le regole di
   serie, che sono quelle su cui poggiano il catalogo dei prezzi e i test.
+- **Ricettario pieno di doppioni** (archivio di prima che le ricette si condividessero):
+  `python -m app.merge_recipes` per vedere cosa fonderebbe, `--yes` per fonderlo.

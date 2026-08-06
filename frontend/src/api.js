@@ -269,10 +269,13 @@ export const api = {
 
   deleteRecipe: (id) => request(`/recipes/${id}`, { method: 'DELETE' }),
 
-  substituteIngredient: (id, ingredient_to_replace, reason) =>
+  // `mealId` dice da quale casella del piano arriva la richiesta: lo stesso piatto in
+  // più giorni è una ricetta sola, e senza, cambiare il pollo di lunedì lo cambierebbe
+  // anche giovedì. Dal ricettario non c'è (si sta modificando il piatto in sé).
+  substituteIngredient: (id, ingredient_to_replace, reason, mealId = null) =>
     request(`/recipes/${id}/substitute`, {
       method: 'POST',
-      body: JSON.stringify({ ingredient_to_replace, reason }),
+      body: JSON.stringify({ ingredient_to_replace, reason, meal_id: mealId }),
     }),
 
   // ── Chat per pasto ──

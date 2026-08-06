@@ -202,6 +202,11 @@ class FavoriteRequest(BaseModel):
 class SubstituteRequest(BaseModel):
     ingredient_to_replace: str = Field(min_length=1, max_length=120)
     reason: str | None = Field(default=None, max_length=200)
+    # Da quale casella del piano arriva la richiesta. Serve perché lo stesso piatto in
+    # più giorni è una ricetta sola: senza, sostituire il pollo di lunedì lo
+    # sostituirebbe anche giovedì. Assente = si sta modificando il piatto in sé, dal
+    # ricettario, e allora vale ovunque.
+    meal_id: int | None = None
 
 
 # ── Pianificazione ─────────────────────────────────────────────────────────────

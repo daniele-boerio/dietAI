@@ -382,6 +382,14 @@ class PlannedMeal(Base):
     # memoria di cosa c'era in programma, ma non conta più da nessuna parte — spesa,
     # totali del giorno, tracking e generazione la saltano tutti.
     is_skipped = Column(Boolean, nullable=False, default=False, server_default="false")
+    # Dove è stata accodata la ricetta di questa casella saltata: serve a `unskip_meal`
+    # per svuotare **quella** casella e non un'altra che per caso ha lo stesso piatto.
+    # Prima si andava per somiglianza (stesso pasto, stessa `recipe_id`), e finché ogni
+    # casella aveva la sua riga di ricetta bastava; ora che lo stesso piatto in due
+    # giorni è una riga sola, "stessa ricetta" non identifica più niente.
+    skipped_to_meal_id = Column(
+        Integer, ForeignKey("planned_meals.id", ondelete="SET NULL")
+    )
 
     __table_args__ = (
         UniqueConstraint("day_plan_id", "meal_slot_id", name="uq_planned_meal"),

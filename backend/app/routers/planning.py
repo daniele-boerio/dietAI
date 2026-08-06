@@ -325,7 +325,7 @@ def set_followed(
     pantry_used: list[dict] = []
     pantry_skipped: list[dict] = []
     if body.is_followed:
-        unskip_meal(db, user_id, meal, week)
+        unskip_meal(db, meal)
         moved = {"moved_to": None}
         if meal.pantry_used is None:
             pantry_used, pantry_skipped = consume_from_pantry(db, user_id, meal.recipe_id)

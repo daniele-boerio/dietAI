@@ -34,7 +34,7 @@ from ..utils.seasonality import current_month, current_month_name, in_season
 from ..utils.units import format_quantity
 from . import prompts
 from .ai_client import AIError, get_client
-from .recipes import copy_recipe, create_recipe, recipe_for_prompt, serialize_recipe
+from .recipes import create_recipe, recipe_for_prompt, serialize_recipe
 
 logger = logging.getLogger(__name__)
 
@@ -490,8 +490,12 @@ def _is_fixed(meal: PlannedMeal, slot: MealSlot) -> bool:
 def apply_recurring_meals(db: Session, user_id: int, week: WeekPlan) -> int:
     """Pre-assegna alla settimana i pasti marcati come ricorrenti nella precedente.
 
-    La ricetta viene COPIATA, non condivisa: modificare la colazione di questa
-    settimana non deve riscrivere quella delle settimane già archiviate.
+    La ricetta è la stessa riga, non una copia: la colazione di sempre è **un** piatto,
+    e farne una copia a settimana (per giorno, con la regola "daily") era il modo più
+    veloce di riempire il ricettario di doppioni. La garanzia che c'era prima non si
+    perde: modificare la colazione di questa settimana non riscrive quella archiviata,
+    perché chi modifica da dentro un pasto passa da `fork_recipe_for_meal`, che la
+    copia stacca lì — quando serve davvero.
     """
     previous = (
         db.query(WeekPlan)
@@ -541,7 +545,7 @@ def apply_recurring_meals(db: Session, user_id: int, week: WeekPlan) -> int:
             )
             if not target or target.recipe_id:
                 continue
-            target.recipe_id = copy_recipe(db, recipe).id
+            target.recipe_id = recipe.id
             target.source = meal.source
             target.is_recurring = True
             target.recurring_rule = rule
@@ -560,6 +564,7 @@ def _empty_meal(meal: PlannedMeal) -> None:
     meal.source = "ai_generated"
     meal.is_followed = None
     meal.deviation_notes = None
+    meal.skipped_to_meal_id = None
 
 
 def _overflow_week(db: Session, user_id: int, week: WeekPlan) -> WeekPlan | None:
@@ -624,6 +629,11 @@ def skip_meal(db: Session, user_id: int, meal: PlannedMeal, day: DayPlan, week: 
     target.source = meal.source
     target.is_followed = None
     target.deviation_notes = None
+    # Dove è finito il piatto, scritto invece che indovinato: annullare il salto deve
+    # svuotare **questa** casella, non un'altra che per caso ha lo stesso piatto — e da
+    # quando lo stesso piatto in due giorni è una riga di ricetta sola, "stessa ricetta"
+    # non è più un indirizzo.
+    meal.skipped_to_meal_id = target.id
     db.flush()
 
     target_day = db.get(DayPlan, target.day_plan_id)
@@ -637,31 +647,30 @@ def skip_meal(db: Session, user_id: int, meal: PlannedMeal, day: DayPlan, week: 
     }
 
 
-def unskip_meal(db: Session, user_id: int, meal: PlannedMeal, week: WeekPlan) -> None:
-    """Annulla il salto: la ricetta torna qui dalla casella dov'era stata accodata."""
+def unskip_meal(db: Session, meal: PlannedMeal) -> None:
+    """Annulla il salto: la ricetta torna qui e la casella dove si era accodata si svuota.
+
+    Quale casella lo dice `skipped_to_meal_id`, scritto da `skip_meal`. Prima lo si
+    cercava per somiglianza — stesso pasto, stessa `recipe_id` — e finché ogni casella
+    aveva la sua riga di ricetta era un indirizzo univoco; ora che lo stesso piatto in
+    due giorni è **una** riga, quella ricerca svuoterebbe la prima colazione uguale che
+    incontra.
+    """
     if not meal.is_skipped:
         return
 
     meal.is_skipped = False
-    if not meal.recipe_id:
-        db.flush()
-        return
+    accodata = (
+        db.get(PlannedMeal, meal.skipped_to_meal_id) if meal.skipped_to_meal_id else None
+    )
+    meal.skipped_to_meal_id = None
 
-    for source in (week, _overflow_week(db, user_id, week)):
-        if source is None:
-            continue
-        for _day, other, slot in week_meals(db, source):
-            same = (
-                other.id != meal.id
-                and other.meal_slot_id == meal.meal_slot_id
-                and other.recipe_id == meal.recipe_id
-                and not other.is_skipped
-                and not _is_fixed(other, slot)
-            )
-            if same:
-                _empty_meal(other)
-                db.flush()
-                return
+    # Solo se là c'è ancora il piatto di qui: nel frattempo quella casella può essere
+    # stata rigenerata, riassegnata o svuotata a mano, e in quel caso non c'è niente da
+    # riprendersi — la ricetta di questa casella è comunque rimasta qui, come memoria.
+    if accodata is not None and accodata.recipe_id == meal.recipe_id and not accodata.is_skipped:
+        _empty_meal(accodata)
+
     db.flush()
 
 
@@ -681,7 +690,7 @@ def skip_day(db: Session, user_id: int, day: DayPlan, week: WeekPlan, skipped: b
         if skipped:
             skip_meal(db, user_id, meal, day, week)
         else:
-            unskip_meal(db, user_id, meal, week)
+            unskip_meal(db, meal)
     db.flush()
 
 

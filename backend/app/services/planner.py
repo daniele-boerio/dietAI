@@ -558,13 +558,26 @@ def apply_recurring_meals(db: Session, user_id: int, week: WeekPlan) -> int:
 # ── Pasti saltati ──────────────────────────────────────────────────────────────
 
 
-def _empty_meal(meal: PlannedMeal) -> None:
+def forget_queued_meal(db: Session, meal: PlannedMeal) -> None:
+    """Questa casella non è più «il piatto che avevo rimandato».
+
+    Da chiamare quando ci si mette dentro qualcos'altro di proposito — rigenerata,
+    riassegnata, svuotata: da lì in poi annullare il salto non deve più portarsela via,
+    perché quello che c'è ora l'ha scelto l'utente.
+    """
+    db.query(PlannedMeal).filter(PlannedMeal.skipped_to_meal_id == meal.id).update(
+        {"skipped_to_meal_id": None}
+    )
+
+
+def _empty_meal(db: Session, meal: PlannedMeal) -> None:
     """Svuota una casella: la ricetta se n'è andata da un'altra parte."""
     meal.recipe_id = None
     meal.source = "ai_generated"
     meal.is_followed = None
     meal.deviation_notes = None
     meal.skipped_to_meal_id = None
+    forget_queued_meal(db, meal)
 
 
 def _overflow_week(db: Session, user_id: int, week: WeekPlan) -> WeekPlan | None:
@@ -665,11 +678,13 @@ def unskip_meal(db: Session, meal: PlannedMeal) -> None:
     )
     meal.skipped_to_meal_id = None
 
-    # Solo se là c'è ancora il piatto di qui: nel frattempo quella casella può essere
-    # stata rigenerata, riassegnata o svuotata a mano, e in quel caso non c'è niente da
-    # riprendersi — la ricetta di questa casella è comunque rimasta qui, come memoria.
-    if accodata is not None and accodata.recipe_id == meal.recipe_id and not accodata.is_skipped:
-        _empty_meal(accodata)
+    # Basta che là ci sia ancora qualcosa: il puntatore è l'indirizzo, e vale finché
+    # nessuno ci ha messo dentro altro di proposito — chi rigenera, riassegna o svuota
+    # quella casella lo cancella (`forget_queued_meal`). Non si confrontano le ricette,
+    # perché nel frattempo il piatto rimandato può essere stato modificato in chat, e
+    # quella modifica gliene ha staccata una copia sua.
+    if accodata is not None and accodata.recipe_id and not accodata.is_skipped:
+        _empty_meal(db, accodata)
 
     db.flush()
 
@@ -1202,6 +1217,9 @@ def regenerate_meal(
     meal.recipe_id = recipe.id
     meal.source = "ai_generated"
     meal.is_followed = None
+    # Qui dentro c'è un piatto nuovo, scelto adesso: se questa casella era la coda di un
+    # pasto rimandato, non lo è più.
+    forget_queued_meal(db, meal)
     db.commit()
 
     from .shopping import rebuild_shopping_list

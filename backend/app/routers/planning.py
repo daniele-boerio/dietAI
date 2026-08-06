@@ -14,6 +14,7 @@ from ..schemas import AssignMealRequest, FollowedRequest, RecurringRequest, Skip
 from ..services.planner import (
     current_week_start,
     ensure_not_skipped,
+    forget_queued_meal,
     generate_week,
     generation_error,
     get_or_create_week,
@@ -242,6 +243,9 @@ def assign_meal(
     # Il piatto è un altro: quello che era stato scalato dalla dispensa resta scalato
     # (mangiato è mangiato), ma non ha più senso rimetterlo se domani si corregge.
     meal.pantry_used = None
+    # E se questa casella era la coda di un pasto rimandato, adesso non lo è più:
+    # annullare quel salto non deve portarsi via la ricetta appena scelta.
+    forget_queued_meal(db, meal)
     db.commit()
 
     rebuild_shopping_list(db, user.id)
@@ -264,6 +268,8 @@ def clear_meal(
     meal.recurring_rule = None
     meal.is_followed = None
     meal.pantry_used = None
+    meal.skipped_to_meal_id = None
+    forget_queued_meal(db, meal)
     db.commit()
 
     rebuild_shopping_list(db, user_id)

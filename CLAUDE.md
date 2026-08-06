@@ -357,13 +357,15 @@ candidate si pescano per calorie, che sono un intero e tagliano l'archivio in un
 solo.
 
 Una riga condivisa però non si può modificare come se fosse di uno solo, ed è qui che
-sta il lavoro vero. **`fork_recipe_for_meal`** è la contropartita: chi modifica *da un
-pasto* — la chat del pasto, quella della spesa, la sostituzione di un ingrediente con
-`meal_id` — se quel piatto è in programma anche altrove ne stacca prima una copia. È la
-stessa garanzia di quando le copie si facevano subito ("modificare la colazione di
-questa settimana non riscrive quella archiviata"), pagata solo quando serve davvero. Le
-caselle **saltate** non contano come uso: la loro `recipe_id` è la memoria di cosa era
-in programma e condividono già la riga con la casella dove il piatto si è accodato.
+sta il lavoro vero. **Quello che è già stato non si riscrive: modificare un giorno crea
+una ricetta nuova.** `fork_recipe_for_meal` è la contropartita della riga condivisa:
+chi modifica *da un pasto* — la chat del pasto, quella della spesa, la sostituzione di
+un ingrediente con `meal_id` — se quel piatto è in programma anche altrove ne stacca
+prima una copia, e la modifica finisce solo lì. È la stessa garanzia di quando le copie
+si facevano subito ("modificare la colazione di questa settimana non riscrive quella
+archiviata"), pagata solo quando serve davvero. Conta come uso **qualunque** altra
+casella, comprese quelle saltate: la `recipe_id` di una casella saltata è la memoria di
+cosa c'era in programma quel giorno, quindi è storia come il resto.
 E **`settle_recipe`** è il ritorno: dopo la modifica, se il piatto è diventato uguale a
 uno che c'è già si torna a una riga sola. Serve al caso che la chat della spesa produce
 da sé — "le zucchine non le trovo" riscrive tutte le ricette che le usano, e due caselle
@@ -377,7 +379,13 @@ Un posto sfruttava "stessa ricetta" come identità e ora non regge più:
 `recipe_id`, e con le ricette condivise avrebbe svuotato la prima colazione uguale che
 incontrava. Per questo `PlannedMeal.skipped_to_meal_id` (migrazione `0018`, con
 backfill della vecchia regola finché è ancora univoca) scrive **dove**, invece di
-indovinarlo.
+indovinarlo. Il puntatore è un indirizzo e basta: annullando il salto si svuota quella
+casella senza confrontare le ricette, perché nel frattempo il piatto rimandato può
+essere stato modificato in chat — e la modifica gliene ha staccata una copia sua. A
+tenere onesto l'indirizzo è `forget_queued_meal`, che lo cancella appena in quella
+casella si mette dentro qualcos'altro di proposito (rigenerata, riassegnata, svuotata):
+da lì in poi quello che c'è l'ha scelto l'utente, e nessun "in realtà l'ho seguito"
+deve portarselo via.
 
 Per l'archivio già gonfio c'è `python -m app.merge_recipes`: senza `--yes` stampa solo
 cosa fonderebbe, con `--yes` tiene la riga con più storia addosso (prima i preferiti,

@@ -280,6 +280,87 @@ def test_la_chat_della_spesa_non_sdoppia_il_piatto_ripetuto(
     assert titoli.count("Pasta e zucchine") == 1
 
 
+def test_modificare_oggi_non_riscrive_i_giorni_gia_passati(client, diet, monkeypatch):
+    """La regola, detta dal lato che conta: quello che è già stato non si tocca."""
+    monkeypatch.setattr(planner, "get_client", lambda db, user, role: ModelloRipetitivo(user))
+    client.put("/api/auth/api-key", json={"api_key": "sk-or-chiave-finta-per-i-test"})
+
+    week = client.get("/api/planning/weeks/current").json()
+    client.post(f"/api/planning/weeks/{week['id']}/generate")
+    week = client.get("/api/planning/weeks/current").json()
+
+    lunedi = pasto(week, 0, "Pranzo")
+    giovedi = pasto(week, 3, "Pranzo")
+    # Lunedì è storia: quel piatto è stato cucinato e mangiato.
+    client.put(f"/api/planning/meals/{lunedi['id']}/followed", json={"is_followed": True})
+
+    modificata = {**PRANZO, "title": "Pasta e zucchine al forno"}
+    monkeypatch.setattr(
+        chat_router,
+        "get_client",
+        lambda db, user, role: FakeChat("Fatto.\n[RECIPE_UPDATE]\n" + json.dumps(modificata)),
+    )
+    client.post(f"/api/chat/meals/{giovedi['id']}/messages", json={"content": "al forno"})
+
+    dopo = client.get("/api/planning/weeks/current").json()
+    assert pasto(dopo, 3, "Pranzo")["recipe"]["title"] == "Pasta e zucchine al forno"
+    # Quello che lunedì è stato mangiato resta quello che è stato mangiato.
+    assert pasto(dopo, 0, "Pranzo")["recipe"]["title"] == "Pasta e zucchine"
+    assert pasto(dopo, 0, "Pranzo")["is_followed"] is True
+
+
+def test_anche_la_memoria_di_un_pasto_rimandato_resta_com_era(client, settimana_ripetitiva, monkeypatch):
+    """Una casella saltata dice cosa c'era in programma: è storia anche quella."""
+    week = client.get("/api/planning/weeks/current").json()
+    cena = pasto(week, 0, "Cena")
+    accodata = client.put(
+        f"/api/planning/meals/{cena['id']}/followed", json={"is_followed": False}
+    ).json()["moved_to"]
+
+    modificata = {**CENA, "title": "Pollo alle erbe"}
+    monkeypatch.setattr(
+        chat_router,
+        "get_client",
+        lambda db, user, role: FakeChat("Fatto.\n[RECIPE_UPDATE]\n" + json.dumps(modificata)),
+    )
+    client.post(
+        f"/api/chat/meals/{accodata['meal_id']}/messages", json={"content": "con le erbe"}
+    )
+
+    nxt = client.get("/api/planning/weeks/next").json()
+    assert pasto(nxt, 0, "Cena")["recipe"]["title"] == "Pollo alle erbe"
+    # Il lunedì saltato ricorda ancora il piatto che era in programma quel giorno.
+    dopo = client.get("/api/planning/weeks/current").json()
+    assert pasto(dopo, 0, "Cena")["recipe"]["title"] == "Pollo e insalata"
+
+
+def test_il_piatto_rimandato_e_poi_modificato_torna_indietro_lo_stesso(
+    client, settimana_ripetitiva, monkeypatch
+):
+    """Il rinvio si annulla per indirizzo, non per somiglianza: la modifica non lo perde."""
+    week = client.get("/api/planning/weeks/current").json()
+    cena = pasto(week, 0, "Cena")
+    accodata = client.put(
+        f"/api/planning/meals/{cena['id']}/followed", json={"is_followed": False}
+    ).json()["moved_to"]
+
+    monkeypatch.setattr(
+        chat_router,
+        "get_client",
+        lambda db, user, role: FakeChat(
+            "Fatto.\n[RECIPE_UPDATE]\n" + json.dumps({**CENA, "title": "Pollo alle erbe"})
+        ),
+    )
+    client.post(
+        f"/api/chat/meals/{accodata['meal_id']}/messages", json={"content": "con le erbe"}
+    )
+
+    client.put(f"/api/planning/meals/{cena['id']}/followed", json={"is_followed": True})
+
+    nxt = client.get("/api/planning/weeks/next").json()
+    assert pasto(nxt, 0, "Cena")["recipe"] is None
+
+
 # ── "Ho mangiato altro" con lo stesso piatto in più giorni ─────────────────────
 
 

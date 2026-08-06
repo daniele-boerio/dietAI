@@ -348,10 +348,10 @@ def fork_recipe_for_meal(db: Session, meal: PlannedMeal) -> Recipe | None:
     piatto: se quel piatto è in programma anche altrove, "meno olio stasera" non deve
     riscrivere il giovedì né la settimana già archiviata.
 
-    Le caselle saltate non contano come uso: la loro `recipe_id` è solo la memoria di
-    cosa era in programma, e condividono già la riga con la casella dove il piatto si è
-    accodato — staccarne una copia lì vorrebbe dire fabbricare il doppione proprio nel
-    caso in cui non serve.
+    **Ogni** altra casella conta come uso, comprese quelle saltate: la `recipe_id` di
+    una casella saltata è la memoria di cosa c'era in programma quel giorno, cioè un
+    pezzo di storia come tutti gli altri. Modificare il piatto dove si è accodato non
+    può riscrivere quello che il lunedì diceva.
     """
     recipe = db.get(Recipe, meal.recipe_id) if meal.recipe_id else None
     if recipe is None:
@@ -359,11 +359,7 @@ def fork_recipe_for_meal(db: Session, meal: PlannedMeal) -> Recipe | None:
 
     condivisa = (
         db.query(PlannedMeal)
-        .filter(
-            PlannedMeal.recipe_id == recipe.id,
-            PlannedMeal.id != meal.id,
-            PlannedMeal.is_skipped.is_(False),
-        )
+        .filter(PlannedMeal.recipe_id == recipe.id, PlannedMeal.id != meal.id)
         .first()
     )
     if condivisa is None:

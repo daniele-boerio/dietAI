@@ -326,18 +326,11 @@ export default function MealDetailPage() {
               title="Nessuna ricetta per questo pasto"
               text={`Target: ${meal.target.calories} kcal, proteine ${meal.target.protein_g}g, carboidrati ${meal.target.carbs_g}g, grassi ${meal.target.fat_g}g.`}
               action={
-                /* I tre modi di riempire la casella, in una riga sola e con tre nomi
-                   diversi: sceglie l'AI, scegli tu cosa e l'AI fa i conti, oppure la
-                   ricetta ce l'hai già. `flex-wrap` perché sul telefono tre pulsanti
-                   in fila non ci stanno, e senza uscirebbero dal bordo. */
-                <div
-                  style={{
-                    display: 'flex',
-                    gap: 8,
-                    justifyContent: 'center',
-                    flexWrap: 'wrap',
-                  }}
-                >
+                /* I tre modi di riempire la casella, incolonnati e larghi uguale
+                   (`.empty-actions`): scelgo io, scegli tu cosa e faccio i conti,
+                   oppure la ricetta ce l'hai già. In riga si allineavano solo a
+                   schermo largo — vedi il commento sulla classe. */
+                <div className="empty-actions">
                   <button
                     className="btn btn-primary"
                     onClick={() => regenerate()}

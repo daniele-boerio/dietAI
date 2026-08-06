@@ -733,6 +733,13 @@ threadpool. La regola non ha eccezioni e `tests/test_concurrency.py` la fa rispe
   `viewport-fit=cover` lascia passare la pagina sotto la tacca. E ciò che compare solo
   `:hover` col dito non compare mai: le correzioni per il touch stanno nel blocco
   `@media (pointer: coarse)` in fondo al foglio, bersagli da 44px compresi.
+- **Più di un'azione in uno stato vuoto va incolonnata** (`.empty-actions`: griglia,
+  larghezza uguale, 320px al centro). In riga i pulsanti si allineano solo per
+  combinazione — le etichette sono lunghe diverse e `.btn` non manda a capo — quindi
+  fra i 1100 e i 1280px, dove accanto c'è ancora la colonna della chat, andavano a capo
+  2+1, e sul telefono diventavano una scaletta storta. Sul telefono vale anche per la
+  testata: `.page-actions` prende tutta la riga e i pulsanti crescono a riempirla,
+  perché il bordo destro frastagliato è la stessa bruttura vista dall'altro lato.
 - **Una striscia che scorre di lato deve arrivare dove sei.** È l'errore che si vede
   solo aprendo l'app sul telefono: le schede delle impostazioni scorrevano, e su
   "Utenti" la striscia mostrava ancora le prime tre — la pagina non diceva più dove ti

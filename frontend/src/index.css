@@ -3144,7 +3144,14 @@ textarea:focus {
   padding: 60px 20px;
 }
 
-.empty-state svg {
+/* Il figlio diretto, non "ogni svg qui dentro": così scritta, questa regola prendeva
+   anche le icone dei pulsanti dell'azione — 46px al posto di 16 e, soprattutto,
+   `margin: 0 auto`, che dentro un flex spinge icona ed etichetta alle due estremità.
+   Da lì i pulsanti sfilacciati: le icone finivano ognuna a una distanza diversa dal
+   bordo, e nessun `justify-content` poteva rimetterle in riga. Vale anche altrove —
+   la freccia di "Torna a questa settimana" in Pianificazione era gigante per lo stesso
+   motivo, e nessuno l'aveva collegata a questa riga. */
+.empty-state > svg {
   width: 46px;
   height: 46px;
   margin: 0 auto 14px;
@@ -3162,6 +3169,38 @@ textarea:focus {
   font-size: 0.9rem;
   max-width: 420px;
   margin: 0 auto 18px;
+}
+
+/* Più di un'azione in uno stato vuoto va **incolonnata**, non messa in riga.
+   In riga si allineano solo per combinazione: le etichette sono lunghe diverse e
+   `.btn` non manda a capo, quindi tre pulsanti finiscono su ~615px — che stanno
+   comodi solo a schermo largo. Fra i 1100 e i 1280px, dove accanto c'è ancora la
+   colonna della chat, andavano a capo 2+1; sul telefono uno sotto l'altro ma di
+   larghezze diverse, cioè una scaletta storta in mezzo alla pagina. Incolonnati e
+   larghi uguale sono la stessa cosa ovunque, e la larghezza sta sotto quella del
+   paragrafo qui sopra, così la colonna ha un bordo solo. */
+.empty-actions {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  max-width: 320px;
+  margin: 0 auto;
+}
+
+/* Incolonnati, il contenuto va a sinistra e non al centro: centrandolo, ogni icona si
+   sposta di mezza etichetta e le tre finiscono su tre ascisse diverse — una scaletta,
+   dentro pulsanti perfettamente allineati. A sinistra partono tutte dallo stesso
+   padding, e le etichette pure. */
+.empty-actions > .btn {
+  justify-content: flex-start;
+}
+
+/* Lo spinner prende il posto dell'icona mentre si genera: senza questa larghezza è
+   15px contro 16, e l'etichetta accanto si sposta di un pixel proprio nell'istante in
+   cui la si sta guardando. */
+.empty-actions > .btn > .spinner-inline {
+  width: 16px;
+  height: 16px;
 }
 
 .spinner {
@@ -3505,6 +3544,17 @@ textarea:focus {
   .page-header {
     gap: 12px;
     margin-bottom: 20px;
+  }
+  /* E i pulsanti si prendono la riga per intero. Tre in fila su 360px vanno a capo
+     2+1 e lasciano il bordo destro frastagliato, con l'ultimo pulsante mozzo in mezzo
+     al vuoto; crescendo, ogni riga è piena e il bersaglio da toccare è più largo.
+     Solo `grow`, mai `shrink`: `.btn` non manda a capo l'etichetta, e stringerli
+     vorrebbe dire farli sbordare. */
+  .page-actions {
+    width: 100%;
+  }
+  .page-actions > .btn {
+    flex: 1 1 auto;
   }
   .detail-layout {
     gap: 14px;

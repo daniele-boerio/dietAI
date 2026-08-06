@@ -178,6 +178,110 @@ describe('lucchetto: un pasto cambia, il totale no', () => {
   });
 });
 
+// «Lo faccio io» non è solo un pasto che l'AI non genera: i suoi numeri li ha scritti
+// l'utente, e riorganizzare la giornata non può riscriverglieli. Il caso vero: colazione
+// e spuntino li preparo io, correggo la colazione e mi ritrovo lo spuntino cambiato.
+describe('i pasti «lo faccio io» non li tocca nessuno', () => {
+  const MISTA = [
+    { name: 'Colazione', calories: 400, protein_g: 20, carbs_g: 50, fat_g: 12,
+      auto_generate: false },
+    { name: 'Spuntino', calories: 200, protein_g: 10, carbs_g: 25, fat_g: 6,
+      auto_generate: false },
+    { name: 'Pranzo', calories: 700, protein_g: 40, carbs_g: 80, fat_g: 20 },
+    { name: 'Cena', calories: 600, protein_g: 45, carbs_g: 50, fat_g: 22 },
+  ];
+  const TOTALE = dailyTotals(MISTA).calories; // 1900
+
+  it('correggendo un pasto mio, gli altri miei restano identici', () => {
+    // La colazione passa da 400 a 500: le 100 kcal le mettono pranzo e cena.
+    const scritta = MISTA.map((m, i) => (i === 0 ? { ...m, calories: 500 } : m));
+    const dopo = rebalanceField(scritta, 0, 'calories', TOTALE);
+
+    expect(dopo[0].calories).toBe(500);
+    expect(dopo[1].calories).toBe(200); // lo spuntino non si è mosso
+    expect(dopo[2].calories).toBeLessThan(700);
+    expect(dopo[3].calories).toBeLessThan(600);
+    expect(dailyTotals(dopo).calories).toBe(TOTALE);
+  });
+
+  it('vale per ogni campo, non solo per le calorie', () => {
+    const scritta = MISTA.map((m, i) => (i === 0 ? { ...m, protein_g: 30 } : m));
+    const dopo = rebalanceField(scritta, 0, 'protein_g', dailyTotals(MISTA).protein_g);
+
+    expect(dopo[1].protein_g).toBe(10);
+    expect(dailyTotals(dopo).protein_g).toBe(dailyTotals(MISTA).protein_g);
+  });
+
+  it('anche cambiando un pasto di DietAI i miei restano fermi', () => {
+    const scritta = MISTA.map((m, i) => (i === 2 ? { ...m, calories: 900 } : m));
+    const dopo = rebalanceField(scritta, 2, 'calories', TOTALE);
+
+    expect(dopo.slice(0, 2).map((m) => m.calories)).toEqual([400, 200]);
+    expect(dopo[3].calories).toBe(400); // solo la cena assorbe
+    expect(dailyTotals(dopo).calories).toBe(TOTALE);
+  });
+
+  it('il valore scritto si ferma a quello che resta, non al totale', () => {
+    // 5000 kcal a pranzo: pranzo e cena insieme valgono 1300, non 1900.
+    const assurda = MISTA.map((m, i) => (i === 2 ? { ...m, calories: 5000 } : m));
+    const dopo = rebalanceField(assurda, 2, 'calories', TOTALE);
+
+    expect(dopo[2].calories).toBe(1300);
+    expect(dopo[3].calories).toBe(0);
+    expect(dopo.slice(0, 2).map((m) => m.calories)).toEqual([400, 200]);
+  });
+
+  it('se li preparo tutti io il valore torna indietro invece di spostare', () => {
+    // Non c'è nessun pasto libero: col totale bloccato non resta un grado di libertà.
+    const tutti = MISTA.map((m) => ({ ...m, auto_generate: false }));
+    const scritta = tutti.map((m, i) => (i === 0 ? { ...m, calories: 900 } : m));
+    const dopo = rebalanceField(scritta, 0, 'calories', TOTALE);
+
+    expect(dopo[0].calories).toBe(400);
+    expect(dailyTotals(dopo).calories).toBe(TOTALE);
+  });
+
+  it('togliendo un pasto le sue calorie vanno solo su quelli di DietAI', () => {
+    const dopo = removeMeal(MISTA, 3); // via la cena
+
+    expect(dopo.slice(0, 2).map((m) => m.calories)).toEqual([400, 200]);
+    expect(dopo[2].calories).toBe(1300); // pranzo si prende tutta la cena
+    expect(dailyTotals(dopo).calories).toBe(TOTALE);
+  });
+
+  it('togliendo un pasto mio la giornata resta intera lo stesso', () => {
+    const dopo = removeMeal(MISTA, 1); // via lo spuntino, che era mio
+
+    expect(dopo[0].calories).toBe(400);
+    expect(dailyTotals(dopo).calories).toBe(TOTALE);
+  });
+
+  it('se li preparo tutti io togliere un pasto accorcia la giornata', () => {
+    const tutti = MISTA.map((m) => ({ ...m, auto_generate: false }));
+    const dopo = removeMeal(tutti, 1);
+
+    expect(dopo.map((m) => m.calories)).toEqual([400, 700, 600]);
+    expect(dailyTotals(dopo).calories).toBe(TOTALE - 200);
+  });
+
+  it('il pasto aggiunto prende la sua quota solo dai pasti di DietAI', () => {
+    const dopo = addMeal(MISTA, 'Spuntino sera');
+
+    expect(dopo.slice(0, 2).map((m) => m.calories)).toEqual([400, 200]);
+    expect(dopo.at(-1).calories).toBeGreaterThan(0);
+    expect(dailyTotals(dopo).calories).toBe(TOTALE);
+  });
+
+  it('se li preparo tutti io il pasto aggiunto nasce a zero', () => {
+    const tutti = MISTA.map((m) => ({ ...m, auto_generate: false }));
+    const dopo = addMeal(tutti, 'Spuntino sera');
+
+    expect(dopo.at(-1).calories).toBe(0);
+    expect(dopo.slice(0, 4).map((m) => m.calories)).toEqual([400, 200, 700, 600]);
+    expect(dailyTotals(dopo).calories).toBe(TOTALE);
+  });
+});
+
 describe('divisione per pesi (i pasti scelti nel questionario)', () => {
   const CATALOGO = [
     { key: 'colazione', name: 'Colazione', weight: 0.2 },

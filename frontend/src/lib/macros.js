@@ -16,10 +16,27 @@ const round = (value, decimals) => {
   return Math.round(value * factor) / factor;
 };
 
+/** L'arrotondamento di un campo, per chi deve confrontarsi con quello che esce da qui. */
+export const roundField = (value, field) => round(Number(value) || 0, DECIMALS[field]);
+
 const num = (value) => {
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? n : 0;
 };
+
+/**
+ * «Lo faccio io»: un pasto che l'utente prepara da sé.
+ *
+ * Non è solo una cosa che l'AI non genera — è un pasto di cui i numeri li ha decisi
+ * lui, ed è l'unico che sa quanto pesa. La ridistribuzione lo salta: alzare la
+ * colazione può ridivedere quello che cucina DietAI, non riscrivere la merenda che
+ * l'utente si porta da casa. Chi resta senza nessun pasto libero non ha più dove
+ * spostare la differenza, e a quel punto la strada è aprire il lucchetto.
+ */
+export const isMine = (meal) => meal?.auto_generate === false;
+
+const sumMine = (meals, field) =>
+  meals.reduce((total, meal) => (isMine(meal) ? total + num(meal[field]) : total), 0);
 
 export function dailyTotals(meals) {
   return FIELDS.reduce((acc, field) => {
@@ -57,28 +74,46 @@ function shareOut(values, total, decimals) {
   return shares;
 }
 
-/** Riscala i pasti perché la somma di ogni campo torni ai totali dati. */
+/**
+ * Riscala i pasti perché la somma di ogni campo torni ai totali dati, muovendo solo
+ * quelli che genera DietAI.
+ *
+ * I pasti «lo faccio io» restano dove sono e quello che resta della giornata si
+ * divide fra gli altri, in proporzione a quanto pesavano. Se di pasti liberi non ce
+ * n'è nemmeno uno non c'è niente da riscalare: i numeri restano quelli e il totale con
+ * loro — è il chiamante a doverlo dire a schermo, perché una giornata che cambia in
+ * silenzio è il modo peggiore di scoprirlo.
+ */
 export function rescaleToTotals(meals, totals) {
   if (meals.length === 0) return [];
+
+  const liberi = meals.map((_, i) => i).filter((i) => !isMine(meals[i]));
+  if (liberi.length === 0) return meals.map((meal) => ({ ...meal }));
 
   const shares = {};
   for (const field of FIELDS) {
     shares[field] = shareOut(
-      meals.map((m) => num(m[field])),
-      totals[field] ?? 0,
+      liberi.map((i) => num(meals[i][field])),
+      Math.max(round(num(totals[field]) - sumMine(meals, field), DECIMALS[field]), 0),
       DECIMALS[field]
     );
   }
 
-  return meals.map((meal, i) => ({
-    ...meal,
-    ...FIELDS.reduce((acc, field) => ({ ...acc, [field]: shares[field][i] }), {}),
-  }));
+  const quota = new Map(liberi.map((i, k) => [i, k]));
+  return meals.map((meal, i) => {
+    const k = quota.get(i);
+    if (k === undefined) return { ...meal };
+    return {
+      ...meal,
+      ...FIELDS.reduce((acc, field) => ({ ...acc, [field]: shares[field][k] }), {}),
+    };
+  });
 }
 
 /**
  * Toglie un pasto e ridistribuisce le sue calorie e i suoi macro sugli altri,
- * in proporzione a quanto pesavano già. Il totale giornaliero resta identico.
+ * in proporzione a quanto pesavano già. Il totale giornaliero resta identico — a meno
+ * che di pasti da muovere non ne resti nessuno, e allora la giornata cala davvero.
  */
 export function removeMeal(meals, index) {
   const totals = dailyTotals(meals);
@@ -91,28 +126,41 @@ export function removeMeal(meals, index) {
  * modificato: la differenza va sugli **altri**, in proporzione a quanto pesano.
  *
  * È il lucchetto chiuso: alzare la colazione ridivide la giornata, non la allunga.
- * Il valore scritto si ferma al totale — chi batte 5000 kcal in un pasto solo non
- * vuole gli altri in negativo, vuole gli altri a zero.
+ * A muoversi però sono solo i pasti che genera DietAI: quelli segnati «lo faccio io»
+ * sono fermi per definizione, e correggere la colazione non può riscrivere lo spuntino
+ * che l'utente si è già organizzato.
+ *
+ * Il valore scritto si ferma perciò a quello che **resta** dopo i pasti fermi, non al
+ * totale: chi batte 5000 kcal in un pasto solo non vuole gli altri in negativo, vuole
+ * gli altri a zero. E se di pasti liberi non ce n'è nessuno il valore è già deciso —
+ * col totale bloccato e tutto il resto fermo, di gradi di libertà non ne restano.
  */
 export function rebalanceField(meals, index, field, total) {
   const decimals = DECIMALS[field];
   const target = round(num(total), decimals);
-  const edited = round(Math.min(num(meals[index][field]), target), decimals);
+  const altri = meals.filter((_, i) => i !== index);
+  // Quanto può prendersi il pasto che si sta scrivendo: il totale meno quello che è
+  // fermo in mano all'utente.
+  const spazio = round(Math.max(target - sumMine(altri, field), 0), decimals);
 
-  // Con un pasto solo non c'è nessuno su cui spostare la differenza: il valore torna
-  // ad essere il totale, che è l'unica cosa che il lucchetto promette.
-  if (meals.length === 1) return meals.map((meal) => ({ ...meal, [field]: target }));
+  const liberi = altri.filter((meal) => !isMine(meal));
+  if (liberi.length === 0) {
+    return meals.map((meal, i) => (i === index ? { ...meal, [field]: spazio } : { ...meal }));
+  }
 
+  const edited = round(Math.min(num(meals[index][field]), spazio), decimals);
   const shares = shareOut(
-    meals.filter((_, i) => i !== index).map((meal) => num(meal[field])),
-    round(target - edited, decimals),
+    liberi.map((meal) => num(meal[field])),
+    round(spazio - edited, decimals),
     decimals
   );
 
   let next = 0;
-  return meals.map((meal, i) =>
-    i === index ? { ...meal, [field]: edited } : { ...meal, [field]: shares[next++] }
-  );
+  return meals.map((meal, i) => {
+    if (i === index) return { ...meal, [field]: edited };
+    if (isMine(meal)) return { ...meal };
+    return { ...meal, [field]: shares[next++] };
+  });
 }
 
 /**
@@ -136,6 +184,10 @@ export function splitByWeights(meals, totals) {
  * Aggiunge un pasto prendendo una quota media dagli altri, che si stringono in
  * proporzione. Anche qui il totale giornaliero non cambia: aggiungere uno spuntino
  * significa ridistribuire la giornata, non mangiare di più.
+ *
+ * La quota esce però dal budget dei soli pasti liberi — dai pasti «lo faccio io» non
+ * si prende niente. Se tutta la giornata è in mano all'utente il pasto nuovo nasce a
+ * zero: non c'era da dove prenderla.
  */
 export function addMeal(meals, name = 'Nuovo pasto') {
   const totals = dailyTotals(meals);
@@ -144,8 +196,12 @@ export function addMeal(meals, name = 'Nuovo pasto') {
     return [{ name, ...FIELDS.reduce((acc, f) => ({ ...acc, [f]: 0 }), {}) }];
   }
 
+  const liberi = meals.filter((meal) => !isMine(meal)).length;
   const average = FIELDS.reduce(
-    (acc, field) => ({ ...acc, [field]: totals[field] / meals.length }),
+    (acc, field) => ({
+      ...acc,
+      [field]: Math.max(totals[field] - sumMine(meals, field), 0) / (liberi + 1),
+    }),
     {}
   );
 

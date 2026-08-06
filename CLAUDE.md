@@ -332,7 +332,9 @@ suoi ingredienti non entrano in lista della spesa, **ma i suoi macro contano lo 
 nel totale del giorno e nel tracking, dati per centrati sul target. Scordarsi la seconda
 metà è l'errore facile: si vedrebbe un buco di 400 kcal al giorno e l'aderenza a picco
 per un pasto che invece rispetta la dieta. Vedi `_is_fixed`, `serialize_week` e
-`weekly_tracking`.
+`weekly_tracking`. E nell'editor della dieta i suoi numeri non li muove nessun altro:
+la ridistribuzione del lucchetto lo salta (vedi *Ma la ridistribuzione salta i pasti «lo
+faccio io»*).
 
 **I pasti fissi non si rigenerano.** `is_recurring` o `source == 'user_custom'` →
 `_is_fixed()` li salta nella generazione e la settimana successiva se li ricopia
@@ -470,6 +472,23 @@ differenza sugli altri (`rebalanceField`), col valore scritto fermato al totale 
 gli altri non vadano in negativo. Aperto, i campi sono liberi ed è il totale a
 cambiare: è la strada di chi ha numeri nuovi, non di chi riorganizza la giornata.
 Richiudendolo, i totali di adesso diventano il nuovo vincolo.
+
+**Ma la ridistribuzione salta i pasti «lo faccio io».** Il lucchetto divide la
+giornata fra i pasti che DietAI genera: quello che prepara l'utente ha numeri che ha
+scritto lui — quanto pesa il panino della mensa lo sa soltanto lui — e correggere la
+colazione non può riscrivergli lo spuntino. `isMine` (`auto_generate === false`) è il
+segno, e lo rispettano tutte e tre le operazioni: `rebalanceField`, `removeMeal` e
+`addMeal` (che la sua quota la prende dai soli pasti liberi, per lo stesso motivo).
+Cambia anche il tetto del valore scritto: non è più il totale del giorno ma **quello
+che resta** dopo i pasti fermi, o gli altri finirebbero in negativo per far posto. Il
+caso limite si dichiara invece di essere aggirato: senza nemmeno un pasto libero il
+lucchetto non ha più a chi girare la differenza, quindi il valore torna quello di prima
+(`rebalanceField` restituisce lo spazio disponibile, che a totale invariante è il
+valore di partenza) e la pagina dice di aprire il lucchetto — un campo che non si
+lascia scrivere, senza una riga che spieghi perché, sembra rotto. Stessa cura per gli
+altri due: togliere un pasto senza nessun libero **accorcia** davvero la giornata e il
+messaggio lo dice, e il pasto aggiunto in quella situazione nasce a zero. Guardie in
+`lib/macros.test.js`.
 
 Il riallineamento aspetta il `blur`, non il tasto: ridistribuire a ogni battuta farebbe
 ballare gli altri pasti su "6" e su "60" mentre si scrive "600", e un pasto che passa

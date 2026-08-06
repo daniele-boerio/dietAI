@@ -13,7 +13,14 @@ import {
 import { api } from '../api';
 import { useApp } from '../App';
 import Questionnaire from '../components/Questionnaire';
-import { addMeal, dailyTotals, rebalanceField, removeMeal } from '../lib/macros';
+import {
+  addMeal,
+  dailyTotals,
+  isMine,
+  rebalanceField,
+  removeMeal,
+  roundField,
+} from '../lib/macros';
 
 const CAMPI = [
   { key: 'calories', label: 'kcal' },
@@ -79,6 +86,25 @@ export default function DietPage() {
       locked && target
         ? rebalanceField(withDraft, draft.index, draft.field, target[draft.field])
         : withDraft;
+
+    // Col lucchetto chiuso la differenza va sugli altri pasti — ma quelli «lo faccio
+    // io» non si toccano, e se sono tutti così non resta nessuno a cui girarla: il
+    // valore torna quello di prima. Senza dirlo sembra un campo che non si lascia
+    // scrivere.
+    if (
+      locked &&
+      target &&
+      next[draft.index][draft.field] !== roundField(draft.value, draft.field) &&
+      withDraft.length > 1 &&
+      withDraft.every((m, i) => i === draft.index || isMine(m))
+    ) {
+      addToast(
+        'Gli altri pasti li prepari tu e restano come sono: col totale bloccato non ' +
+          'c’è dove spostare la differenza. Apri il lucchetto per cambiare la giornata.',
+        'info'
+      );
+    }
+
     setMeals(next);
     setDraft(null);
     return next;
@@ -146,9 +172,13 @@ export default function DietPage() {
     }
     const removed = base[index];
     const kcal = Math.round(removed.calories) || 0;
-    setMeals(locked ? removeMeal(base, index) : base.filter((_, i) => i !== index));
+    const next = locked ? removeMeal(base, index) : base.filter((_, i) => i !== index);
+    setMeals(next);
+    // Le sue calorie possono andare solo sui pasti che DietAI genera: se dopo la
+    // rimozione non ne resta nemmeno uno, la giornata cala per davvero e va detto.
+    const assorbite = dailyTotals(next).calories === dailyTotals(base).calories;
     addToast(
-      locked
+      assorbite
         ? `${removed.name || 'Pasto'} rimosso: le sue ${kcal} kcal sono andate sugli altri pasti`
         : `${removed.name || 'Pasto'} rimosso: la giornata cala di ${kcal} kcal`
     );
@@ -161,11 +191,16 @@ export default function DietPage() {
         ? addMeal(base, 'Nuovo pasto')
         : [...base, { name: 'Nuovo pasto', calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }]
     );
-    addToast(
-      locked
-        ? 'Pasto aggiunto: la giornata è stata ridivisa fra tutti'
-        : 'Pasto aggiunto a zero: scrivi tu quanto vale'
-    );
+    // La quota del pasto nuovo esce da quelli che genera DietAI: se la giornata è
+    // tutta in pasti preparati dall'utente non c'era niente da cui prenderla.
+    const tuttiMiei = base.length > 0 && base.every(isMine);
+    if (!locked) addToast('Pasto aggiunto a zero: scrivi tu quanto vale');
+    else if (tuttiMiei)
+      addToast(
+        'Pasto aggiunto a zero: gli altri li prepari tu e restano come sono — scrivi ' +
+          'tu quanto vale, o apri il lucchetto'
+      );
+    else addToast('Pasto aggiunto: la giornata è stata ridivisa fra i pasti di DietAI');
   };
 
   // Chiudere il lucchetto prende per buoni i totali di adesso: da lì in poi sono quelli
@@ -184,16 +219,17 @@ export default function DietPage() {
   };
 
   // "Lo faccio io": DietAI smette di generarlo, ma i macro restano nel conto della
-  // giornata — l'utente quel pasto lo mangia comunque, centrando i target.
+  // giornata — l'utente quel pasto lo mangia comunque, centrando i target. Da qui in
+  // poi i suoi numeri sono suoi: col lucchetto chiuso nessuna ridistribuzione li tocca.
   const toggleWho = (index) => {
-    const mine = meals[index].auto_generate === false;
+    const mine = isMine(meals[index]);
     setMeals((prev) =>
       prev.map((m, i) => (i === index ? { ...m, auto_generate: mine } : m))
     );
     addToast(
       mine
         ? `${meals[index].name || 'Pasto'}: torna a generarlo DietAI`
-        : `${meals[index].name || 'Pasto'}: non verrà più generato, lo prepari tu`
+        : `${meals[index].name || 'Pasto'}: lo prepari tu — non verrà generato e i suoi numeri restano fermi`
     );
   };
 
@@ -337,8 +373,10 @@ export default function DietPage() {
                   <strong>Totale bloccato:</strong> quanto mangi in un giorno è deciso, e
                   qui si decide solo come dividerlo. Cambiando un pasto la differenza va
                   sugli altri, e aggiungendone o togliendone uno la giornata si ridivide
-                  fra quelli rimasti — a somma zero. Se invece è cambiata la dieta, apri il
-                  lucchetto: i campi diventano liberi e il totale è quello che scrivi tu.
+                  fra quelli rimasti — a somma zero. A muoversi sono però solo i pasti che
+                  genera DietAI: quelli che prepari tu restano ai numeri che gli hai dato.
+                  Se invece è cambiata la dieta, apri il lucchetto: i campi diventano
+                  liberi e il totale è quello che scrivi tu.
                 </>
               ) : (
                 <>
@@ -354,7 +392,9 @@ export default function DietPage() {
               <strong>Lo faccio io:</strong> per i pasti che hai già risolto — la colazione
               di sempre, il pranzo in mensa. DietAI non li genera e non compra i loro
               ingredienti, ma i macro restano nel conto della giornata: tu quel pasto lo
-              mangi, e centra i suoi target.
+              mangi, e centra i suoi target. E i loro numeri li muovi solo tu: col
+              lucchetto chiuso la ridistribuzione li salta, perché quanto vale un pasto
+              che prepari da te lo sai soltanto tu.
             </p>
 
             <div className="meal-editor-actions">

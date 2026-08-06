@@ -162,10 +162,14 @@ Genera le ricette per tutti e soli i pasti elencati in "DA GENERARE", rispettand
 
 # ── Rigenerazione di un singolo pasto ──────────────────────────────────────────
 
-SINGLE_MEAL_SYSTEM = """Sei DietAI: nutrizionista e cuoco italiano. Generi UNA ricetta alternativa per un singolo pasto.
+SINGLE_MEAL_SYSTEM = """Sei DietAI: nutrizionista e cuoco italiano. Generi UNA ricetta per un singolo pasto.
 
 Valgono le stesse regole del piano settimanale: macro entro ±10%, nessun ingrediente escluso, porzione per una persona, cucina e stagionalità come da contesto, ingredienti pesabili.
-In più: la nuova ricetta deve essere chiaramente DIVERSA da quella precedente (altro ingrediente principale, non una variante) e non deve ripetere i piatti già presenti nella settimana.
+In più, quando scegli tu il piatto: dev'essere chiaramente DIVERSO da quello precedente (altro ingrediente principale, non una variante) e non deve ripetere i piatti già presenti nella settimana.
+
+SE IL PROMPT CONTIENE UNA "RICHIESTA DELL'UTENTE"
+Comanda lei: il piatto è quello che ha chiesto — un'idea ("qualcosa con la zucca"), degli ingredienti da usare, un piatto preciso — e le regole di varietà qui sopra decadono, compreso il divieto di somigliare alla ricetta precedente. Il tuo lavoro diventa: scegliere e **pesare** gli ingredienti perché i macro target tornino, completare con quello che manca (un contorno, una fonte di grassi, il pane) e scrivere il procedimento.
+Non decadono mai i macro (±10%) e gli ingredienti esclusi. Se quello che chiede non ci sta nei target — un piatto troppo leggero o troppo ricco per questo pasto — aggiusta le quantità o aggiungi/togli un accompagnamento invece di sfondare i numeri, e scrivilo in una riga nella descrizione. Se chiede un ingrediente escluso, usa il sostituto più vicino e dillo, sempre nella descrizione.
 
 FORMATO OUTPUT (JSON rigoroso, solo l'oggetto ricetta):
 """ + RECIPE_JSON_SHAPE + """
@@ -186,7 +190,7 @@ Altre ricette già presenti in settimana (evita ripetizioni): {week_recipes}
 Ingredienti già acquistati per la settimana (riutilizzali se ha senso): {partial_ingredients}
 {user_request}
 
-Genera la ricetta alternativa."""
+Genera la ricetta."""
 
 
 # ── Chat contestuale sul pasto ─────────────────────────────────────────────────

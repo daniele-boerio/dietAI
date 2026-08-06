@@ -212,6 +212,17 @@ class SubstituteRequest(BaseModel):
 # ── Pianificazione ─────────────────────────────────────────────────────────────
 
 
+class RegenerateMealRequest(BaseModel):
+    """Cosa vuole l'utente in quella casella, se ha qualcosa da dire.
+
+    Vuoto (o assente) = sceglie il modello, che è come ha sempre funzionato il pulsante.
+    Pieno = un'idea, degli ingredienti da usare, un piatto preciso: l'AI ci pesa sopra i
+    macro. Il limite è corto apposta — è una richiesta, non una ricetta scritta a mano.
+    """
+
+    user_request: str | None = Field(default=None, max_length=500)
+
+
 class AssignMealRequest(BaseModel):
     """Assegna una ricetta esistente al pasto, oppure ne crea una custom al volo."""
 

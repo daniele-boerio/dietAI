@@ -215,8 +215,13 @@ export const api = {
 
   getMeal: (mealId) => request(`/planning/meals/${mealId}`),
 
-  regenerateMeal: (mealId) =>
-    request(`/planning/meals/${mealId}/regenerate`, { method: 'POST' }),
+  // Con `userRequest` il piatto lo decide l'utente ("qualcosa con la zucca", "ho del
+  // salmone da finire") e l'AI ci pesa sopra i macro; senza, sceglie il modello.
+  regenerateMeal: (mealId, userRequest = null) =>
+    request(`/planning/meals/${mealId}/regenerate`, {
+      method: 'POST',
+      body: JSON.stringify({ user_request: userRequest }),
+    }),
 
   assignMeal: (mealId, payload) =>
     request(`/planning/meals/${mealId}/assign`, {

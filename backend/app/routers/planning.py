@@ -10,7 +10,13 @@ from ..auth import get_current_user, get_current_user_id
 from ..database import get_db
 from ..models import DayPlan, MealSlot, PlannedMeal, Recipe, User, WeekPlan
 from ..rate_limit import AI_LIMIT, limiter
-from ..schemas import AssignMealRequest, FollowedRequest, RecurringRequest, SkipDayRequest
+from ..schemas import (
+    AssignMealRequest,
+    FollowedRequest,
+    RecurringRequest,
+    RegenerateMealRequest,
+    SkipDayRequest,
+)
 from ..services.planner import (
     current_week_start,
     ensure_not_skipped,
@@ -202,11 +208,19 @@ def get_meal(
 def regenerate(
     request: Request,
     meal_id: int,
+    body: RegenerateMealRequest | None = None,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """Genera la ricetta di questa casella: a scelta del modello, o su indicazione.
+
+    Il corpo è facoltativo — senza, è la generazione di sempre. Con `user_request`
+    dentro ("qualcosa con la zucca", "ho del salmone da finire") il piatto lo decide
+    l'utente e l'AI ci pesa sopra i macro del pasto.
+    """
     meal, day, week = _get_meal(db, user.id, meal_id)
-    regenerate_meal(db, user, meal)
+    richiesta = (body.user_request or "").strip() if body else ""
+    regenerate_meal(db, user, meal, user_request=richiesta or None)
     slot = db.get(MealSlot, meal.meal_slot_id)
     return serialize_meal(db, day, meal, slot, full=True)
 

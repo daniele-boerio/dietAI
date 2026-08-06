@@ -1164,7 +1164,15 @@ def _partial_ingredients(db: Session, week: WeekPlan, exclude_meal_id: int) -> l
 def regenerate_meal(
     db: Session, user: User, meal: PlannedMeal, *, user_request: str | None = None
 ) -> Recipe:
-    """Rigenera la ricetta di un singolo pasto.
+    """Genera (o rigenera) la ricetta di un singolo pasto.
+
+    Due modi, stesso pulsante. Senza `user_request` sceglie il modello, col vincolo di
+    proporre qualcosa di diverso dal piatto di prima e dagli altri della settimana.
+    Con `user_request` — un'idea, degli ingredienti da usare, un piatto preciso — decide
+    l'utente e all'AI resta il mestiere: pesare gli ingredienti perché i macro del pasto
+    tornino, completare quello che manca e scrivere il procedimento. È il caso che la
+    chat non copriva: lì si parte da una ricetta e la si modifica, qui la casella può
+    essere ancora vuota.
 
     La vecchia ricetta non viene cancellata: resta nel ricettario (magari era
     votata) e semplicemente non è più assegnata a questo pasto.
@@ -1199,7 +1207,10 @@ def regenerate_meal(
         week_recipes=_fmt_list(week_titles, "nessuna"),
         partial_ingredients=_fmt_list(_partial_ingredients(db, week, meal.id), "nessuno"),
         user_request=(
-            f"\nRichiesta esplicita dell'utente da rispettare: {user_request}"
+            "\nRICHIESTA DELL'UTENTE (ha la precedenza sulle regole di varietà qui "
+            f"sopra): {user_request}\n"
+            "Costruisci il piatto attorno a questa richiesta: scegli e pesa gli "
+            "ingredienti perché i macro target tornino, e scrivi il procedimento."
             if user_request
             else ""
         ),

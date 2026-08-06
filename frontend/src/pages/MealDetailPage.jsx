@@ -33,6 +33,7 @@ export default function MealDetailPage() {
   const [substitution, setSubstitution] = useState(null);
   const [confirmClear, setConfirmClear] = useState(false);
   const [picker, setPicker] = useState(false);
+  const [generator, setGenerator] = useState(false);
 
   // Lo spinner solo quando si è senza niente a schermo: `load()` si richiama anche
   // dopo una sostituzione, col dialogo del risultato aperto sopra la pagina, e
@@ -62,11 +63,15 @@ export default function MealDetailPage() {
     meal?.week && !meal.week.is_current ? `/plan/${meal.week.week_start_date}` : '/plan'
   );
 
-  const regenerate = async () => {
+  // Due strade dallo stesso pulsante: senza indicazioni sceglie il modello, con
+  // indicazioni ("ho del salmone da finire") sceglie l'utente e l'AI ci pesa sopra i
+  // macro. Il dialogo esiste per questo — chiedere prima di spendere una chiamata.
+  const regenerate = async (userRequest = null) => {
     setBusy(true);
     try {
-      setMeal(await api.regenerateMeal(mealId));
-      addToast('Nuova ricetta pronta ✓');
+      setMeal(await api.regenerateMeal(mealId, userRequest));
+      setGenerator(false);
+      addToast(userRequest ? 'Ricetta pronta su tua indicazione ✓' : 'Nuova ricetta pronta ✓');
     } catch (e) {
       addToast(e.message, 'error');
     } finally {
@@ -212,9 +217,13 @@ export default function MealDetailPage() {
               </button>
             </>
           )}
-          <button className="btn btn-primary" onClick={regenerate} disabled={busy || frozen}>
+          <button
+            className="btn btn-primary"
+            onClick={() => setGenerator(true)}
+            disabled={busy || frozen}
+          >
             {busy ? <span className="spinner-inline" /> : <RefreshCw size={16} />}
-            Rigenera
+            {meal.recipe ? 'Rigenera' : "Genera con l'AI"}
           </button>
         </div>
       </div>
@@ -307,7 +316,11 @@ export default function MealDetailPage() {
               text={`Target: ${meal.target.calories} kcal, proteine ${meal.target.protein_g}g, carboidrati ${meal.target.carbs_g}g, grassi ${meal.target.fat_g}g.`}
               action={
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
-                  <button className="btn btn-primary" onClick={regenerate} disabled={busy || frozen}>
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => setGenerator(true)}
+                    disabled={busy || frozen}
+                  >
                     {busy && <span className="spinner-inline" />}
                     Generala con l'AI
                   </button>
@@ -359,6 +372,15 @@ export default function MealDetailPage() {
         />
       )}
 
+      {generator && (
+        <GenerateDialog
+          meal={meal}
+          busy={busy}
+          onGenerate={regenerate}
+          onCancel={() => setGenerator(false)}
+        />
+      )}
+
       {picker && (
         <RecipePicker
           onCancel={() => setPicker(false)}
@@ -374,6 +396,71 @@ export default function MealDetailPage() {
         />
       )}
     </>
+  );
+}
+
+const ESEMPI_RICHIESTA = `Ho del salmone da finire.
+Qualcosa con la zucca, veloce.
+Vorrei un piatto unico freddo da portare in ufficio.
+Pasta e ceci, ma con le quantità giuste per i miei macro.`;
+
+/**
+ * Le due strade del pulsante «Genera con l'AI», messe una accanto all'altra.
+ *
+ * Lasciando vuoto il campo è la generazione di sempre: sceglie il modello. Scrivendoci
+ * dentro si passa il comando all'utente — un'idea, un ingrediente da finire, un piatto
+ * preciso — e all'AI resta il mestiere: pesare gli ingredienti perché i macro del pasto
+ * tornino e scrivere il procedimento. Il dialogo c'è perché una generazione si paga e
+ * dura: chiedere prima costa un clic, riprovare costa una chiamata.
+ */
+function GenerateDialog({ meal, busy, onGenerate, onCancel }) {
+  const [testo, setTesto] = useState('');
+  const richiesta = testo.trim();
+
+  return (
+    <div className="modal-overlay" onClick={busy ? undefined : onCancel}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <h2 className="modal-title">
+          {meal.recipe ? 'Rigenera questo pasto' : 'Genera questo pasto'}
+        </h2>
+        <p className="modal-text">
+          Target: {meal.target.calories} kcal · P {meal.target.protein_g}g · C{' '}
+          {meal.target.carbs_g}g · G {meal.target.fat_g}g.
+          <br />
+          Scrivi cosa ti va: un'idea, un ingrediente da finire, un piatto preciso.
+        </p>
+
+        <textarea
+          rows={4}
+          value={testo}
+          placeholder={ESEMPI_RICHIESTA}
+          onChange={(e) => setTesto(e.target.value)}
+          maxLength={500}
+          disabled={busy}
+          autoFocus
+        />
+
+        <p className="field-hint" style={{ marginTop: 8 }}>
+          {richiesta
+            ? 'I macro restano il vincolo: le quantità le calcola l’AI per starci dentro.'
+            : 'Lascialo vuoto e ti propongo un piatto diverso dagli altri della settimana.'}
+        </p>
+
+        <div className="modal-actions" style={{ marginTop: 16 }}>
+          <button className="btn btn-secondary" onClick={onCancel} disabled={busy}>
+            Annulla
+          </button>
+          <button
+            className="btn btn-primary"
+            onClick={() => onGenerate(richiesta || null)}
+            disabled={busy}
+          >
+            {busy && <span className="spinner-inline" />}
+            {richiesta ? 'Genera così' : 'Scegli tu il piatto'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

@@ -461,6 +461,25 @@ cara dell'app; `regenerate_all=true` rifà tutto e la UI lo fa confermare. Quell
 conserva la ricetta va comunque nel prompt come `PASTI GIÀ ASSEGNATI`, altrimenti il
 modello ripropone un piatto che è già in settimana.
 
+**Generare un singolo pasto sono due cose, con lo stesso pulsante.** Senza indicazioni
+sceglie il modello, col vincolo di proporre qualcosa di diverso dal piatto di prima e
+dagli altri della settimana. Con indicazioni — `POST
+/api/planning/meals/{id}/regenerate` con `user_request` nel corpo, che resta
+**facoltativo** perché la griglia settimanale chiama la stessa rotta senza — decide
+l'utente («ho del salmone da finire», «qualcosa con la zucca») e all'AI resta il
+mestiere: scegliere e **pesare** gli ingredienti perché i macro del pasto tornino,
+completare quello che manca e scrivere il procedimento. È il buco che la chat non
+copriva: lì si parte da una ricetta e la si modifica, qui la casella può essere ancora
+vuota. Nel prompt la richiesta arriva come `RICHIESTA DELL'UTENTE`, e
+`SINGLE_MEAL_SYSTEM` dice che **comanda lei**: le regole di varietà decadono (chiedere
+"come ieri ma col tacchino" è legittimo), i macro e gli ingredienti esclusi no — se il
+piatto chiesto non ci sta nei target il modello aggiusta le quantità o
+l'accompagnamento e lo scrive nella descrizione, invece di sfondare i numeri.
+Dal frontend è un dialogo con un campo di testo (`GenerateDialog` in `MealDetailPage`),
+non un secondo pulsante: le due strade sono la stessa azione con o senza una frase, e
+il campo vuoto porta al comportamento di prima. Guardie in
+`tests/test_genera_su_richiesta.py`.
+
 **La generazione in corso è stato del server, non della pagina.**
 `WeekPlan.generation_started_at` viene valorizzato prima della chiamata al modello e
 azzerato alla fine (anche in caso di errore); `serialize_week` lo espone come

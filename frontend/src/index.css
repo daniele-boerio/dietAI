@@ -1403,6 +1403,18 @@ textarea {
   gap: 10px;
 }
 
+/* La conversazione sta **in fondo**, come in qualunque chat. Su PC il pannello è alto
+   quanto lo schermo, e ancorata in cima lasciava mezzo metro di vuoto nero fra i
+   suggerimenti e il campo di scrittura — con un solo messaggio scambiato faceva lo
+   stesso effetto. Il margine automatico sul primo figlio e non
+   `justify-content: flex-end`: quello, quando i messaggi crescono oltre l'altezza,
+   rende irraggiungibile l'inizio della conversazione (il contenuto sborda dal lato
+   sbagliato e non si può scorrere). Un margine `auto` invece assorbe solo lo spazio
+   che avanza, e a conversazione piena vale zero da solo. */
+.chat-body > *:first-child {
+  margin-top: auto;
+}
+
 .chat-bubble {
   max-width: 88%;
   padding: 9px 13px;

@@ -202,13 +202,15 @@ export const api = {
   // pianificate tornano vuote (`id` a null) invece di essere create adesso.
   getWeekByDate: (weekStart) => request(`/planning/weeks/by-date/${weekStart}`),
 
-  // Di default riempie solo le caselle vuote; regenerateAll rifà tutta la settimana
-  // (una chiamata al modello su tutti i pasti: la UI la fa confermare).
-  generateWeek: (weekId, regenerateAll = false) =>
-    request(
-      `/planning/weeks/${weekId}/generate${regenerateAll ? '?regenerate_all=true' : ''}`,
-      { method: 'POST' }
-    ),
+  // Cosa generare della settimana, come l'ha spuntato la dialog: `days` sono i
+  // `day_of_week` scelti, `slotIds` i pasti, e `regenerateAll` rifà anche le caselle
+  // che una ricetta ce l'hanno già. A null vale «tutto», che è il pulsante di sempre.
+  // Resta comunque una chiamata sola al modello: cambia solo su quante caselle.
+  generateWeek: (weekId, { regenerateAll = false, days = null, slotIds = null } = {}) =>
+    request(`/planning/weeks/${weekId}/generate`, {
+      method: 'POST',
+      body: JSON.stringify({ regenerate_all: regenerateAll, days, slot_ids: slotIds }),
+    }),
 
   // Cosa sta scrivendo il modello adesso: si chiede solo mentre genera.
   getGenerationProgress: (weekId) => request(`/planning/weeks/${weekId}/progress`),

@@ -82,7 +82,8 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
     ├── api.js                  # TUTTE le fetch + refresh automatico sul 401
     ├── index.css               # design system completo (variabili CSS, tema chiaro/scuro)
     ├── lib/macros.js           # ripartizione calorie/macro tra i pasti (+ test)
-    ├── components/             # WeekGrid, MealCard, MealChat, RecipeView, MacroBar,
+    ├── lib/generation.js       # cosa c'è da generare in settimana: la conta della dialog (+ test)
+    ├── components/             # WeekGrid, WeekGenerateDialog, MealCard, MealChat, RecipeView, MacroBar,
     │                           # Questionnaire (dieta calcolata, onboarding + /diet)...
     └── pages/                  # Dashboard, Planning, MealDetail, Shopping, Pantry,
                                 # Recipes, Tracking, Diet, Settings, Onboarding, Login
@@ -341,6 +342,33 @@ faccio io»*).
 `_is_fixed()` li salta nella generazione e la settimana successiva se li ripropone
 (`apply_recurring_meals`, che assegna la **stessa** ricetta: vedi qui sotto).
 
+**E togliendo la spunta se ne vanno anche le copie già fatte.** Un pasto fisso si
+ricopia da sé sulle settimane che si aprono — e una settimana si apre anche solo
+sfogliandola — quindi quando si toglie il «fisso» quelle copie sono già scritte in
+giro: spegnere l'interruttore e trovarsi la luce accesa lo stesso è il motivo per cui
+la spunta sembrava non funzionare. `stop_recurring_forward` svuota le caselle che
+hanno **quella** ricetta su **quel** pasto e il segno di fisso addosso (una colazione
+uguale scelta a mano non ce l'ha, e resta dov'è), e la rotta rifà la lista della spesa
+e risponde con `cleared_forward`, che il frontend dice nel toast: sette caselle che si
+svuotano in silenzio sembrano un guasto. Due limiti, per non cancellare fatti invece
+di previsioni: solo **dopo** la casella da cui si toglie e mai prima di oggi, e mai
+dove l'utente ha già segnato com'è andata. Quelle che restano perdono comunque il
+**segno** di fisso, che è la parte che si propaga: `apply_recurring_meals` legge la
+settimana precedente, quindi con la regola "daily" bastava una casella accesa il
+lunedì per far ricomparire tutto la settimana dopo, e togliere la spunta dal mercoledì
+sembrava non aver fatto niente. Guardie in `tests/test_pasti_fissi.py`.
+
+**Eliminare una ricetta da un pasto non è «ho mangiato altro».** Sono le due cose che
+si confondono, e fanno l'opposto: «ho mangiato altro» il piatto lo tiene (resta
+scritto, si accoda più avanti, la spesa lo compra dove è finito), il cestino lo toglie
+dal piano e la casella torna vuota come se non fosse mai stata riempita
+(`clear_meal_cell`: via anche il fisso, che su una casella vuota non vuol dire niente,
+e via la memoria del rinvio). La ricetta resta nel ricettario: si svuota il posto, non
+si cancella il piatto. Sta nella card della griglia accanto a ✓ e ✗ — è lì che si
+guarda la settimana — e passa da una conferma, perché a due centimetri c'è «l'ho
+seguito». Toglie solo quella casella: le copie di un pasto fisso già messe nelle
+settimane dopo si levano dal dettaglio, togliendo «Fisso», e la conferma lo dice.
+
 **Lo stesso piatto è una ricetta sola.** Il ricettario è l'archivio dei piatti, non il
 diario delle caselle: la colazione che si ripete sette giorni è un piatto. Prima ogni
 casella si portava dietro la sua riga — `create_recipe` una per pasto generato,
@@ -460,6 +488,34 @@ genericamente "riprova".
 cara dell'app; `regenerate_all=true` rifà tutto e la UI lo fa confermare. Quello che
 conserva la ricetta va comunque nel prompt come `PASTI GIÀ ASSEGNATI`, altrimenti il
 modello ripropone un piatto che è già in settimana.
+
+**Ma prima si sceglie cosa generare.** Il pulsante non parte più: apre
+`WeekGenerateDialog`, dove si spuntano **i giorni** (i sette della settimana come un
+calendario, col numero di caselle da fare su ognuno) e **i pasti** (le colazioni e gli
+spuntini se li prepara chi se li prepara, e pagarne sette è pagarli per niente). La
+selezione viaggia nel corpo della POST — `days` (`day_of_week`) e `slot_ids` — e in
+`generate_week` sono due filtri sopra i generabili, non una strada nuova: resta **una
+chiamata sola**, perché l'anti-spreco vive lì, e quello che resta fuori dalla selezione
+ma una ricetta ce l'ha finisce comunque nel prompt come `PASTI GIÀ ASSEGNATI`. Corpo
+assente vuol dire tutta la settimana — è come chiamano ancora i test — mentre una lista
+**vuota** è una scelta esplicita e si risponde che nella selezione non c'è niente da
+fare, invece di rifare tutto per un campo che si è solo svuotato.
+
+Tre cose che la dialog decide e il server no. I giorni **passati partono spenti**
+(quel pasto è stato o non è stato, riempirlo adesso è una chiamata pagata per niente),
+ma restano spuntabili e si accendono da soli se il da fare è tutto lì, o una settimana
+archiviata aprirebbe la dialog col pulsante disattivato e nessuna spiegazione. La
+scelta dei **pasti** si ricorda in `localStorage` — si ricordano gli **esclusi**, così
+un pasto aggiunto alla dieta dopo nasce acceso — mentre i giorni no, che cambiano ogni
+settimana. E "rifai anche i pasti già pronti" è una casella dentro la dialog invece di
+un secondo pulsante: è la stessa domanda, e da lì si può rigenerare *solo le cene di
+lunedì* invece che tutto.
+
+La conta delle caselle sta in `lib/generation.js` (con `generation.test.js`) e non
+dentro il componente perché deve dare **lo stesso risultato del server**: il numero
+scritto sul pulsante ("Genera 9 pasti") è una promessa su quanto si sta per pagare, e
+le due condizioni — giorno saltato, pasto rimandato, pasto «lo faccio io», pasto fisso
+— sono le stesse di `generate_week`. Guardie in `tests/test_genera_selezione.py`.
 
 **Generare un singolo pasto sono due cose, con lo stesso pulsante.** Senza indicazioni
 sceglie il modello, col vincolo di proporre qualcosa di diverso dal piatto di prima e

@@ -1,13 +1,13 @@
 import { Link } from 'react-router-dom';
-import { Check, Clock, Flame, RefreshCw, X } from 'lucide-react';
+import { Check, Clock, Flame, RefreshCw, Trash2, X } from 'lucide-react';
 import MacroBar from './MacroBar';
 
 // Card di un incrocio giorno × pasto. Mostra sempre lo slot e il target, anche
 // quando la casella è vuota: la struttura della dieta si legge prima delle ricette.
 //
-// In fondo ci stanno le tre cose che si fanno davanti alla griglia: cambiare il
-// piatto e dire com'è andata. Chat e "rendi fisso" stanno dentro il dettaglio, che è
-// a un tocco sulla card: da qui servivano di rado, e occupavano il posto di quello
+// In fondo ci stanno le cose che si fanno davanti alla griglia: cambiare il piatto,
+// dire com'è andata, e toglierlo. Chat e "rendi fisso" stanno dentro il dettaglio, che
+// è a un tocco sulla card: da qui servivano di rado, e occupavano il posto di quello
 // che invece si preme ogni sera.
 export default function MealCard({
   meal,
@@ -16,6 +16,7 @@ export default function MealCard({
   regenerating,
   onRegenerate,
   onFollowed,
+  onDelete,
   style,
 }) {
   const { recipe } = meal;
@@ -129,6 +130,20 @@ export default function MealCard({
         >
           <X />
         </button>
+
+        {/* Ultimo e a parte dagli altri due, perché è un'altra cosa: "ho mangiato
+            altro" tiene il piatto e lo rimanda più avanti, questo lo toglie dal
+            piano. Passa da una conferma, che sta in `PlanningPage`. */}
+        {onDelete && (
+          <button
+            className="meal-action del"
+            title="Elimina la ricetta da questo pasto"
+            disabled={!recipe || off || busy}
+            onClick={() => onDelete(meal)}
+          >
+            <Trash2 />
+          </button>
+        )}
       </div>
     </div>
   );

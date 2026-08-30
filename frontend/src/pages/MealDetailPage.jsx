@@ -104,8 +104,20 @@ export default function MealDetailPage() {
 
   const toggleRecurring = async () => {
     try {
-      setMeal(await api.setRecurring(mealId, !meal.is_recurring));
-      addToast(meal.is_recurring ? 'Non è più fisso' : 'Pasto fisso ogni settimana ✓');
+      const updated = await api.setRecurring(mealId, !meal.is_recurring);
+      setMeal(updated);
+      if (!meal.is_recurring) {
+        addToast('Pasto fisso: si ripete sulle settimane che apri ✓');
+      } else if (updated.cleared_forward) {
+        // La spunta tolta si porta via le copie già scritte nei giorni successivi:
+        // se ne succedono sette in silenzio, sembra che si sia rotto qualcosa.
+        addToast(
+          `Non è più fisso: tolto anche da ${updated.cleared_forward} ` +
+            `${updated.cleared_forward === 1 ? 'casella successiva' : 'caselle successive'}`
+        );
+      } else {
+        addToast('Non è più fisso');
+      }
     } catch (e) {
       addToast(e.message, 'error');
     }
@@ -213,7 +225,11 @@ export default function MealDetailPage() {
                 className="btn btn-secondary"
                 onClick={toggleRecurring}
                 disabled={frozen}
-                title="Ripeti questo pasto ogni settimana"
+                title={
+                  meal.is_recurring
+                    ? 'Smetti di ripeterlo: lo toglie anche dai giorni successivi che lo hanno ricevuto'
+                    : 'Ripeti questo pasto ogni settimana'
+                }
               >
                 <Pin size={16} color={meal.is_recurring ? 'var(--accent)' : 'currentColor'} />
                 {meal.is_recurring ? 'Fisso' : 'Rendi fisso'}

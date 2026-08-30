@@ -13,11 +13,13 @@ from ..rate_limit import AI_LIMIT, limiter
 from ..schemas import (
     AssignMealRequest,
     FollowedRequest,
+    GenerateWeekRequest,
     RecurringRequest,
     RegenerateMealRequest,
     SkipDayRequest,
 )
 from ..services.planner import (
+    clear_meal_cell,
     current_week_start,
     ensure_not_skipped,
     forget_queued_meal,
@@ -33,6 +35,7 @@ from ..services.planner import (
     serialize_week,
     skip_day,
     skip_meal,
+    stop_recurring_forward,
     unskip_meal,
 )
 from ..services.recipes import create_recipe
@@ -152,17 +155,31 @@ def generate(
     request: Request,
     week_id: int,
     regenerate_all: bool = False,
+    body: GenerateWeekRequest | None = None,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Genera le ricette della settimana. Può richiedere anche un minuto.
 
-    Di default riempie solo le caselle vuote. Con `regenerate_all=true` rifà tutti i
-    pasti generabili: costa una chiamata al modello su tutta la settimana, quindi la
-    UI lo fa confermare.
+    Di default riempie solo le caselle vuote. Con `regenerate_all` rifà tutti i pasti
+    generabili: costa una chiamata al modello su tutta la settimana, quindi la UI lo
+    fa confermare.
+
+    Nel corpo arriva la selezione della dialog — quali giorni, quali pasti — e senza
+    corpo si genera tutta la settimana, che è come funzionava prima. `regenerate_all`
+    resta anche come parametro in query perché è così che lo chiamano i test e i
+    vecchi indirizzi: basta uno dei due a valere.
     """
     week = _get_week(db, user.id, week_id)
-    result = generate_week(db, user, week, only_missing=not regenerate_all)
+    scelta = body or GenerateWeekRequest()
+    result = generate_week(
+        db,
+        user,
+        week,
+        only_missing=not (regenerate_all or scelta.regenerate_all),
+        days=scelta.days,
+        slot_ids=scelta.slot_ids,
+    )
     payload = serialize_week(db, week)
     payload["generation"] = result
     return payload
@@ -273,17 +290,16 @@ def assign_meal(
 def clear_meal(
     meal_id: int, user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
 ):
-    """Svuota la casella (la ricetta resta nel ricettario)."""
+    """Svuota la casella (la ricetta resta nel ricettario).
+
+    È il "elimina" del piano, e non c'entra con "ho mangiato altro": lì il piatto era
+    in programma e si è deciso altrimenti — resta scritto, e si accoda più avanti —
+    qui invece in programma non c'è più, e la casella torna vuota come se non fosse
+    mai stata riempita.
+    """
     meal, day, week = _get_meal(db, user_id, meal_id)
 
-    meal.recipe_id = None
-    meal.source = "ai_generated"
-    meal.is_recurring = False
-    meal.recurring_rule = None
-    meal.is_followed = None
-    meal.pantry_used = None
-    meal.skipped_to_meal_id = None
-    forget_queued_meal(db, meal)
+    clear_meal_cell(db, meal)
     db.commit()
 
     rebuild_shopping_list(db, user_id)
@@ -314,10 +330,24 @@ def set_recurring(
 
     meal.is_recurring = body.is_recurring
     meal.recurring_rule = rule if body.is_recurring else None
+
+    # Togliere la spunta non è solo smettere di ricopiare in avanti: le copie sulle
+    # settimane già aperte ci sono già, e lasciarle vorrebbe dire spegnere
+    # l'interruttore trovandosi la luce accesa lo stesso.
+    tolte = 0 if body.is_recurring else stop_recurring_forward(db, user_id, meal, day)
     db.commit()
 
+    if tolte:
+        # Il piano è cambiato da qui in avanti, quindi la spesa pure.
+        rebuild_shopping_list(db, user_id)
+        db.commit()
+
     slot = db.get(MealSlot, meal.meal_slot_id)
-    return serialize_meal(db, day, meal, slot, full=True)
+    payload = serialize_meal(db, day, meal, slot, full=True)
+    # Quante caselle si è portata via: senza dirlo, la ricetta sparita dai giorni dopo
+    # sembra un effetto collaterale invece della cosa che si è chiesta.
+    payload["cleared_forward"] = tolte
+    return payload
 
 
 @router.put("/meals/{meal_id}/followed")

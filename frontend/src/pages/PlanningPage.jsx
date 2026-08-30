@@ -16,6 +16,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
 import GenerationLog from '../components/GenerationLog';
 import LoadError from '../components/LoadError';
+import WeekGenerateDialog from '../components/WeekGenerateDialog';
 import WeekGrid from '../components/WeekGrid';
 import { nonScalatiDallaDispensa, scalatiDallaDispensa } from '../lib/pantry';
 
@@ -70,7 +71,13 @@ export default function PlanningPage() {
   // che gira è quella della rigenerazione e solo lì ha senso.
   const [followingMealId, setFollowingMealId] = useState(null);
   const [busyDayId, setBusyDayId] = useState(null);
-  const [confirmRegenerate, setConfirmRegenerate] = useState(false);
+  // Cosa generare non si decide più col pulsante ma nella dialog: `null` = chiusa,
+  // altrimenti dice da quale dei due pulsanti si è arrivati (riempire o rifare).
+  const [dialogo, setDialogo] = useState(null);
+  // Il pasto che si sta per svuotare, in attesa di conferma. Eliminare non si disfa,
+  // e nella griglia il cestino sta a due centimetri da "l'ho seguito".
+  const [daEliminare, setDaEliminare] = useState(null);
+  const [eliminando, setEliminando] = useState(false);
   // Serve a distinguere "non sta generando" da "ha appena finito", per il messaggio.
   const wasGenerating = useRef(false);
   // La colonna di oggi e la settimana per cui ci si è già spostati (vedi sotto).
@@ -148,10 +155,21 @@ export default function PlanningPage() {
     if (window.matchMedia('(min-width: 1100px)').matches) return;
 
     scrollFatto.current = lunediIso;
+
+    // Dove fermarsi: sotto le due cose che non scorrono, la barra dell'app e la
+    // testata del piano. Si misurano invece di scriverne l'altezza nel CSS perché la
+    // testata cresce e cala coi pulsanti che ci stanno dentro (una settimana piena
+    // non ha il pulsante «genera», una sfogliata ha «torna a questa settimana»), e un
+    // numero fisso o lascerebbe un vuoto o nasconderebbe il nome del giorno.
+    const fermi =
+      (document.querySelector('.topbar')?.offsetHeight || 0) +
+      (document.querySelector('.plan-head')?.offsetHeight || 0);
+    if (fermi) colonna.style.scrollMarginTop = `${fermi + 8}px`;
+
     // Se oggi è già in vista — di lunedì, di solito — muovere la pagina sarebbe solo
     // un sussulto che nasconde la testata senza far vedere niente di nuovo.
     const { top } = colonna.getBoundingClientRect();
-    if (top >= 0 && top < window.innerHeight * 0.6) return;
+    if (top >= fermi && top < window.innerHeight * 0.6) return;
     colonna.scrollIntoView({
       behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
         ? 'auto'
@@ -186,11 +204,11 @@ export default function PlanningPage() {
     return () => clearInterval(timer);
   }, [week?.is_generating, week?.generation_error, load, addToast]);
 
-  const generate = async (regenerateAll = false) => {
+  const generate = async (selezione) => {
     setGenerating(true);
-    setConfirmRegenerate(false);
+    setDialogo(null);
     try {
-      const data = await api.generateWeek(week.id, regenerateAll);
+      const data = await api.generateWeek(week.id, selezione);
       setWeek(data);
       const { filled, missing } = data.generation || {};
       addToast(
@@ -258,6 +276,23 @@ export default function PlanningPage() {
     }
   };
 
+  // Il cestino: la ricetta esce dal piano e la casella torna vuota. Non è "ho
+  // mangiato altro", che il piatto lo tiene e lo rimanda più avanti — è la casella
+  // che non ha più niente in programma. La ricetta resta nel ricettario.
+  const eliminaRicetta = async () => {
+    setEliminando(true);
+    try {
+      await api.clearMeal(daEliminare.id);
+      await load({ silent: true });
+      setDaEliminare(null);
+      addToast('Ricetta eliminata dal pasto ✓');
+    } catch (e) {
+      addToast(e.message, 'error');
+    } finally {
+      setEliminando(false);
+    }
+  };
+
   const toggleDaySkip = async (day) => {
     setBusyDayId(day.id);
     try {
@@ -290,79 +325,91 @@ export default function PlanningPage() {
 
   return (
     <>
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">{etichettaSettimana(offset)}</h1>
-          <p className="page-subtitle">
-            Dal {formatDate(lunediIso)} al {formatDate(domenicaIso)}
-            {mai
-              ? ' · nessun piano'
-              : ` · ${week.meals_filled} di ${week.meals_total} pasti pianificati`}
-          </p>
+      {/* Titolo, pulsanti e frecce stanno insieme in un blocco solo perché sul
+          telefono ci restano: `.plan-head` è `sticky` sotto la barra in alto, e
+          quello che scorre è la settimana. I sette giorni lì sono uno sotto
+          l'altro — di domenica bisognava risalire tutta la settimana per cambiare
+          settimana o generare. */}
+      <div className="plan-head">
+        <div className="page-header">
+          <div>
+            <h1 className="page-title">{etichettaSettimana(offset)}</h1>
+            <p className="page-subtitle">
+              Dal {formatDate(lunediIso)} al {formatDate(domenicaIso)}
+              {mai
+                ? ' · nessun piano'
+                : ` · ${week.meals_filled} di ${week.meals_total} pasti pianificati`}
+            </p>
+          </div>
+
+          <div className="page-actions">
+            {/* Tutti e due aprono la stessa dialog — dove si sceglie cosa generare — e
+                cambia solo da che parte ci si arriva: riempire i buchi o rifare quello
+                che c'è già. Rifare resta in secondo piano perché costa di più. */}
+            {week.meals_filled > 0 && (
+              <button
+                className="btn btn-secondary"
+                onClick={() => setDialogo({ rigenera: true })}
+                disabled={busy}
+              >
+                <RefreshCw size={16} /> Rigenera
+              </button>
+            )}
+            {emptySlots > 0 && (
+              <button
+                className="btn btn-primary"
+                onClick={() => setDialogo({ rigenera: false })}
+                disabled={busy}
+              >
+                {busy ? <span className="spinner-inline" /> : <Sparkles size={16} />}
+                {emptySlots === week.meals_total
+                  ? 'Genera la settimana'
+                  : `Riempi i ${emptySlots} vuoti`}
+              </button>
+            )}
+          </div>
         </div>
 
-        <div className="page-actions">
-          {/* Rifare tutto costa una chiamata al modello su tutta la settimana:
-              sta in secondo piano e passa da una conferma. */}
-          {week.meals_filled > 0 && (
+        {/* Il piano si sfoglia una settimana alla volta, indietro e avanti senza
+            limite: indietro per rivedere cos'è stato, avanti per pianificare quanto si
+            vuole. Le frecce restano sempre attive — una settimana mai pianificata si
+            apre lo stesso, e dice che è vuota. */}
+        <div className="week-toolbar">
+          <div className="week-nav">
             <button
-              className="btn btn-secondary"
-              onClick={() => setConfirmRegenerate(true)}
-              disabled={busy}
+              className="week-nav-btn"
+              onClick={() => vaiA(-1)}
+              title="Settimana precedente"
+              aria-label="Settimana precedente"
             >
-              <RefreshCw size={16} /> Rigenera tutto
+              <ChevronLeft />
+            </button>
+            <span className="week-nav-label">
+              {formatDate(lunediIso, { day: 'numeric', month: 'short' })} –{' '}
+              {formatDate(domenicaIso, { day: 'numeric', month: 'short' })}
+            </span>
+            <button
+              className="week-nav-btn"
+              onClick={() => vaiA(1)}
+              title="Settimana successiva"
+              aria-label="Settimana successiva"
+            >
+              <ChevronRight />
+            </button>
+          </div>
+
+          {offset !== 0 && (
+            <button className="btn btn-ghost btn-sm" onClick={() => navigate('/plan')}>
+              <CalendarDays size={15} /> Torna a questa settimana
             </button>
           )}
-          {emptySlots > 0 && (
-            <button className="btn btn-primary" onClick={() => generate(false)} disabled={busy}>
-              {busy ? <span className="spinner-inline" /> : <Sparkles size={16} />}
-              {emptySlots === week.meals_total
-                ? 'Genera la settimana'
-                : `Riempi i ${emptySlots} vuoti`}
-            </button>
+
+          {!mai && !week.is_past && (
+            <span className="week-progress">
+              {emptySlots > 0 ? `${emptySlots} pasti da riempire` : 'Piano completo'}
+            </span>
           )}
         </div>
-      </div>
-
-      {/* Il piano si sfoglia una settimana alla volta, indietro e avanti senza
-          limite: indietro per rivedere cos'è stato, avanti per pianificare quanto si
-          vuole. Le frecce restano sempre attive — una settimana mai pianificata si
-          apre lo stesso, e dice che è vuota. */}
-      <div className="week-toolbar">
-        <div className="week-nav">
-          <button
-            className="week-nav-btn"
-            onClick={() => vaiA(-1)}
-            title="Settimana precedente"
-            aria-label="Settimana precedente"
-          >
-            <ChevronLeft />
-          </button>
-          <span className="week-nav-label">
-            {formatDate(lunediIso, { day: 'numeric', month: 'short' })} –{' '}
-            {formatDate(domenicaIso, { day: 'numeric', month: 'short' })}
-          </span>
-          <button
-            className="week-nav-btn"
-            onClick={() => vaiA(1)}
-            title="Settimana successiva"
-            aria-label="Settimana successiva"
-          >
-            <ChevronRight />
-          </button>
-        </div>
-
-        {offset !== 0 && (
-          <button className="btn btn-ghost btn-sm" onClick={() => navigate('/plan')}>
-            <CalendarDays size={15} /> Torna a questa settimana
-          </button>
-        )}
-
-        {!mai && !week.is_past && (
-          <span className="week-progress">
-            {emptySlots > 0 ? `${emptySlots} pasti da riempire` : 'Piano completo'}
-          </span>
-        )}
       </div>
 
       {week.is_past && !mai && (
@@ -435,24 +482,40 @@ export default function PlanningPage() {
           busyDayId={busyDayId}
           onRegenerate={regenerate}
           onFollowed={setFollowed}
+          onDelete={setDaEliminare}
           onToggleDaySkip={toggleDaySkip}
         />
       )}
 
-      {confirmRegenerate && (
+      {daEliminare && (
         <ConfirmDialog
-          title={`Rigenerare tutte e ${week.meals_filled} le ricette?`}
+          title="Eliminare la ricetta da questo pasto?"
           text={
-            `Butti via il piano attuale e ne fai scrivere uno nuovo da zero: è una ` +
-            `chiamata al modello su tutta la settimana, la cosa più costosa che fa ` +
-            `l'app. Le ricette di adesso restano nel ricettario, e i pasti fissi o ` +
-            `che gestisci tu non vengono toccati. Se ti serve cambiare un piatto solo, ` +
-            `conviene rigenerare quello dalla sua card.`
+            `${daEliminare.day_name} · ${daEliminare.slot_name}: la casella torna vuota ` +
+            `e il piatto esce dalla lista della spesa. La ricetta resta nel ricettario. ` +
+            `Non è "ho mangiato altro": lì il piatto resta in programma e si accoda più ` +
+            `avanti, qui invece non è più previsto.` +
+            (daEliminare.is_recurring
+              ? ' Era anche un pasto fisso: qui smette di esserlo, ma le copie già ' +
+                'messe nelle settimane dopo restano — per togliere anche quelle, apri ' +
+                'il pasto e leva «Fisso».'
+              : '')
           }
-          confirmLabel="Sì, rigenera tutto"
+          confirmLabel="Elimina"
+          danger
+          busy={eliminando}
+          onConfirm={eliminaRicetta}
+          onCancel={() => setDaEliminare(null)}
+        />
+      )}
+
+      {dialogo && (
+        <WeekGenerateDialog
+          week={week}
+          rigeneraDefault={dialogo.rigenera}
           busy={busy}
-          onConfirm={() => generate(true)}
-          onCancel={() => setConfirmRegenerate(false)}
+          onGenerate={generate}
+          onCancel={() => setDialogo(null)}
         />
       )}
 

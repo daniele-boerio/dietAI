@@ -17,6 +17,7 @@ export default function WeekGrid({
   busyDayId,
   onRegenerate,
   onFollowed,
+  onDelete,
   onToggleDaySkip,
   // La colonna di oggi, se la settimana a schermo è quella corrente: chi ci porta la
   // pagina è `PlanningPage`, che resta montata anche quando questa griglia sparisce
@@ -77,6 +78,7 @@ export default function WeekGrid({
                 regenerating={busyMealId === meal.id}
                 onRegenerate={onRegenerate}
                 onFollowed={onFollowed}
+                onDelete={onDelete}
                 style={{ gridColumn: column, gridRow: mealIndex + 2 }}
               />
             ))}

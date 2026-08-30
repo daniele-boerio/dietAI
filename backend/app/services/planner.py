@@ -555,6 +555,81 @@ def apply_recurring_meals(db: Session, user_id: int, week: WeekPlan) -> int:
     return applied
 
 
+def clear_meal_cell(db: Session, meal: PlannedMeal) -> None:
+    """Riporta la casella a com'era prima che ci finisse dentro qualcosa.
+
+    Non è `_empty_meal`, che serve a un'altra cosa — lì la ricetta se n'è andata da
+    un'altra parte, qui non c'è più — e infatti spegne anche il pasto fisso: una
+    casella vuota che si ripete ogni settimana non vuol dire niente. La ricetta resta
+    nel ricettario: quello che si svuota è il posto, non il piatto.
+    """
+    meal.recipe_id = None
+    meal.source = "ai_generated"
+    meal.is_recurring = False
+    meal.recurring_rule = None
+    meal.is_followed = None
+    meal.deviation_notes = None
+    meal.pantry_used = None
+    meal.skipped_to_meal_id = None
+    forget_queued_meal(db, meal)
+
+
+def stop_recurring_forward(db: Session, user_id: int, meal: PlannedMeal, day: DayPlan) -> int:
+    """Togliendo il «fisso», leva quel piatto anche dalle caselle che l'hanno ricevuto.
+
+    Un pasto fisso si ricopia da sé sulle settimane che si aprono — e una settimana si
+    apre anche solo sfogliandola — quindi quando si toglie la spunta quelle copie sono
+    già scritte in giro: spegnere l'interruttore e trovare la luce accesa lo stesso è
+    il motivo per cui la spunta sembrava non funzionare. Si tolgono le caselle che
+    hanno **quella** ricetta su **quel** pasto e il segno di fisso addosso: una
+    colazione uguale scelta a mano un altro giorno non è una copia, e resta dov'è.
+
+    Due limiti, per non cancellare fatti invece di previsioni. Solo **dopo** questa
+    casella e mai prima di oggi: quello che è già stato è storia, anche se lo si
+    scopre sfogliando all'indietro. E mai una casella dove l'utente ha già segnato
+    com'è andata — seguita o rimandata: lì la ricetta non è un programma, è il
+    racconto di una giornata.
+
+    Le altre — quelle che restano, perché vengono prima o perché sono già state
+    vissute — perdono comunque il **segno** di fisso, che è la parte che si propaga:
+    `apply_recurring_meals` legge la settimana precedente, quindi con la regola
+    "daily" bastava una casella accesa il lunedì per far ricomparire tutto la
+    settimana dopo, e togliere la spunta dal mercoledì sarebbe sembrato non aver
+    fatto niente. La ricetta lì non si tocca: è già in programma, ed è un piatto che
+    l'utente ha davanti.
+    """
+    if not meal.recipe_id:
+        return 0
+
+    caselle = (
+        db.query(PlannedMeal, DayPlan)
+        .join(DayPlan, DayPlan.id == PlannedMeal.day_plan_id)
+        .join(WeekPlan, WeekPlan.id == DayPlan.week_plan_id)
+        .filter(
+            WeekPlan.user_id == user_id,
+            DayPlan.date >= today(),
+            PlannedMeal.id != meal.id,
+            PlannedMeal.meal_slot_id == meal.meal_slot_id,
+            PlannedMeal.recipe_id == meal.recipe_id,
+            PlannedMeal.is_recurring.is_(True),
+        )
+        .all()
+    )
+
+    tolte = 0
+    for casella, giorno in caselle:
+        vissuta = casella.is_followed is not None or casella.is_skipped
+        if giorno.date <= day.date or vissuta:
+            casella.is_recurring = False
+            casella.recurring_rule = None
+            continue
+        clear_meal_cell(db, casella)
+        tolte += 1
+
+    db.flush()
+    return tolte
+
+
 # ── Pasti saltati ──────────────────────────────────────────────────────────────
 
 
@@ -973,17 +1048,30 @@ def _slot_line(slot: MealSlot) -> str:
 
 
 def generate_week(
-    db: Session, user: User, week: WeekPlan, *, only_missing: bool = True
+    db: Session,
+    user: User,
+    week: WeekPlan,
+    *,
+    only_missing: bool = True,
+    days: list[int] | None = None,
+    slot_ids: list[int] | None = None,
 ) -> dict:
     """Genera in un'unica chiamata le ricette della settimana.
 
     Una chiamata sola, non una per pasto: è l'unico modo perché l'AI possa
     distribuire gli avanzi (mezza zucchina lunedì, l'altra metà giovedì) e non
-    ripetere gli stessi ingredienti in giorni consecutivi.
+    ripetere gli stessi ingredienti in giorni consecutivi. Vale anche generando
+    mezza settimana: quello che resta fuori dalla selezione ma una ricetta ce l'ha
+    finisce comunque nel prompt come `PASTI GIÀ ASSEGNATI`.
 
     `only_missing` è il default perché ogni chiamata si paga: riempire i buchi è
     l'operazione di tutti i giorni, rifare da capo una settimana già piena è una
     scelta esplicita che la UI fa confermare.
+
+    `days` (day_of_week) e `slot_ids` sono la selezione della dialog: `None` vuol dire
+    tutto, che è come ha sempre funzionato il pulsante. Restringere non è un vezzo —
+    chi la colazione se la prepara da sé non deve pagarne sette — e non cambia niente
+    del resto: si genera sempre in una chiamata sola, solo su meno caselle.
     """
     ensure_not_generating(week)
     rows = week_meals(db, week)
@@ -995,9 +1083,28 @@ def generate_week(
     # cucinerà. Vale anche per "Rigenera tutto", che altrimenti li ripescherebbe.
     rows = [(d, m, s) for d, m, s in rows if not d.is_skipped and not m.is_skipped]
     generabili = [(d, m, s) for d, m, s in rows if not _is_fixed(m, s)]
-    to_fill = [t for t in generabili if t[1].recipe_id is None] if only_missing else generabili
+
+    # La selezione fatta nella dialog. Sono filtri e non validazioni: un giorno o un
+    # pasto che non esistono semplicemente non selezionano niente, e la lista vuota —
+    # che è una scelta esplicita, non un campo dimenticato — cade nel messaggio qui
+    # sotto invece di rifare tutta la settimana.
+    scelti = generabili
+    if days is not None:
+        giorni = set(days)
+        scelti = [t for t in scelti if t[0].day_of_week in giorni]
+    if slot_ids is not None:
+        pasti = set(slot_ids)
+        scelti = [t for t in scelti if t[2].id in pasti]
+
+    to_fill = [t for t in scelti if t[1].recipe_id is None] if only_missing else scelti
 
     if not to_fill:
+        if days is not None or slot_ids is not None:
+            raise HTTPException(
+                400,
+                "Nei giorni e nei pasti che hai scelto non c'è niente da generare: "
+                "allarga la selezione, oppure spunta «rifai anche i pasti già pronti».",
+            )
         if generabili:
             raise HTTPException(
                 400,

@@ -212,6 +212,26 @@ class SubstituteRequest(BaseModel):
 # ── Pianificazione ─────────────────────────────────────────────────────────────
 
 
+class GenerateWeekRequest(BaseModel):
+    """Cosa generare della settimana: quali giorni, quali pasti, e se rifare i pieni.
+
+    Corpo assente (o campi a `None`) = tutta la settimana, che è come ha sempre
+    funzionato il pulsante e come chiamano ancora i test. Con la selezione della
+    dialog si paga una chiamata sola sui soli pasti spuntati: chi la colazione se la
+    prepara da sé non deve pagarne sette.
+
+    Non c'è nessuna validazione sui valori: `days` e `slot_ids` sono filtri, quindi un
+    giorno che non esiste semplicemente non seleziona niente. Una lista **vuota** però
+    è una scelta esplicita — "nessun giorno" — e vale come tale: il servizio risponde
+    che nella selezione non c'è niente da generare invece di rifare tutto.
+    """
+
+    regenerate_all: bool = False
+    # `day_of_week`, da 0 (lunedì) a 6 (domenica).
+    days: list[int] | None = None
+    slot_ids: list[int] | None = None
+
+
 class RegenerateMealRequest(BaseModel):
     """Cosa vuole l'utente in quella casella, se ha qualcosa da dire.
 

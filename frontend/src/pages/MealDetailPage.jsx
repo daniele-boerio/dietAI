@@ -7,6 +7,7 @@ import {
   Check,
   CheckCircle2,
   Heart,
+  MessageCircle,
   Pin,
   RefreshCw,
   Sparkles,
@@ -300,27 +301,29 @@ export default function MealDetailPage() {
 
               <div className="card" style={{ marginTop: 14 }}>
                 <div className="card-title">Com'è andata?</div>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                  <button
-                    className={`btn btn-sm ${
-                      meal.is_followed === true ? 'btn-primary' : 'btn-secondary'
-                    }`}
-                    onClick={() => setFollowed(true)}
-                  >
-                    <Check size={14} /> L'ho seguito
-                  </button>
-                  <button
-                    className={`btn btn-sm ${
-                      meal.is_followed === false ? 'btn-danger' : 'btn-secondary'
-                    }`}
-                    onClick={() => setFollowed(false)}
-                  >
-                    <X size={14} /> Ho mangiato altro
-                  </button>
-                  <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-                      Voto
-                    </span>
+                <div className="andata-row">
+                  {/* Sul telefono queste due stanno nella barra in fondo, sotto il
+                      pollice: qui sarebbero in fondo a una pagina lunga un metro. */}
+                  <div className="andata-answers">
+                    <button
+                      className={`btn btn-sm ${
+                        meal.is_followed === true ? 'btn-primary' : 'btn-secondary'
+                      }`}
+                      onClick={() => setFollowed(true)}
+                    >
+                      <Check size={14} /> L'ho seguito
+                    </button>
+                    <button
+                      className={`btn btn-sm ${
+                        meal.is_followed === false ? 'btn-moved' : 'btn-secondary'
+                      }`}
+                      onClick={() => setFollowed(false)}
+                    >
+                      <X size={14} /> Ho mangiato altro
+                    </button>
+                  </div>
+                  <div className="andata-rating">
+                    <span>Voto</span>
                     <StarRating value={meal.recipe.rating} onChange={rate} />
                   </div>
                 </div>
@@ -379,6 +382,44 @@ export default function MealDetailPage() {
           onRecipeUpdated={(recipe) => setMeal((m) => ({ ...m, recipe }))}
         />
       </div>
+
+      {/* Le due risposte sotto il pollice. La sera il pasto si apre proprio per
+          premerne una, e stavano in fondo alla ricetta, dopo ingredienti e
+          procedimento. Il terzo pulsante porta alla chat, che sul telefono sta
+          sotto la ricetta invece che di fianco. */}
+      {meal.recipe && (
+        <div className="meal-bar">
+          <button
+            className={`btn ${meal.is_followed === true ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setFollowed(true)}
+            disabled={skipped}
+          >
+            <Check size={16} /> L'ho seguito
+          </button>
+          <button
+            className={`btn ${meal.is_followed === false ? 'btn-moved' : 'btn-secondary'}`}
+            onClick={() => setFollowed(false)}
+            disabled={skipped}
+          >
+            <X size={16} /> Ho mangiato altro
+          </button>
+          <button
+            className="btn btn-secondary meal-bar-chat"
+            onClick={() =>
+              document.querySelector('.chat-panel')?.scrollIntoView({
+                behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+                  ? 'auto'
+                  : 'smooth',
+                block: 'start',
+              })
+            }
+            aria-label="Chiedi una modifica"
+            title="Chiedi una modifica"
+          >
+            <MessageCircle size={16} />
+          </button>
+        </div>
+      )}
 
       {substitution && (
         <div className="modal-overlay" onClick={() => setSubstitution(null)}>

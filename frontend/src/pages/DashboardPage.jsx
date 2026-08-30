@@ -4,15 +4,40 @@ import {
   CalendarDays,
   Check,
   ChefHat,
+  ChevronRight,
   ShoppingCart,
   Sparkles,
   X,
 } from 'lucide-react';
-import { api, formatDate, formatMoney } from '../api';
+import { api, formatDate, formatMoney, formatNumber } from '../api';
 import { useApp } from '../App';
 import EmptyState from '../components/EmptyState';
 import MacroBar from '../components/MacroBar';
 import { nonScalatiDallaDispensa, scalatiDallaDispensa } from '../lib/pantry';
+
+// Quanto si mangia oggi, sommando i piatti in programma. Un pasto rimandato non
+// conta (si cucina un altro giorno) e uno che prepara l'utente conta col suo target:
+// è la stessa aritmetica di `serialize_week`, e senza la seconda metà la giornata
+// sembrerebbe più corta di quello che è.
+function totaliDiOggi(meals) {
+  return meals.reduce(
+    (somma, meal) => {
+      // Segnato lo è anche il pasto rimandato: è una risposta come l'altra.
+      const segnati = somma.segnati + (meal.is_followed === null ? 0 : 1);
+      if (meal.is_skipped) return { ...somma, segnati };
+      const r = meal.recipe;
+      return {
+        calories: somma.calories + (r ? r.calories : meal.self_managed ? meal.target_calories : 0),
+        protein_g: somma.protein_g + (r ? r.protein_g : 0),
+        carbs_g: somma.carbs_g + (r ? r.carbs_g : 0),
+        fat_g: somma.fat_g + (r ? r.fat_g : 0),
+        target: somma.target + meal.target_calories,
+        segnati,
+      };
+    },
+    { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, target: 0, segnati: 0 }
+  );
+}
 
 export default function DashboardPage() {
   const { addToast } = useApp();
@@ -70,6 +95,8 @@ export default function DashboardPage() {
 
   const { today, week, shopping, diet } = data;
   const emptySlots = week.meals_total - week.meals_filled;
+  const totali = totaliDiOggi(today.meals);
+  const daPrendere = shopping.total_items - shopping.checked_items;
 
   return (
     <>
@@ -84,9 +111,6 @@ export default function DashboardPage() {
         <div className="page-actions">
           <Link className="btn btn-secondary" to="/plan">
             <CalendarDays size={16} /> Settimana
-          </Link>
-          <Link className="btn btn-primary" to="/shopping">
-            <ShoppingCart size={16} /> Lista della spesa
           </Link>
         </div>
       </div>
@@ -103,36 +127,28 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="stat-grid">
-        <div className="stat-tile">
-          <div className="stat-value">
-            {week.meals_filled}
-            <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
-              /{week.meals_total}
+      {/* La giornata in una riga sola. Erano quattro piastrelle di statistiche — pasti
+          pianificati, articoli presi, spesa stimata, ricette in archivio — che sul
+          telefono prendevano tutto lo spazio sopra la piega e spingevano sotto
+          "cosa si mangia oggi", che è il motivo per cui si apre l'app. Quei numeri
+          non sono spariti: sono scesi in fondo, dove si guardano una volta ogni tanto. */}
+      {today.meals.length > 0 && (
+        <div className="card day-summary">
+          <div className="day-summary-top">
+            <strong>{formatNumber(totali.calories)}</strong>
+            <span>di {formatNumber(totali.target)} kcal in programma</span>
+            <span className="day-summary-tracked">
+              {totali.segnati} di {today.meals.length} segnati
             </span>
           </div>
-          <div className="stat-label">Pasti pianificati questa settimana</div>
+          <MacroBar
+            protein={totali.protein_g}
+            carbs={totali.carbs_g}
+            fat={totali.fat_g}
+            legend
+          />
         </div>
-        <div className="stat-tile">
-          <div className="stat-value">
-            {shopping.checked_items}
-            <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
-              /{shopping.total_items}
-            </span>
-          </div>
-          <div className="stat-label">Articoli presi</div>
-        </div>
-        <div className="stat-tile">
-          <div className="stat-value">{formatMoney(shopping.estimated_cost) || '—'}</div>
-          <div className="stat-label">Spesa stimata</div>
-        </div>
-        <div className="stat-tile">
-          <div className="stat-value">{data.recipes_count}</div>
-          <div className="stat-label">
-            Ricette in archivio · {data.favorites_count} preferite
-          </div>
-        </div>
-      </div>
+      )}
 
       <h2 className="section-title">Cosa si mangia oggi</h2>
 
@@ -157,11 +173,7 @@ export default function DashboardPage() {
               }`}
             >
               <div className="meal-slot">
-                <span className="today-card-slot-name">{meal.slot_name}</span>
-                {meal.is_skipped && <span className="meal-flag skipped">Saltato</span>}
-                {meal.is_followed === true && (
-                  <span className="meal-flag done">Seguito</span>
-                )}
+                <span className="meal-slot-name">{meal.slot_name}</span>
               </div>
 
               {meal.recipe ? (
@@ -176,14 +188,16 @@ export default function DashboardPage() {
                     {meal.recipe.title}
                   </div>
                   <div className="today-card-foot">
-                    <div className="meal-meta">
-                      <span>{meal.recipe.calories} kcal</span>
-                      <span>
-                        {meal.recipe.prep_time_min + meal.recipe.cook_time_min} min
+                    <div className="meal-foot">
+                      <span className="meal-facts">
+                        {meal.recipe.calories} kcal · target {meal.target_calories} kcal
                       </span>
-                      <span className="meal-meta-target">
-                        target {meal.target_calories} kcal
-                      </span>
+                      {meal.is_followed === true && (
+                        <span className="meal-state done">
+                          <Check /> seguito
+                        </span>
+                      )}
+                      {meal.is_skipped && <span className="meal-state moved">rimandato</span>}
                     </div>
                     <MacroBar
                       protein={meal.recipe.protein_g}
@@ -202,11 +216,11 @@ export default function DashboardPage() {
                       </button>
                       <button
                         className={`btn btn-sm ${
-                          meal.is_followed === false ? 'btn-danger' : 'btn-secondary'
+                          meal.is_followed === false ? 'btn-moved' : 'btn-secondary'
                         }`}
                         onClick={() => markFollowed(meal.meal_id, false)}
                       >
-                        <X size={14} /> Saltato
+                        <X size={14} /> Ho mangiato altro
                       </button>
                     </div>
                   </div>
@@ -232,6 +246,36 @@ export default function DashboardPage() {
           ))}
         </div>
       )}
+
+      {/* La spesa non è una statistica, è la cosa che si fa dopo aver guardato i
+          pasti: una riga che porta lì, col numero dentro. */}
+      <Link className="shop-bar" to="/shopping">
+        <ShoppingCart />
+        <div>
+          <strong>Lista della spesa</strong>
+          <span>
+            {daPrendere > 0
+              ? `${daPrendere} ${daPrendere === 1 ? 'articolo' : 'articoli'} da prendere`
+              : 'Niente da prendere'}
+            {shopping.estimated_cost
+              ? ` · ${formatMoney(shopping.estimated_cost)} stimati`
+              : ''}
+          </span>
+        </div>
+        <ChevronRight />
+      </Link>
+
+      <div className="home-stats">
+        <span>
+          Piano <strong>{week.meals_filled}</strong> di {week.meals_total}
+        </span>
+        <span>
+          Ricettario <strong>{data.recipes_count}</strong>
+        </span>
+        <span>
+          Preferite <strong>{data.favorites_count}</strong>
+        </span>
+      </div>
     </>
   );
 }

@@ -1,4 +1,5 @@
 import { CalendarOff, Undo2 } from 'lucide-react';
+import DayDots from './DayDots';
 import MealCard from './MealCard';
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -38,20 +39,27 @@ export default function WeekGrid({
         return (
           <div
             key={day.id}
+            // L'indirizzo a cui salta la striscia dei giorni in cima alla pagina.
+            id={`giorno-${day.day_of_week}`}
             ref={isToday ? todayRef : null}
             className={`day-column ${isToday ? 'today' : ''} ${
               day.is_skipped ? 'skipped' : ''
             }`}
           >
+            {/* Il totale del giorno sta qui, in testa alla colonna, e non in fondo:
+                è il numero che si cerca guardando la giornata, e in fondo a sette
+                card finiva sotto la piega — su un monitor da 900px non si vedeva mai. */}
             <div className="day-head" style={{ gridColumn: column, gridRow: 1 }}>
-              <div className="day-name">{day.day_name}</div>
-              <div className="day-date">
-                {day.is_skipped
-                  ? 'Saltato'
-                  : new Date(day.date).toLocaleDateString('it-IT', {
-                      day: 'numeric',
-                      month: 'short',
-                    })}
+              <div className="day-name">
+                {day.day_name} <span className="day-date">{Number(day.date.slice(8, 10))}</span>
+              </div>
+              <div className="day-sum">
+                <span>
+                  {day.is_skipped
+                    ? 'Giornata saltata'
+                    : `${day.totals.calories} / ${day.totals.target_calories} kcal`}
+                </span>
+                <DayDots day={day} />
               </div>
               {canSkip && (
                 <button
@@ -82,15 +90,6 @@ export default function WeekGrid({
                 style={{ gridColumn: column, gridRow: mealIndex + 2 }}
               />
             ))}
-
-            <div
-              className="day-total"
-              style={{ gridColumn: column, gridRow: day.meals.length + 2 }}
-            >
-              {day.is_skipped
-                ? '—'
-                : `${day.totals.calories} / ${day.totals.target_calories} kcal`}
-            </div>
           </div>
         );
       })}

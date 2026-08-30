@@ -7,12 +7,14 @@ import {
   CalendarOff,
   ChevronLeft,
   ChevronRight,
+  Menu,
   RefreshCw,
   Sparkles,
 } from 'lucide-react';
 import { api, formatDate } from '../api';
 import { useApp } from '../App';
 import ConfirmDialog from '../components/ConfirmDialog';
+import DayDots from '../components/DayDots';
 import EmptyState from '../components/EmptyState';
 import GenerationLog from '../components/GenerationLog';
 import LoadError from '../components/LoadError';
@@ -59,7 +61,7 @@ function etichettaSettimana(offset) {
 // sempre, passato compreso: quello che è stato comprato sta in dispensa, e la
 // dispensa la corregge chi apre il frigo.
 export default function PlanningPage() {
-  const { addToast } = useApp();
+  const { addToast, apriMenu } = useApp();
   const navigate = useNavigate();
   const { weekStart } = useParams();
   const [week, setWeek] = useState(null);
@@ -101,6 +103,29 @@ export default function PlanningPage() {
 
   const lunediIso = isoOf(lunedi);
   const domenicaIso = isoOf(addDays(lunedi, 6));
+  const oggiIso = isoOf(new Date());
+
+  // Dove finisce la parte ferma della pagina: la barra dell'app, dove c'è, più la
+  // testata del piano. Si misura invece di scriverla nel CSS perché cresce e cala coi
+  // pulsanti che ci stanno dentro (una settimana piena non ha «genera», una sfogliata
+  // ha «torna a questa settimana»), e un numero fisso o lascerebbe un vuoto o
+  // nasconderebbe il nome del giorno a cui si è saltati.
+  const margineTestata = () =>
+    (document.querySelector('.topbar')?.offsetHeight || 0) +
+    (document.querySelector('.plan-head')?.offsetHeight || 0);
+
+  // La striscia dei giorni porta alla colonna, sotto la testata.
+  const vaiAlGiorno = (giorno) => {
+    const colonna = document.getElementById(`giorno-${giorno.day_of_week}`);
+    if (!colonna) return;
+    colonna.style.scrollMarginTop = `${margineTestata() + 8}px`;
+    colonna.scrollIntoView({
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        ? 'auto'
+        : 'smooth',
+      block: 'start',
+    });
+  };
 
   const load = useCallback(
     async ({ silent = false } = {}) => {
@@ -156,14 +181,8 @@ export default function PlanningPage() {
 
     scrollFatto.current = lunediIso;
 
-    // Dove fermarsi: sotto le due cose che non scorrono, la barra dell'app e la
-    // testata del piano. Si misurano invece di scriverne l'altezza nel CSS perché la
-    // testata cresce e cala coi pulsanti che ci stanno dentro (una settimana piena
-    // non ha il pulsante «genera», una sfogliata ha «torna a questa settimana»), e un
-    // numero fisso o lascerebbe un vuoto o nasconderebbe il nome del giorno.
-    const fermi =
-      (document.querySelector('.topbar')?.offsetHeight || 0) +
-      (document.querySelector('.plan-head')?.offsetHeight || 0);
+    // Dove fermarsi: sotto la parte ferma della pagina.
+    const fermi = margineTestata();
     if (fermi) colonna.style.scrollMarginTop = `${fermi + 8}px`;
 
     // Se oggi è già in vista — di lunedì, di solito — muovere la pagina sarebbe solo
@@ -332,7 +351,13 @@ export default function PlanningPage() {
           settimana o generare. */}
       <div className="plan-head">
         <div className="page-header">
-          <div>
+          {/* Sul telefono questa è anche la barra dell'app: il menu si apre da qui,
+              perché su questa pagina la barra di sopra non c'è (vedi App.jsx). */}
+          <button className="plan-menu" onClick={apriMenu} aria-label="Apri menu">
+            <Menu size={20} />
+          </button>
+
+          <div className="plan-ident">
             <h1 className="page-title">{etichettaSettimana(offset)}</h1>
             <p className="page-subtitle">
               Dal {formatDate(lunediIso)} al {formatDate(domenicaIso)}
@@ -345,10 +370,12 @@ export default function PlanningPage() {
           <div className="page-actions">
             {/* Tutti e due aprono la stessa dialog — dove si sceglie cosa generare — e
                 cambia solo da che parte ci si arriva: riempire i buchi o rifare quello
-                che c'è già. Rifare resta in secondo piano perché costa di più. */}
+                che c'è già. Rifare resta in secondo piano perché costa di più, e sul
+                telefono sparisce quando c'è da riempire: la stessa cosa si spunta
+                dentro la dialog, e due pulsanti mandavano la testata a capo. */}
             {week.meals_filled > 0 && (
               <button
-                className="btn btn-secondary"
+                className={`btn btn-secondary ${emptySlots > 0 ? 'plan-secondaria' : ''}`}
                 onClick={() => setDialogo({ rigenera: true })}
                 disabled={busy}
               >
@@ -362,9 +389,12 @@ export default function PlanningPage() {
                 disabled={busy}
               >
                 {busy ? <span className="spinner-inline" /> : <Sparkles size={16} />}
-                {emptySlots === week.meals_total
-                  ? 'Genera la settimana'
-                  : `Riempi i ${emptySlots} vuoti`}
+                <span className="solo-largo">
+                  {emptySlots === week.meals_total
+                    ? 'Genera la settimana'
+                    : `Riempi i ${emptySlots} vuoti`}
+                </span>
+                <span className="solo-stretto">Genera</span>
               </button>
             )}
           </div>
@@ -410,6 +440,43 @@ export default function PlanningPage() {
             </span>
           )}
         </div>
+
+        {/* La settimana intera in una striscia: dove sei, com'è andato ogni giorno, e
+            un tocco per saltarci. Sul telefono i sette giorni stanno uno sotto l'altro
+            — di domenica bisognava risalirli tutti per cambiare settimana — e questa
+            fa da indice e da frecce insieme. Sopra i 1100px non serve: la griglia
+            mostra già tutto. */}
+        {!mai && (
+          <div className="day-strip">
+            <button
+              className="day-strip-nav"
+              onClick={() => vaiA(-1)}
+              aria-label="Settimana precedente"
+            >
+              <ChevronLeft size={18} />
+            </button>
+            {week.days.map((giorno) => (
+              <button
+                key={giorno.id}
+                className={`day-pick ${giorno.date === oggiIso ? 'today' : ''} ${
+                  giorno.is_skipped ? 'off' : ''
+                }`}
+                onClick={() => vaiAlGiorno(giorno)}
+              >
+                <span className="day-pick-name">{giorno.day_name.slice(0, 3)}</span>
+                <span className="day-pick-num">{Number(giorno.date.slice(8, 10))}</span>
+                <DayDots day={giorno} />
+              </button>
+            ))}
+            <button
+              className="day-strip-nav"
+              onClick={() => vaiA(1)}
+              aria-label="Settimana successiva"
+            >
+              <ChevronRight size={18} />
+            </button>
+          </div>
+        )}
       </div>
 
       {week.is_past && !mai && (

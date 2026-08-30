@@ -83,7 +83,7 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
     ├── index.css               # design system completo (variabili CSS, tema chiaro/scuro)
     ├── lib/macros.js           # ripartizione calorie/macro tra i pasti (+ test)
     ├── lib/generation.js       # cosa c'è da generare in settimana: la conta della dialog (+ test)
-    ├── components/             # WeekGrid, WeekGenerateDialog, MealCard, MealChat, RecipeView, MacroBar,
+    ├── components/             # WeekGrid, WeekGenerateDialog, MealCard, DayDots, MealChat, RecipeView, MacroBar,
     │                           # Questionnaire (dieta calcolata, onboarding + /diet)...
     └── pages/                  # Dashboard, Planning, MealDetail, Shopping, Pantry,
                                 # Recipes, Tracking, Diet, Settings, Onboarding, Login
@@ -540,6 +540,68 @@ primo dei tre — stessa azione, nome quasi uguale, in un altro punto dello sche
 Il campo lasciato vuoto nel dialogo ricade sulla generazione di sempre, e il pulsante
 prende lo stesso nome dell'altra strada (*Scegli tu il piatto*) per dirlo. Guardie in
 `tests/test_genera_su_richiesta.py`.
+
+**Una card pasto è una riga, e lo stato si dice una volta sola.** La griglia della
+settimana e la lista del telefono sono lo **stesso** markup (`MealCard`) in due versi:
+in griglia la cella è incolonnata, sotto i 768px diventa una riga — testo a sinistra,
+le due risposte a destra — e passa da 215px a ~90px, cioè da due pasti e mezzo per
+schermata a una giornata intera. Il pezzo non ovvio è `.meal-main { flex: 1 1 0 }`:
+con `flex-basis: auto` a decidere se i comandi ci stanno in riga è la larghezza che il
+testo *vorrebbe* (max-content), quindi con un titolo lungo andavano a capo sempre.
+
+Lo stato di una casella era detto in cinque modi contemporaneamente — pastiglia
+SALTATO rossa piena, titolo barrato, bordo tratteggiato, filetto sul bordo, pulsante
+✗ acceso — e su sette giorni la settimana sembrava un errore di sistema. Ne restano
+due: il filetto colorato e **la parola** nel piede (`seguito`, `rimandato`), perché il
+colore da solo non basta (daltonismo, schermo al sole). Il colore è il **terracotta**
+della palette e non `--danger`: quel rosso nell'app vuol dire "azione distruttiva", e
+aver mangiato altro è un fatto, non un guasto. Vale ovunque si dica la stessa cosa —
+card della settimana, card di oggi (`.btn-moved`), barra del pasto.
+
+Com'è *fatta* la casella (fissa, «lo prepari tu», scritta da te) sono tre segni
+accanto al nome del pasto — puntina, cappello, matita — al posto di tre pastiglie in
+fondo alla card: erano l'unica cosa uguale in tutte e ventotto le celle, e coprivano
+l'unica cosa che cambia, il piatto. E i pasti fissi o gestiti dall'utente prendono
+`.quiet` (fondo spento): sono già decisi e in griglia sono metà delle caselle, quindi
+quello che si scorre davvero — pranzi e cene — viene avanti.
+
+I comandi rari stanno dietro il `⋯`, che apre *dentro* la card (rigenera, elimina):
+sempre a schermo erano quattro icone per cella, centoventi bersagli che nessuno cerca.
+Una casella vuota non ne mostra nessuno e ha un solo pulsante «Genera», invece delle
+stesse quattro icone di cui tre spente.
+
+**Il piano si tiene la barra dell'app.** Sul telefono `.plan-head` è `sticky` in cima
+e contiene menu, titolo, pulsanti e la striscia dei sette giorni; la barra globale su
+quella rotta non viene renderizzata affatto (`testataPropria` in `App.jsx`, che passa
+anche `apriMenu` nel contesto). Due barre in fila facevano 219px prima del primo
+piatto — un quarto di schermo per dire due volte dove sei.
+
+La striscia (`.day-strip`, con `DayDots`) è insieme indice e frecce: quattro pallini
+per giorno dicono com'è andata — verde seguito, terracotta rimandato, grigio ancora da
+vivere, vuoto da riempire — e un tocco salta al giorno, che era il problema di partenza
+(di domenica bisognava risalire tutta la settimana). Per questo `.week-nav` e
+`.week-progress` lì spariscono: direbbero le stesse date e lo stesso numero una seconda
+volta. Dove fermarsi lo misura `margineTestata()` sugli elementi veri, perché l'altezza
+della testata cambia coi pulsanti che ci stanno dentro.
+
+Nella griglia il totale del giorno e i pallini stanno nell'**intestazione** della
+colonna: in fondo, dopo quattro card, finivano sotto la piega di qualunque schermo.
+
+**La home mette i pasti sopra la piega.** Quattro piastrelle di statistiche — pasti
+pianificati, articoli presi, spesa stimata, ricette in archivio — occupavano tutto lo
+spazio sopra la piega e spingevano sotto «cosa si mangia oggi», che è il motivo per cui
+si apre l'app. Adesso c'è una riga sola (`.day-summary`: quanto si mangia oggi, su
+quanto, quanti pasti segnati, i macro), poi i pasti; la spesa è una barra verde che
+porta lì col numero dentro (`.shop-bar`) — non è una statistica, è quello che si fa
+dopo aver guardato i pasti — e i numeri da guardare una volta ogni tanto sono una riga
+in fondo (`.home-stats`).
+
+**Nel dettaglio del pasto le due risposte stanno sotto il pollice.** `.meal-bar` è
+`sticky` in fondo sul telefono, dove «l'ho seguito» era in fondo a una pagina lunga un
+metro — ricetta, ingredienti, procedimento — e la sera il pasto si apre proprio per
+premerlo. Le stesse due dentro la card «com'è andata?» si nascondono lì
+(`.andata-answers`), o sarebbero un doppione; il terzo pulsante porta alla chat, che
+sul telefono sta sotto la ricetta invece che di fianco.
 
 **La generazione in corso è stato del server, non della pagina.**
 `WeekPlan.generation_started_at` viene valorizzato prima della chiamata al modello e

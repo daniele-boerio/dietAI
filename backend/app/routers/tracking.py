@@ -117,6 +117,9 @@ def dashboard(
                 # "Ho mangiato altro": la ricetta è scritta ma è stata rimandata. La
                 # home la mostra spenta, non tra i piatti di oggi da preparare.
                 "is_skipped": meal.is_skipped,
+                # "Lo prepari tu": niente ricetta, ma i macro contano lo stesso nel
+                # totale del giorno — dati per centrati sul target.
+                "self_managed": not slot.auto_generate,
                 "recipe": (
                     {
                         "id": recipe.id,

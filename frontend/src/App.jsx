@@ -84,7 +84,10 @@ function AuthenticatedApp() {
     };
   }, [navOpen]);
 
-  const ctx = { addToast };
+  // `apriMenu` sta nel contesto perché il piano si tiene la propria testata: sul
+  // telefono la barra dell'app e quella della pagina erano due, 219px prima del primo
+  // piatto, e per fonderle in una sola serve che quella pagina possa aprire il menu.
+  const ctx = { addToast, apriMenu: () => setNavOpen(true) };
 
   // Finché mancano la API key o la dieta non c'è niente da pianificare: l'app
   // mostra solo il percorso guidato, non una interfaccia piena di stati vuoti.
@@ -105,6 +108,9 @@ function AuthenticatedApp() {
     );
   }
 
+  // Solo il piano, per ora: è la pagina che si scorre a lungo con una mano sola.
+  const testataPropria = pathname === '/plan' || pathname.startsWith('/plan/');
+
   const navLinks = [
     { to: '/', icon: LayoutDashboard, label: 'Oggi', end: true },
     { to: '/plan', icon: CalendarDays, label: 'Settimana' },
@@ -119,12 +125,18 @@ function AuthenticatedApp() {
   return (
     <AppContext.Provider value={ctx}>
       <div className="app-layout">
-        <header className="topbar">
-          <button className="icon-button" onClick={() => setNavOpen(true)} aria-label="Apri menu">
-            <Menu size={20} />
-          </button>
-          <span className="topbar-logo">DietAI</span>
-        </header>
+        {/* Il piano ha una testata sua che fa anche da barra dell'app: titolo, frecce
+            e la striscia dei sette giorni stanno insieme, e restano ferme mentre la
+            settimana scorre. Averne due, una sopra l'altra, voleva dire cominciare a
+            leggere i pasti a 219px dal bordo dello schermo. */}
+        {!testataPropria && (
+          <header className="topbar">
+            <button className="icon-button" onClick={() => setNavOpen(true)} aria-label="Apri menu">
+              <Menu size={20} />
+            </button>
+            <span className="topbar-logo">DietAI</span>
+          </header>
+        )}
 
         {navOpen && <div className="sidebar-backdrop" onClick={() => setNavOpen(false)} />}
 
@@ -185,7 +197,7 @@ function AuthenticatedApp() {
           </div>
         </nav>
 
-        <main className="main-content">
+        <main className={`main-content ${testataPropria ? 'senza-topbar' : ''}`}>
           {/* Un errore in una pagina non deve spegnere l'app: senza questa rete
               resterebbe una finestra vuota, nera col tema scuro, e sul telefono
               nemmeno un modo per capire cosa sia successo. */}

@@ -4,13 +4,14 @@ import {
   FileUp,
   Lock,
   MessageSquare,
+  Plus,
   Save,
   Sparkles,
   Unlock,
   User,
   X,
 } from 'lucide-react';
-import { api } from '../api';
+import { api, formatNumber } from '../api';
 import { useApp } from '../App';
 import Questionnaire from '../components/Questionnaire';
 import {
@@ -252,206 +253,234 @@ export default function DietPage() {
       {loading ? (
         <div className="spinner" />
       ) : (
-        <>
-          <div className="card settings-section">
-            <div className="card-title">Pasti e macro</div>
-            <p className="field-hint" style={{ marginBottom: 14 }}>
-              Questi numeri sono il vincolo più duro di tutta l'app: ogni ricetta deve
-              starci dentro con una tolleranza del 10%. Se il PDF è stato letto male,
-              correggilo qui.
-            </p>
-
-            <div className="meal-editor-row meal-editor-head">
-              <span>Pasto</span>
-              {CAMPI.map(({ key, label }) => (
-                <span key={key}>{label}</span>
-              ))}
-              <span>Chi lo prepara</span>
-              <span />
-            </div>
-
-            {meals.map((meal, i) => (
-              <div
-                key={i}
-                className={`meal-editor-row ${
-                  meal.auto_generate === false ? 'self-managed' : ''
-                }`}
-              >
-                {/* L'etichetta sta dentro ogni cella e su desktop non si vede: lassù
-                    la dà l'intestazione della tabella, che sul telefono sparisce —
-                    in due colonne non ci sono sei intestazioni da allineare, e senza
-                    si finisce a scrivere le proteine nella casella dei grassi. */}
-                <label className="meal-editor-cell wide">
-                  <span>Pasto</span>
-                  <input value={meal.name} onChange={(e) => rename(i, e.target.value)} />
-                </label>
-                {CAMPI.map(({ key, label }) => (
-                  <label className="meal-editor-cell" key={key}>
-                    <span>{label}</span>
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      value={
-                        draft && draft.index === i && draft.field === key
-                          ? draft.value
-                          : meal[key]
-                      }
-                      onChange={(e) =>
-                        setDraft({ index: i, field: key, value: e.target.value })
-                      }
-                      onBlur={commit}
-                      onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-                    />
-                  </label>
-                ))}
+        /* A sinistra i numeri della dieta, che sono la dieta; a destra quello che le
+           sta intorno — le regole scritte a parole, il questionario, il PDF nuovo. In
+           colonna sola la tabella dei pasti finiva a metà pagina, sotto due riquadri
+           che si aprono una volta ogni sei mesi. */
+        <div className="page-split" style={{ '--aside': '400px' }}>
+          <div className="page-main">
+            {/* Il totale del giorno è **il numero della pagina**: è quello che il
+                nutrizionista ha prescritto, ed è il vincolo da cui discende ogni
+                ricetta. Stava in fondo alla tabella, in una riga come le altre, dove
+                lo si trovava solo scorrendo. Qui sopra ha accanto i tre macro e il
+                lucchetto, che è la cosa che si tocca guardandolo. */}
+            <div className="diet-total">
+              <div className="diet-total-num">
+                <strong>{formatNumber(totals.calories)}</strong>
+                <span>
+                  kcal al giorno
+                  <br />
+                  su {meals.length} {meals.length === 1 ? 'pasto' : 'pasti'}
+                </span>
+              </div>
+              <div className="diet-total-macros">
+                {CAMPI.filter((c) => c.key !== 'calories').map(({ key, label }) => {
+                  const fuori = locked && target && totals[key] !== target[key];
+                  return (
+                    <span key={key} className={`badge ${fuori ? 'badge-warning' : ''}`}>
+                      {label} {totals[key]} g
+                      {fuori && ` → ${target[key]}`}
+                    </span>
+                  );
+                })}
                 <button
-                  className={`who-toggle ${meal.auto_generate === false ? 'mine' : 'ai'}`}
-                  onClick={() => toggleWho(i)}
-                  title={
-                    meal.auto_generate === false
-                      ? 'Lo prepari tu: non verrà generato, ma i suoi macro contano nella giornata'
-                      : 'Lo genera DietAI a ogni piano settimanale'
-                  }
-                >
-                  {meal.auto_generate === false ? (
-                    <>
-                      <User /> Lo faccio io
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles /> DietAI
-                    </>
-                  )}
-                </button>
-
-                <button
-                  className="icon-button danger"
-                  onClick={() => dropMeal(i)}
+                  className={`lock-toggle ${locked ? '' : 'open'}`}
+                  onClick={toggleLock}
                   title={
                     locked
-                      ? 'Rimuovi il pasto (le sue calorie vanno sugli altri)'
-                      : 'Rimuovi il pasto (la giornata cala delle sue calorie)'
+                      ? 'Il totale del giorno non si muove: quello che togli a un pasto va sugli altri. Clicca per sbloccarlo.'
+                      : 'I totali sono liberi: quello che scrivi cambia la giornata. Clicca per ribloccarli su questi numeri.'
                   }
                 >
-                  <X size={15} />
+                  {locked ? <Lock size={13} /> : <Unlock size={13} />}
+                  {locked ? 'Bloccato' : 'Libero'}
                 </button>
               </div>
-            ))}
+            </div>
 
-            <div className="meal-editor-row totals-row">
-              <strong className="totals-row-label">Totale giornaliero</strong>
-              {CAMPI.map(({ key, label }) => {
-                const fuori = locked && target && totals[key] !== target[key];
-                return (
-                  <div className="meal-editor-cell" key={key}>
-                    <span>{label}</span>
-                    <strong className={fuori ? 'off-target' : ''}>
-                      {totals[key]}
-                      {fuori && <em>torna a {target[key]}</em>}
-                    </strong>
-                  </div>
+            <div className="card settings-section">
+              <div className="card-title">Pasti e macro</div>
+              <p className="field-hint" style={{ marginBottom: 14 }}>
+                Questi numeri sono il vincolo più duro di tutta l'app: ogni ricetta deve
+                starci dentro con una tolleranza del 10%. Se il PDF è stato letto male,
+                correggilo qui.
+              </p>
+
+              <div className="meal-editor-row meal-editor-head">
+                <span>Pasto</span>
+                {CAMPI.map(({ key, label }) => (
+                  <span key={key}>{label}</span>
+                ))}
+                <span>Chi lo prepara</span>
+                <span />
+              </div>
+
+              {meals.map((meal, i) => (
+                <div
+                  key={i}
+                  className={`meal-editor-row ${
+                    meal.auto_generate === false ? 'self-managed' : ''
+                  }`}
+                >
+                  {/* L'etichetta sta dentro ogni cella e su desktop non si vede: lassù
+                      la dà l'intestazione della tabella, che sul telefono sparisce —
+                      in due colonne non ci sono sei intestazioni da allineare, e senza
+                      si finisce a scrivere le proteine nella casella dei grassi. */}
+                  <label className="meal-editor-cell wide">
+                    <span>Pasto</span>
+                    {/* `type` esplicito: tutto il foglio di stile dei moduli è
+                        scritto su `input[type=...]`, e un input senza type non lo
+                        prende nessuna di quelle regole — resta con l'aspetto di
+                        serie del browser, che qui era l'unico riquadro chiaro in
+                        mezzo a una tabella di testo. */}
+                    <input
+                      type="text"
+                      value={meal.name}
+                      onChange={(e) => rename(i, e.target.value)}
+                    />
+                  </label>
+                  {CAMPI.map(({ key, label }) => (
+                    <label className="meal-editor-cell" key={key}>
+                      <span>{label}</span>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        value={
+                          draft && draft.index === i && draft.field === key
+                            ? draft.value
+                            : meal[key]
+                        }
+                        onChange={(e) =>
+                          setDraft({ index: i, field: key, value: e.target.value })
+                        }
+                        onBlur={commit}
+                        onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+                      />
+                    </label>
+                  ))}
+                  <button
+                    className={`who-toggle ${meal.auto_generate === false ? 'mine' : 'ai'}`}
+                    onClick={() => toggleWho(i)}
+                    title={
+                      meal.auto_generate === false
+                        ? 'Lo prepari tu: non verrà generato, ma i suoi macro contano nella giornata'
+                        : 'Lo genera DietAI a ogni piano settimanale'
+                    }
+                  >
+                    {meal.auto_generate === false ? (
+                      <>
+                        <User /> Lo faccio io
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles /> DietAI
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    className="icon-button danger"
+                    onClick={() => dropMeal(i)}
+                    title={
+                      locked
+                        ? 'Rimuovi il pasto (le sue calorie vanno sugli altri)'
+                        : 'Rimuovi il pasto (la giornata cala delle sue calorie)'
+                    }
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
+              ))}
+
+              <p className="field-hint" style={{ marginTop: 10 }}>
+                {locked ? (
+                  <>
+                    <strong>Totale bloccato:</strong> quanto mangi in un giorno è deciso, e
+                    qui si decide solo come dividerlo. Cambiando un pasto la differenza va
+                    sugli altri, e aggiungendone o togliendone uno la giornata si ridivide
+                    fra quelli rimasti — a somma zero. A muoversi sono però solo i pasti che
+                    genera DietAI: quelli che prepari tu restano ai numeri che gli hai dato.
+                    Se invece è cambiata la dieta, apri il lucchetto: i campi diventano
+                    liberi e il totale è quello che scrivi tu.
+                  </>
+                ) : (
+                  <>
+                    <strong>Totale libero:</strong> stai cambiando quanto mangi in un giorno,
+                    non come lo dividi — è la strada giusta se il nutrizionista ti ha dato
+                    numeri nuovi. Quando i conti tornano richiudi il lucchetto: da lì in poi
+                    saranno questi i totali da difendere.
+                  </>
+                )}
+              </p>
+
+              <p className="field-hint">
+                <strong>Lo faccio io:</strong> per i pasti che hai già risolto — la colazione
+                di sempre, il pranzo in mensa. DietAI non li genera e non compra i loro
+                ingredienti, ma i macro restano nel conto della giornata: tu quel pasto lo
+                mangi, e centra i suoi target. E i loro numeri li muovi solo tu: col
+                lucchetto chiuso la ridistribuzione li salta, perché quanto vale un pasto
+                che prepari da te lo sai soltanto tu.
+              </p>
+
+              <div className="meal-editor-actions">
+                <button className="btn btn-secondary btn-sm" onClick={appendMeal}>
+                  <Plus size={14} /> Aggiungi pasto
+                </button>
+                <button className="btn btn-primary btn-sm" onClick={save} disabled={busy}>
+                  {busy ? <span className="spinner-inline" /> : <Save size={14} />}
+                  Salva le modifiche
+                </button>
+              </div>
+            </div>
+
+            </div>
+
+            <aside className="page-aside">
+            <DietRulesCard />
+
+            <QuestionnaireCard
+              diet={diet}
+              onDone={(updated) => {
+                setDiet(updated);
+                setMeals(updated.meals);
+                // Il questionario ha appena deciso i totali: sono loro il nuovo vincolo.
+                setTarget(dailyTotals(updated.meals));
+                setLocked(true);
+                addToast(
+                  `Ricalcolata: ${updated.total_daily_calories} kcal al giorno ✓ — ` +
+                    'rigenera la settimana per adeguare le ricette'
                 );
-              })}
+              }}
+            />
+
+            <div className="card settings-section">
+              <div className="card-title">Carica un nuovo PDF</div>
+              <p className="field-hint" style={{ marginBottom: 12 }}>
+                Il nutrizionista ti ha dato una dieta nuova? Caricala: quella attuale finisce
+                in archivio e i pasti vengono riletti da capo.
+              </p>
+              <label className="dropzone">
+                <FileUp />
+                {file ? <strong>{file.name}</strong> : 'Scegli il PDF della dieta'}
+                <input
+                  type="file"
+                  accept="application/pdf"
+                  hidden
+                  onChange={(e) => setFile(e.target.files?.[0] || null)}
+                />
+              </label>
               <button
-                className={`lock-toggle ${locked ? '' : 'open'}`}
-                onClick={toggleLock}
-                title={
-                  locked
-                    ? 'Il totale del giorno non si muove: quello che togli a un pasto va sugli altri. Clicca per sbloccarlo.'
-                    : 'I totali sono liberi: quello che scrivi cambia la giornata. Clicca per ribloccarli su questi numeri.'
-                }
+                className="btn btn-primary btn-sm"
+                style={{ marginTop: 12 }}
+                onClick={upload}
+                disabled={!file || busy}
               >
-                {locked ? <Lock size={13} /> : <Unlock size={13} />}
-                {locked ? 'Bloccato' : 'Libero'}
-              </button>
-              <span />
-            </div>
-
-            <p className="field-hint" style={{ marginTop: 10 }}>
-              {locked ? (
-                <>
-                  <strong>Totale bloccato:</strong> quanto mangi in un giorno è deciso, e
-                  qui si decide solo come dividerlo. Cambiando un pasto la differenza va
-                  sugli altri, e aggiungendone o togliendone uno la giornata si ridivide
-                  fra quelli rimasti — a somma zero. A muoversi sono però solo i pasti che
-                  genera DietAI: quelli che prepari tu restano ai numeri che gli hai dato.
-                  Se invece è cambiata la dieta, apri il lucchetto: i campi diventano
-                  liberi e il totale è quello che scrivi tu.
-                </>
-              ) : (
-                <>
-                  <strong>Totale libero:</strong> stai cambiando quanto mangi in un giorno,
-                  non come lo dividi — è la strada giusta se il nutrizionista ti ha dato
-                  numeri nuovi. Quando i conti tornano richiudi il lucchetto: da lì in poi
-                  saranno questi i totali da difendere.
-                </>
-              )}
-            </p>
-
-            <p className="field-hint">
-              <strong>Lo faccio io:</strong> per i pasti che hai già risolto — la colazione
-              di sempre, il pranzo in mensa. DietAI non li genera e non compra i loro
-              ingredienti, ma i macro restano nel conto della giornata: tu quel pasto lo
-              mangi, e centra i suoi target. E i loro numeri li muovi solo tu: col
-              lucchetto chiuso la ridistribuzione li salta, perché quanto vale un pasto
-              che prepari da te lo sai soltanto tu.
-            </p>
-
-            <div className="meal-editor-actions">
-              <button className="btn btn-secondary btn-sm" onClick={appendMeal}>
-                Aggiungi pasto
-              </button>
-              <button className="btn btn-primary btn-sm" onClick={save} disabled={busy}>
-                {busy ? <span className="spinner-inline" /> : <Save size={14} />}
-                Salva
+                {busy && <span className="spinner-inline" />}
+                Leggi e sostituisci
               </button>
             </div>
-          </div>
-
-          <DietRulesCard />
-
-          <QuestionnaireCard
-            diet={diet}
-            onDone={(updated) => {
-              setDiet(updated);
-              setMeals(updated.meals);
-              // Il questionario ha appena deciso i totali: sono loro il nuovo vincolo.
-              setTarget(dailyTotals(updated.meals));
-              setLocked(true);
-              addToast(
-                `Ricalcolata: ${updated.total_daily_calories} kcal al giorno ✓ — ` +
-                  'rigenera la settimana per adeguare le ricette'
-              );
-            }}
-          />
-
-          <div className="card settings-section">
-            <div className="card-title">Carica un nuovo PDF</div>
-            <p className="field-hint" style={{ marginBottom: 12 }}>
-              Il nutrizionista ti ha dato una dieta nuova? Caricala: quella attuale finisce
-              in archivio e i pasti vengono riletti da capo.
-            </p>
-            <label className="dropzone">
-              <FileUp />
-              {file ? <strong>{file.name}</strong> : 'Scegli il PDF della dieta'}
-              <input
-                type="file"
-                accept="application/pdf"
-                hidden
-                onChange={(e) => setFile(e.target.files?.[0] || null)}
-              />
-            </label>
-            <button
-              className="btn btn-primary btn-sm"
-              style={{ marginTop: 12 }}
-              onClick={upload}
-              disabled={!file || busy}
-            >
-              {busy && <span className="spinner-inline" />}
-              Leggi e sostituisci
-            </button>
-          </div>
-        </>
+          </aside>
+        </div>
       )}
     </>
   );

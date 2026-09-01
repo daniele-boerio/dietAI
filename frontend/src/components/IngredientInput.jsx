@@ -29,7 +29,10 @@ export default function IngredientInput({ value, onChange, placeholder = 'Ingred
   }, [value]);
 
   return (
-    <div style={{ position: 'relative', flex: 1, minWidth: 160 }}>
+    // La larghezza la decide chi lo usa: qui dentro c'era un `minWidth: 160` che in
+    // una colonna stretta — la riga della dispensa in modifica — impediva al campo
+    // di stringersi, e la riga andava a capo storta invece di comprimersi.
+    <div className="ingredient-input">
       <input
         type="text"
         value={value}

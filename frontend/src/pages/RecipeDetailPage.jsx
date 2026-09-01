@@ -66,33 +66,47 @@ export default function RecipeDetailPage() {
 
   return (
     <>
-      <div className="page-header">
-        <div>
-          <button className="btn btn-ghost" onClick={tornaIndietro}>
-            <ArrowLeft size={16} /> Indietro
-          </button>
+      {/* Qui la ricetta è tutta la pagina: il titolo è sul foglio, l'indietro è sul
+          foglio e i comandi del piatto sono in fondo al foglio. Una testata sopra
+          direbbe una seconda volta le stesse cose. */}
+      <div className="page-split" style={{ '--aside': '340px' }}>
+        <div className="page-main">
+          <RecipeView
+            recipe={recipe}
+            indietro={
+              <button className="recipe-back" onClick={tornaIndietro} title="Indietro">
+                <ArrowLeft />
+              </button>
+            }
+            azioni={
+              <>
+                <div className="andata-rating">
+                  <span>Voto</span>
+                  <StarRating value={recipe.rating} onChange={rate} />
+                </div>
+                <button className="btn btn-secondary spinta" onClick={toggleFavorite}>
+                  <Heart
+                    size={16}
+                    fill={recipe.is_favorite ? 'currentColor' : 'none'}
+                    color={recipe.is_favorite ? 'var(--terracotta)' : 'currentColor'}
+                  />
+                  {recipe.is_favorite ? 'Preferita' : 'Aggiungi ai preferiti'}
+                </button>
+                <button
+                  className="btn btn-secondary btn-icon"
+                  onClick={() => setConfirmDelete(true)}
+                  title="Elimina la ricetta"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </>
+            }
+          />
         </div>
-        <div className="page-actions">
-          <StarRating value={recipe.rating} onChange={rate} size="lg" />
-          <button className="btn btn-secondary" onClick={toggleFavorite}>
-            <Heart
-              size={16}
-              fill={recipe.is_favorite ? 'currentColor' : 'none'}
-              color={recipe.is_favorite ? 'var(--terracotta)' : 'currentColor'}
-            />
-            Preferita
-          </button>
-          <button className="btn btn-danger" onClick={() => setConfirmDelete(true)}>
-            <Trash2 size={16} />
-          </button>
-        </div>
-      </div>
 
-      <div style={{ maxWidth: 780 }}>
-        <RecipeView recipe={recipe} />
-
+        <aside className="page-aside">
         {recipe.usage_history?.length > 0 && (
-          <div className="card" style={{ marginTop: 14 }}>
+          <div className="card">
             <div className="card-title">Quando l'hai mangiata</div>
             <div className="list-rows">
               {recipe.usage_history.map((u) => (
@@ -108,6 +122,7 @@ export default function RecipeDetailPage() {
             </div>
           </div>
         )}
+        </aside>
       </div>
 
       {confirmDelete && (

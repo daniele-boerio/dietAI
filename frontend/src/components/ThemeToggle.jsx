@@ -5,7 +5,7 @@ import { Moon, Sun } from 'lucide-react';
 // cambia solo a runtime e si ricorda la scelta.
 export default function ThemeToggle() {
   const [theme, setTheme] = useState(
-    () => document.documentElement.getAttribute('data-theme') || 'light'
+    () => document.documentElement.getAttribute('data-theme') || 'dark'
   );
 
   const toggle = () => {

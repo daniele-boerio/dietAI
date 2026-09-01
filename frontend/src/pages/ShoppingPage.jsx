@@ -31,6 +31,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
 import LoadError from '../components/LoadError';
 import ShoppingChat from '../components/ShoppingChat';
+import { useDueColonne } from '../lib/schermo';
 
 /**
  * Il campo per dire quanto se n'è preso davvero.
@@ -84,7 +85,9 @@ function QuantityInput({ item, onDone, onCancel }) {
  * quantità della riga. Vuoto cancella il prezzo tuo e rimette la media del catalogo.
  */
 function PriceInput({ item, onDone, onCancel }) {
-  const [value, setValue] = useState(item.price_by_user ? (item.estimated_price ?? '') : '');
+  // Quello che si ritrova nel campo è quello che ci si era scritto, non la stima
+  // ricalcolata: il prezzo pagato sta sulla riga proprio per questo.
+  const [value, setValue] = useState(item.paid_price ?? '');
   const annullato = useRef(false);
 
   const conferma = () => {
@@ -130,6 +133,9 @@ export default function ShoppingPage() {
   const [confirmDone, setConfirmDone] = useState(false);
   const [busy, setBusy] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  // Sopra i 1100px la chat è una colonna in pagina, sotto è un cassetto: sono due
+  // componenti diversi con due comandi diversi, non lo stesso pannello spostato.
+  const dueColonne = useDueColonne();
   // L'articolo che si sta spostando di reparto (null = nessun dialogo aperto).
   const [moving, setMoving] = useState(null);
   // L'articolo di cui si sta scrivendo la quantità presa, e quello del prezzo pagato.
@@ -170,9 +176,10 @@ export default function ShoppingPage() {
             ? {
                 ...i,
                 is_checked: next,
-                // "Non l'ho preso" cancella anche quanto ne avevo segnato: il server
-                // fa lo stesso, qui si tiene solo il passo.
-                ...(next ? {} : { bought_quantity: null, bought_label: null }),
+                // "Non l'ho preso" cancella anche quanto ne avevo segnato e quanto
+                // avevo scritto di averci speso: il server fa lo stesso, qui si tiene
+                // solo il passo.
+                ...(next ? {} : { bought_quantity: null, bought_label: null, paid_price: null }),
               }
             : i
         ),
@@ -205,6 +212,7 @@ export default function ShoppingPage() {
   // qui insegna all'app un prezzo vero, e resta per tutte le liste che verranno.
   const savePrice = async (item, paid) => {
     setPriceOf(null);
+    if (paid === (item.paid_price ?? null)) return;
     try {
       const aggiornata = await api.setPaidPrice(item.id, paid);
       setList(aggiornata);
@@ -278,205 +286,252 @@ export default function ShoppingPage() {
           </p>
         </div>
         <div className="page-actions">
-          <button className="btn btn-secondary" onClick={() => setChatOpen(true)}>
-            <MessageSquare size={16} /> Assistente
-          </button>
+          {/* Sul monitor la chat è già in pagina, in colonna: un pulsante che
+              "apre" una cosa che si vede sarebbe un comando senza effetto. */}
+          {!dueColonne && (
+            <button className="btn btn-secondary" onClick={() => setChatOpen(true)}>
+              <MessageSquare size={16} /> Chiedi alla lista
+            </button>
+          )}
           <button className="btn btn-secondary" onClick={copyList}>
             <Copy size={16} /> Copia
           </button>
         </div>
       </div>
 
-      {/* La lista arriva più in là di domenica perché hai già generato la settimana
-          prossima: dirlo evita che il totale alto sembri un errore di conto. */}
-      {oltre && (
-        <div className="notice notice-skip">
-          <CalendarCheck />
-          <div>
-            <strong>Spesa fino al {formatDate(list.covers_to)}</strong>: la lista
-            comprende anche le ricette della settimana prossima, così di una confezione
-            se ne compra una sola invece di due mezze.
-          </div>
-        </div>
-      )}
+      <div className="page-split" style={{ '--aside': '380px' }}>
+        <div className="page-main">
+          {/* Quanto manca alla fine del giro, in un filo. Al supermercato è l'unica
+              domanda che ci si fa mentre si scorre: quante ne restano. */}
+          {list.total_items > 0 && (
+            <div className="shopping-progress">
+              <span
+                style={{
+                  width: `${Math.round((100 * list.checked_items) / list.total_items)}%`,
+                }}
+              />
+            </div>
+          )}
 
-      {/* Il contrario del riquadro qui sopra, e serve per lo stesso motivo: una lista
-          più corta del piano non deve sembrare una lista che ha perso dei pezzi. */}
-      {list.meals_beyond > 0 && (
-        <div className="notice">
-          <CalendarClock />
-          <div>
-            <strong>Il piano va più avanti della spesa.</strong> Dopo il{' '}
-            {formatDate(list.horizon)} hai{' '}
-            {list.meals_beyond === 1
-              ? 'un pasto pianificato'
-              : `${list.meals_beyond} pasti pianificati`}
-            : non sono in lista e non è una dimenticanza — si comprano quando arriva il
-            loro turno, altrimenti il carrello di oggi sarebbe pieno di roba per fra tre
-            settimane.
-          </div>
-        </div>
-      )}
-
-      {list.completed_at && (
-        <div className="notice">
-          <CalendarCheck />
-          <div>
-            <strong>Ultima spesa {formatDate(list.completed_at)}</strong>: quello che
-            avevi spuntato è passato in dispensa, ed è per questo che non compare più
-            qui. Quello che resta è quello che manca ancora.
-          </div>
-        </div>
-      )}
-
-      {list.categories.length === 0 ? (
-        <EmptyState
-          icon={ShoppingCart}
-          title="Non manca niente"
-          text="Tutto quello che il piano chiede da oggi in avanti è già in dispensa. Genera altre ricette e qui comparirà quello che serve comprare."
-        />
-      ) : (
-        <>
-          {list.categories.map((cat) => {
-            const isCollapsed = collapsed[cat.key];
-            const done = cat.items.filter((i) => i.is_checked).length;
-            return (
-              <div key={cat.key} className="shopping-category">
-                <button
-                  className="shopping-category-head"
-                  onClick={() =>
-                    setCollapsed((prev) => ({ ...prev, [cat.key]: !prev[cat.key] }))
-                  }
-                >
-                  {isCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
-                  {cat.label}
-                  <span className="count">
-                    {done}/{cat.items.length}
-                  </span>
-                  {cat.estimated_price != null && (
-                    <span className="price">{formatMoney(cat.estimated_price)}</span>
-                  )}
-                </button>
-
-                {!isCollapsed &&
-                  cat.items.map((item) => (
-                    <div
-                      key={item.id}
-                      className={`shopping-item ${item.is_checked ? 'checked' : ''}`}
-                    >
-                      <button
-                        className="shopping-tick"
-                        onClick={() => toggleItem(item)}
-                      >
-                        <span className="shopping-check">
-                          <Check size={13} strokeWidth={3} />
-                        </span>
-                        <span className="shopping-name">{item.name}</span>
-                      </button>
-
-                      {/* La quantità è un pulsante a sé: al supermercato si tocca per
-                          dire quanto se n'è preso davvero, e non deve far spuntare o
-                          despuntare la riga per sbaglio. */}
-                      {quantityOf === item.id ? (
-                        <QuantityInput
-                          item={item}
-                          onDone={(quantity) => saveQuantity(item, quantity)}
-                          onCancel={() => setQuantityOf(null)}
-                        />
-                      ) : (
-                        <button
-                          className={`shopping-qty ${item.bought_quantity ? 'bought' : ''}`}
-                          onClick={() => setQuantityOf(item.id)}
-                          title="Quanto ne hai preso?"
-                        >
-                          {item.bought_label || item.label}
-                          {item.bought_quantity && <small>ne servono {item.label}</small>}
-                        </button>
-                      )}
-
-                      {/* Il prezzo si tocca per dire quanto è costato davvero: da lì
-                          l'app impara il prezzo unitario e smette di stimare a caso.
-                          Si può fare anche a spesa fatta, scontrino alla mano. */}
-                      {priceOf === item.id ? (
-                        <PriceInput
-                          item={item}
-                          onDone={(paid) => savePrice(item, paid)}
-                          onCancel={() => setPriceOf(null)}
-                        />
-                      ) : (
-                        <button
-                          className={`shopping-price ${item.price_by_user ? 'mine' : ''}`}
-                          onClick={() => setPriceOf(item.id)}
-                          title={
-                            item.price_by_user
-                              ? `Prezzo tuo: ${formatMoney(item.unit_price)}/${item.price_unit}${
-                                  item.last_paid_at
-                                    ? ` · segnato il ${formatDate(item.last_paid_at)}`
-                                    : ''
-                                }`
-                              : 'Quanto è costato? Segnalo e la stima diventa la tua'
-                          }
-                        >
-                          {item.estimated_price != null ? formatMoney(item.estimated_price) : '€ —'}
-                        </button>
-                      )}
-                      <button
-                        className="icon-button shopping-move"
-                        onClick={() => setMoving({ ...item, from: cat.label })}
-                        title="Sposta di reparto"
-                        aria-label={`Sposta ${item.name} in un altro reparto`}
-                      >
-                        <FolderInput size={15} />
-                      </button>
-
-                      {/* Perché l'articolo è in lista pur avendone in casa. Sta qui
-                          in fondo e non dentro il pulsante che spunta la riga: quando
-                          l'unità non torna è un link alla dispensa, e un link dentro
-                          un bottone non si può toccare. Va a capo da solo. */}
-                      {item.pantry &&
-                        (item.pantry.usable ? (
-                          <span className="shopping-pantry">
-                            già in dispensa: {item.pantry.label} — ne serve altro
-                          </span>
-                        ) : (
-                          <Link
-                            className="shopping-pantry fix"
-                            to={`/pantry?fix=${item.ingredient_id}`}
-                          >
-                            in dispensa hai {item.pantry.label}, qui si conta a{' '}
-                            {item.unit}: non posso scalarli — correggi la dispensa
-                          </Link>
-                        ))}
-                    </div>
-                  ))}
+          {/* La lista arriva più in là di domenica perché hai già generato la settimana
+              prossima: dirlo evita che il totale alto sembri un errore di conto. */}
+          {oltre && (
+            <div className="notice notice-skip">
+              <CalendarCheck />
+              <div>
+                <strong>Spesa fino al {formatDate(list.covers_to)}</strong>: la lista
+                comprende anche le ricette della settimana prossima, così di una confezione
+                se ne compra una sola invece di due mezze.
               </div>
-            );
-          })}
+            </div>
+          )}
 
-          <div className="shopping-footer">
-            <div className="shopping-total">
-              {formatMoney(list.estimated_cost) || '—'}
-              {/* Un totale fatto di medie nazionali non serve a niente, e dirlo è
-                  meglio che farlo sembrare un preventivo: la frase cambia man mano
-                  che i prezzi veri prendono il posto di quelli del catalogo. */}
-              <small>
-                {list.priced_items === 0
-                  ? `stima sui prezzi medi · ${list.total_items} articoli`
-                  : list.priced_items === list.total_items
-                    ? `sui tuoi prezzi · ${list.total_items} articoli`
-                    : `${list.priced_items} di ${list.total_items} articoli a prezzo tuo`}
-              </small>
+          {/* Il contrario del riquadro qui sopra, e serve per lo stesso motivo: una lista
+              più corta del piano non deve sembrare una lista che ha perso dei pezzi. */}
+          {list.meals_beyond > 0 && (
+            <div className="notice">
+              <CalendarClock />
+              <div>
+                <strong>Il piano va più avanti della spesa.</strong> Dopo il{' '}
+                {formatDate(list.horizon)} hai{' '}
+                {list.meals_beyond === 1
+                  ? 'un pasto pianificato'
+                  : `${list.meals_beyond} pasti pianificati`}
+                : non sono in lista e non è una dimenticanza — si comprano quando arriva il
+                loro turno, altrimenti il carrello di oggi sarebbe pieno di roba per fra tre
+                settimane.
+              </div>
+            </div>
+          )}
+
+          {list.completed_at && (
+            <div className="notice">
+              <CalendarCheck />
+              <div>
+                <strong>Ultima spesa {formatDate(list.completed_at)}</strong>: quello che
+                avevi spuntato è passato in dispensa, ed è per questo che non compare più
+                qui. Quello che resta è quello che manca ancora.
+              </div>
+            </div>
+          )}
+
+          {list.categories.length === 0 ? (
+            <EmptyState
+              icon={ShoppingCart}
+              title="Non manca niente"
+              text="Tutto quello che il piano chiede da oggi in avanti è già in dispensa. Genera altre ricette e qui comparirà quello che serve comprare."
+            />
+          ) : (
+            /* I reparti stanno in due colonne: la lista è lunga e stretta, e su un
+               monitor una colonna sola vorrebbe dire scorrere per due schermate con
+               mezzo metro di vuoto a destra. `columns` e non una griglia perché
+               bilancia le altezze da sé — i reparti hanno da due a dodici voci l'uno —
+               e `break-inside: avoid` tiene un reparto tutto nella stessa colonna. */
+            <div className="shopping-list">
+              {list.categories.map((cat) => {
+                const isCollapsed = collapsed[cat.key];
+                const done = cat.items.filter((i) => i.is_checked).length;
+                return (
+                  <div key={cat.key} className="shopping-category">
+                    <button
+                      className="shopping-category-head"
+                      onClick={() =>
+                        setCollapsed((prev) => ({ ...prev, [cat.key]: !prev[cat.key] }))
+                      }
+                    >
+                      {isCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
+                      {cat.label}
+                      <span className="count">
+                        {done}/{cat.items.length}
+                      </span>
+                      {cat.estimated_price != null && (
+                        <span className="price">{formatMoney(cat.estimated_price)}</span>
+                      )}
+                    </button>
+
+                    {!isCollapsed &&
+                      cat.items.map((item) => (
+                        <div
+                          key={item.id}
+                          className={`shopping-item ${item.is_checked ? 'checked' : ''}`}
+                        >
+                          <button
+                            className="shopping-tick"
+                            onClick={() => toggleItem(item)}
+                          >
+                            <span className="shopping-check">
+                              <Check size={13} strokeWidth={3} />
+                            </span>
+                            <span className="shopping-name">{item.name}</span>
+                          </button>
+
+                          {/* La quantità è un pulsante a sé: al supermercato si tocca per
+                              dire quanto se n'è preso davvero, e non deve far spuntare o
+                              despuntare la riga per sbaglio. */}
+                          {quantityOf === item.id ? (
+                            <QuantityInput
+                              item={item}
+                              onDone={(quantity) => saveQuantity(item, quantity)}
+                              onCancel={() => setQuantityOf(null)}
+                            />
+                          ) : (
+                            <button
+                              className={`shopping-qty ${item.bought_quantity ? 'bought' : ''}`}
+                              onClick={() => setQuantityOf(item.id)}
+                              title="Quanto ne hai preso?"
+                            >
+                              {item.bought_label || item.label}
+                              {item.bought_quantity && <small>ne servono {item.label}</small>}
+                            </button>
+                          )}
+
+                          {/* Il prezzo si tocca per dire quanto è costato davvero: da lì
+                              l'app impara il prezzo unitario e smette di stimare a caso.
+                              Si può fare anche a spesa fatta, scontrino alla mano. */}
+                          {priceOf === item.id ? (
+                            <PriceInput
+                              item={item}
+                              onDone={(paid) => savePrice(item, paid)}
+                              onCancel={() => setPriceOf(null)}
+                            />
+                          ) : (
+                            <button
+                              className={`shopping-price ${item.paid_price != null ? 'mine' : ''}`}
+                              onClick={() => setPriceOf(item.id)}
+                              title={
+                                item.paid_price != null
+                                  ? `L'hai pagato tu: ${formatMoney(item.paid_price)}` +
+                                    ` — ${formatMoney(item.unit_price)}/${item.price_unit}` +
+                                    (item.last_paid_at ? ` · segnato il ${formatDate(item.last_paid_at)}` : '')
+                                  : item.price_by_user
+                                    ? `Stima col prezzo tuo: ${formatMoney(item.unit_price)}/${item.price_unit}`
+                                    : 'Quanto è costato? Segnalo e la stima diventa la tua'
+                              }
+                            >
+                              {item.estimated_price != null ? formatMoney(item.estimated_price) : '€ —'}
+                            </button>
+                          )}
+                          <button
+                            className="icon-button shopping-move"
+                            onClick={() => setMoving({ ...item, from: cat.label })}
+                            title="Sposta di reparto"
+                            aria-label={`Sposta ${item.name} in un altro reparto`}
+                          >
+                            <FolderInput size={15} />
+                          </button>
+
+                          {/* Perché l'articolo è in lista pur avendone in casa. Sta qui
+                              in fondo e non dentro il pulsante che spunta la riga: quando
+                              l'unità non torna è un link alla dispensa, e un link dentro
+                              un bottone non si può toccare. Va a capo da solo. */}
+                          {item.pantry &&
+                            (item.pantry.usable ? (
+                              <span className="shopping-pantry">
+                                già in dispensa: {item.pantry.label} — ne serve altro
+                              </span>
+                            ) : (
+                              <Link
+                                className="shopping-pantry fix"
+                                to={`/pantry?fix=${item.ingredient_id}`}
+                              >
+                                in dispensa hai {item.pantry.label}, qui si conta a{' '}
+                                {item.unit}: non posso scalarli — correggi la dispensa
+                              </Link>
+                            ))}
+                        </div>
+                      ))}
+                  </div>
+                );
+              })}
+
+            </div>
+          )}
+        </div>
+
+        <aside className="page-aside">
+          {/* Il conto è **su carta**: è il foglietto che si tiene in mano alla
+              cassa, ed è l'unica cosa chiara della pagina — quella su cui l'occhio
+              cade tornando dalla lista. */}
+          <div className="card shopping-total-card">
+            <div className="card-title">Totale stimato</div>
+            <div className="shopping-total">{formatMoney(list.estimated_cost) || '—'}</div>
+            {/* Un totale fatto di medie nazionali non serve a niente, e dirlo è
+                meglio che farlo sembrare un preventivo: la frase cambia man mano
+                che i prezzi veri prendono il posto di quelli del catalogo. */}
+            <div className="shopping-total-note">
+              {list.priced_items === 0
+                ? `stima sui prezzi medi · ${list.total_items} articoli`
+                : list.priced_items === list.total_items
+                  ? `sui tuoi prezzi · ${list.total_items} articoli`
+                  : `${list.priced_items} di ${list.total_items} articoli a prezzo tuo`}
+              {list.total_items > 0 && ` · ${list.total_items - list.checked_items} da prendere`}
             </div>
             <button
-              className="btn btn-primary"
-              style={{ marginLeft: 'auto' }}
+              className="btn btn-primary btn-block"
+              disabled={list.checked_items === 0}
               onClick={() => setConfirmDone(true)}
             >
               <Check size={16} /> Ho fatto la spesa
             </button>
+            <p className="shopping-total-hint">
+              Quello che hai spuntato passa in dispensa nella quantità che hai preso
+              davvero, e da lì sparisce dalla lista: quello che resta è quello che non
+              hai preso.
+            </p>
           </div>
-        </>
-      )}
+
+          {/* Sul monitor la chat vive qui, accanto alla lista: è lì che si sta
+              quando si riscrive una ricetta perché le zucchine non si trovano. */}
+          {dueColonne && (
+            <ShoppingChat
+              key={`inline-${list.week_plan_id}`}
+              weekId={list.week_plan_id}
+              inline
+              onListUpdated={(updated) => updated && setList(updated)}
+            />
+          )}
+        </aside>
+      </div>
 
       {moving && (
         <div className="modal-overlay" onClick={() => setMoving(null)}>
@@ -522,7 +577,7 @@ export default function ShoppingPage() {
         />
       )}
 
-      {chatOpen && (
+      {chatOpen && !dueColonne && (
         <>
           <div className="chat-backdrop" onClick={() => setChatOpen(false)} />
           <ShoppingChat

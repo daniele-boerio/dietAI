@@ -16,6 +16,16 @@ import Questionnaire from '../components/Questionnaire';
 // al primo accesso, cioè nel momento peggiore.
 const ALL_STEPS = ['welcome', 'apikey', 'diet', 'ingredients', 'preferences'];
 
+// Il nome di ogni passo, scritto sotto il suo trattino: cinque tacche senza etichette
+// dicono quanto manca ma non che cosa manca.
+const ETICHETTE_PASSI = {
+  welcome: 'Benvenuto',
+  apikey: 'API key',
+  diet: 'Dieta',
+  ingredients: 'Ingredienti',
+  preferences: 'Preferenze',
+};
+
 export default function OnboardingPage() {
   const { user, refreshUser } = useAuth();
   const { addToast } = useApp();
@@ -41,14 +51,24 @@ export default function OnboardingPage() {
 
   return (
     <div className="onboarding">
-      <div className="auth-logo" style={{ marginBottom: 22 }}>
-        <Sprout size={24} />
-        DietAI
+      <div className="onboarding-brand">
+        <Sprout />
+        <span>DietAI</span>
       </div>
 
+      {/* La barra dei passi porta i suoi nomi: cinque trattini senza etichette dicono
+          quanto manca ma non che cosa manca, e il primo passo di un percorso guidato
+          è sapere dove porta. */}
       <div className="onboarding-steps">
         {steps.map((key, i) => (
           <i key={key} className={i <= step ? 'done' : ''} />
+        ))}
+      </div>
+      <div className="onboarding-steps-labels">
+        {steps.map((key, i) => (
+          <span key={key} className={i === step ? 'ora' : ''}>
+            {ETICHETTE_PASSI[key]}
+          </span>
         ))}
       </div>
 

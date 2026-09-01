@@ -4,8 +4,8 @@
   "description": "La tua dieta, tradotta in ricette e lista della spesa.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f7f4ee",
-  "theme_color": "#4a7c59",
+  "background_color": "#14130f",
+  "theme_color": "#14130f",
   "lang": "it",
   "icons": [
     {

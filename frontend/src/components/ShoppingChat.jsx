@@ -42,7 +42,12 @@ function useKeyboardInset() {
 // Chat "da supermercato": lavora sulla settimana intera, non su un pasto. Quando il
 // backend cambia delle ricette (`list_updated`) avvisa il genitore, che ricarica la
 // lista della spesa perché rifletta i nuovi ingredienti.
-export default function ShoppingChat({ weekId, onClose, onListUpdated }) {
+// `inline`: sul monitor la chat non è un cassetto ma una colonna in pagina, accanto
+// alla lista — è lì che si sta quando si riscrive una ricetta perché le zucchine non
+// si trovano, e un pannello che copre la lista mentre le si parla è il contrario di
+// quello che serve. Sul telefono resta il cassetto: al supermercato lo schermo è uno
+// solo, e la conversazione deve poterselo prendere tutto e poi togliersi di mezzo.
+export default function ShoppingChat({ weekId, onClose, onListUpdated, inline = false }) {
   const { addToast } = useApp();
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState('');
@@ -96,18 +101,19 @@ export default function ShoppingChat({ weekId, onClose, onListUpdated }) {
 
   return (
     <div
-      className="shopping-chat"
+      className={inline ? 'chat-panel shopping-chat-inline' : 'shopping-chat'}
       // Col foglio alzato sopra la tastiera va accorciato anche, o la sua testata
-      // (dove sta la X per chiudere) esce dallo schermo dalla parte opposta.
+      // (dove sta la X per chiudere) esce dallo schermo dalla parte opposta. In
+      // pagina il problema non c'è: la tastiera del telefono non apre questa forma.
       style={
-        keyboard
+        !inline && keyboard
           ? { bottom: keyboard, maxHeight: `calc(100dvh - ${keyboard}px - 12px)` }
           : undefined
       }
     >
       <div className="chat-head">
         <ShoppingCart />
-        Assistente spesa
+        Chiedi alla lista
         {messages.length > 0 && (
           <button
             className="icon-button"
@@ -118,14 +124,18 @@ export default function ShoppingChat({ weekId, onClose, onListUpdated }) {
             <Trash2 size={15} />
           </button>
         )}
-        <button
-          className="icon-button"
-          style={{ marginLeft: messages.length > 0 ? 4 : 'auto' }}
-          onClick={onClose}
-          title="Chiudi"
-        >
-          <X size={16} />
-        </button>
+        {/* In pagina non c'è niente da chiudere: la colonna è parte della schermata,
+            e una X sopra un pannello che non se ne va sarebbe un comando che mente. */}
+        {!inline && (
+          <button
+            className="icon-button"
+            style={{ marginLeft: messages.length > 0 ? 4 : 'auto' }}
+            onClick={onClose}
+            title="Chiudi"
+          >
+            <X size={16} />
+          </button>
+        )}
       </div>
 
       <div className="chat-body" ref={bodyRef}>

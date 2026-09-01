@@ -517,3 +517,105 @@ def test_il_prezzo_segnato_sopravvive_al_seed(client, settimana, db):
     db.refresh(riga)
     assert riga.avg_price_per_unit == pytest.approx(10.00)
     assert riga.price_by_user is True
+
+
+def test_RIPRODUZIONE_prezzo_poi_quantita(client, settimana):
+    pasta = voce(client, "pasta")  # 700 g in lista
+    client.put(f"/api/shopping/items/{pasta['id']}/price", json={"paid": 2.10})
+    res = client.put(f"/api/shopping/items/{pasta['id']}/quantity", json={"quantity": 1000})
+    riga = next(i for c in res.json()["categories"] for i in c["items"] if i["name"] == "pasta")
+    print("DOPO LA QUANTITA:", riga["estimated_price"])
+    assert riga["estimated_price"] == pytest.approx(2.10)
+
+
+def test_RIPRODUZIONE_il_piano_cambia(client, settimana):
+    pasta = voce(client, "pasta")
+    client.put(f"/api/shopping/items/{pasta['id']}/price", json={"paid": 2.10})
+    w = client.get("/api/planning/weeks/next").json()
+    client.post(f"/api/planning/weeks/{w['id']}/generate")
+    riga = voce(client, "pasta")
+    print("DOPO LA GENERAZIONE:", riga["estimated_price"], "per", riga["label"])
+    assert riga["estimated_price"] == pytest.approx(2.10)
+
+
+# ── Il prezzo scritto a mano non si tocca ──────────────────────────────────────
+#
+# Il prezzo di una riga era **ricalcolato** ogni volta dal prezzo al chilo per la
+# quantità del momento: bastava correggere quanto se n'era preso, o rigenerare una
+# ricetta che di quell'ingrediente ne chiede di più, perché la cifra scritta a mano
+# diventasse un'altra. Al supermercato sembrava che l'app cambiasse i prezzi da sé.
+
+
+def test_correggere_la_quantita_non_riscrive_il_prezzo(client, settimana):
+    """Il pacco era da 1 kg e non da 700 g: ho pagato lo stesso 2,10."""
+    pasta = voce(client, "pasta")  # 700 g in lista
+    client.put(f"/api/shopping/items/{pasta['id']}/price", json={"paid": 2.10})
+
+    res = client.put(f"/api/shopping/items/{pasta['id']}/quantity", json={"quantity": 1000})
+
+    riga = next(i for c in res.json()["categories"] for i in c["items"] if i["name"] == "pasta")
+    assert riga["estimated_price"] == pytest.approx(2.10)
+    assert riga["paid_price"] == pytest.approx(2.10)
+    # Al chilo però vuol dire un'altra cosa, e l'app deve impararla giusta.
+    assert riga["unit_price"] == pytest.approx(2.10)
+
+
+def test_il_piano_che_cambia_non_riscrive_il_prezzo(client, settimana):
+    """Generare altre ricette allunga la lista: la cifra pagata resta una cifra."""
+    pasta = voce(client, "pasta")
+    client.put(f"/api/shopping/items/{pasta['id']}/price", json={"paid": 2.10})
+
+    w = client.get("/api/planning/weeks/next").json()
+    client.post(f"/api/planning/weeks/{w['id']}/generate")
+
+    riga = voce(client, "pasta")
+    assert riga["quantity"] > pasta["quantity"]  # di pasta ne serve di più
+    assert riga["estimated_price"] == pytest.approx(2.10)
+
+
+def test_il_prezzo_scritto_conta_nel_totale(client, settimana):
+    prima = client.get("/api/shopping/current").json()["estimated_cost"]
+    pasta = voce(client, "pasta")
+
+    res = client.put(f"/api/shopping/items/{pasta['id']}/price", json={"paid": 2.10})
+
+    dopo = res.json()["estimated_cost"]
+    assert dopo == pytest.approx(round(prima - pasta["estimated_price"] + 2.10, 2))
+
+
+def test_le_altre_righe_restano_stimate(client, settimana):
+    """Il prezzo al chilo imparato serve proprio a quelle: si ricalcolano eccome."""
+    pasta = voce(client, "pasta")
+    client.put(f"/api/shopping/items/{pasta['id']}/price", json={"paid": 7.00})  # 10 €/kg
+
+    w = client.get("/api/planning/weeks/next").json()
+    client.post(f"/api/planning/weeks/{w['id']}/generate")
+    zucchine = voce(client, "zucchine")
+
+    assert zucchine["paid_price"] is None
+    assert zucchine["estimated_price"] is not None
+
+
+def test_togliere_la_spunta_cancella_anche_il_prezzo(client, settimana):
+    """«Non l'ho preso» vuol dire che non l'ho nemmeno pagato."""
+    pasta = voce(client, "pasta")
+    client.put(f"/api/shopping/items/{pasta['id']}/price", json={"paid": 2.10})
+
+    client.put(f"/api/shopping/items/{pasta['id']}/check", json={"is_checked": False})
+
+    riga = voce(client, "pasta")
+    assert riga["paid_price"] is None
+    # Il prezzo al chilo però resta imparato: quello lo si è visto davvero.
+    assert riga["price_by_user"] is True
+    assert riga["estimated_price"] == pytest.approx(2.10)  # 3 €/kg per 700 g
+
+
+def test_cancellare_il_prezzo_toglie_anche_quello_della_riga(client, settimana):
+    pasta = voce(client, "pasta")
+    client.put(f"/api/shopping/items/{pasta['id']}/price", json={"paid": 9.99})
+
+    res = client.put(f"/api/shopping/items/{pasta['id']}/price", json={"paid": None})
+
+    riga = next(i for c in res.json()["categories"] for i in c["items"] if i["name"] == "pasta")
+    assert riga["paid_price"] is None
+

@@ -215,6 +215,9 @@ def rebuild_shopping_list(db: Session, user_id: int) -> ShoppingList:
     }
     checked = {key for key, i in previous.items() if i.is_checked}
     bought = {key: i.bought_quantity for key, i in previous.items() if i.bought_quantity}
+    # E il prezzo scritto a mano è la cosa che meno di tutte si può rifare da soli:
+    # è una cifra letta su uno scaffale.
+    paid = {key: i.paid_price for key, i in previous.items() if i.paid_price is not None}
     db.query(ShoppingListItem).filter(ShoppingListItem.shopping_list_id == lst.id).delete()
 
     estimated_total = 0.0
@@ -227,9 +230,16 @@ def rebuild_shopping_list(db: Session, user_id: int) -> ShoppingList:
 
         ingredient = db.get(Ingredient, ingredient_id)
         # Il costo segue quello che si porta a casa: se il pacco è più grande della
-        # quantità che serve, il conto alla cassa è quello del pacco.
+        # quantità che serve, il conto alla cassa è quello del pacco. A meno che il
+        # prezzo l'utente non l'abbia scritto: quello vale com'è, anche se intanto la
+        # quantità in lista è cambiata perché il piano è cambiato.
+        pagato = paid.get((ingredient_id, unit))
         taken = bought.get((ingredient_id, unit)) or round(net, 2)
-        price = price_for(taken, unit, ingredient.avg_price_per_unit, ingredient.price_unit)
+        price = (
+            pagato
+            if pagato is not None
+            else price_for(taken, unit, ingredient.avg_price_per_unit, ingredient.price_unit)
+        )
         if price:
             estimated_total += price
 
@@ -241,6 +251,7 @@ def rebuild_shopping_list(db: Session, user_id: int) -> ShoppingList:
                 unit=unit,
                 is_checked=(ingredient_id, unit) in checked,
                 bought_quantity=bought.get((ingredient_id, unit)),
+                paid_price=pagato,
                 estimated_price=price,
             )
         )
@@ -320,8 +331,14 @@ def serialize_shopping_list(db: Session, user_id: int, lst: ShoppingList) -> dic
                     else None
                 ),
                 "estimated_price": item.estimated_price,
+                # Quello che l'utente ha scritto per *questa* riga: è la cifra che
+                # ritrova nel campo quando lo riapre, e quella che il totale conta al
+                # posto della stima.
+                "paid_price": item.paid_price,
                 # Un prezzo che l'utente ha segnato allo scaffale vale come dato, uno
-                # del catalogo vale come indizio: la UI li distingue.
+                # del catalogo vale come indizio: la UI li distingue. Il flag sta
+                # sull'ingrediente perché il prezzo al chilo imparato vale per tutte
+                # le liste, anche dove nessuno ha scritto niente.
                 "price_by_user": ingredient.price_by_user,
                 "last_paid_at": (
                     ingredient.last_paid_at.isoformat() if ingredient.last_paid_at else None

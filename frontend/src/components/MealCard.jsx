@@ -11,7 +11,6 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import MacroBar from './MacroBar';
 
 // Card di un incrocio giorno × pasto: sul telefono è una riga alta ~90px, nella
 // griglia settimanale una cella incolonnata. Il markup è lo stesso, cambia il verso
@@ -44,7 +43,13 @@ export default function MealCard({
     <div
       className={`meal-card ${meal.is_skipped ? 'skipped' : ''} ${
         meal.is_followed === true ? 'followed' : ''
-      } ${meal.is_recurring || meal.self_managed ? 'quiet' : ''}`}
+      } ${meal.is_recurring || meal.self_managed ? 'quiet' : ''} ${
+        // Casella da riempire: contorno tratteggiato invece di fondo pieno. In una
+        // settimana a metà è l'unica cosa che si cerca — dove manca ancora qualcosa —
+        // e una card piena e una vuota che si distinguono per una riga di testo
+        // obbligano a leggerle tutte e ventotto.
+        !recipe && !off && !meal.self_managed ? 'da-riempire' : ''
+      }`}
       style={style}
     >
       <Link className="meal-main" to={`/meals/${meal.id}`}>
@@ -84,17 +89,18 @@ export default function MealCard({
           <div className="meal-empty">Da riempire</div>
         )}
 
-        {/* Numeri e stato sull'ultima riga, appesa in basso: così le celle di una
-            stessa riga della griglia allineano i piedi anche se un titolo va a capo. */}
+        {/* Nel piede **solo le calorie**, più la parola di stato. Ci stavano anche i
+            minuti e il filetto dei macro: in una colonna da 150px sono tre cose che
+            si contendono la stessa riga, e su ventotto celle diventano una nebbia di
+            numeri sopra la quale il piatto non si legge più. Il tempo e i macro
+            stanno nel pasto, che è a un clic.
+
+            La riga è appesa in basso, così le celle di una stessa riga della griglia
+            allineano i piedi anche se un titolo va a capo. */}
         <div className="meal-foot">
           <span className="meal-facts">
-            {recipe
-              ? `${recipe.calories} kcal · ${recipe.prep_time_min + recipe.cook_time_min} min`
-              : `${meal.target.calories} kcal`}
+            {recipe ? `${recipe.calories} kcal` : `${meal.target.calories} kcal`}
           </span>
-          {recipe && !off && (
-            <MacroBar protein={recipe.protein_g} carbs={recipe.carbs_g} fat={recipe.fat_g} />
-          )}
           {/* La parola resta, il colore la conferma: è la risposta alla domanda
               "com'è andata?", e si cerca scorrendo la settimana. */}
           {meal.is_followed === true && (

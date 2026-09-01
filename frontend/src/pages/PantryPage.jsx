@@ -58,47 +58,56 @@ export default function PantryPage() {
   };
 
   return (
-    // Un modulo e una lista di righe: sono le due cose che dallo spazio in più non
-    // guadagnano niente — il nome finirebbe solo più lontano dalla sua quantità.
-    <div className="page-narrow">
+    // La riga di una scorta è corta — nome, reparto, quantità — e su un monitor una
+    // colonna sola vorrebbe dire mezzo metro di vuoto a destra e trenta voci da
+    // scorrere. Un tetto ci vuole lo stesso: oltre, il nome finirebbe troppo lontano
+    // dalla sua quantità.
+    <div style={{ maxWidth: 1100 }}>
       <div className="page-header">
         <div>
           <h1 className="page-title">Dispensa</h1>
           <p className="page-subtitle">
-            Quello che hai già in casa: viene sottratto dalla lista della spesa e proposto
-            per primo alle ricette.
+            Si sottrae dalla lista della spesa · {items.length}{' '}
+            {items.length === 1 ? 'voce' : 'voci'}
           </p>
         </div>
       </div>
 
       <div className="card">
         <div className="card-title">Aggiungi quello che hai</div>
-        <p className="field-hint" style={{ marginBottom: 14 }}>
-          Si riempie da sola quando segni una spesa come fatta: gli articoli spuntati
-          finiscono qui. A mano serve per quello che era già in casa prima — il pacco di
-          riso aperto, i legumi in barattolo, quello che ti hanno regalato.
-        </p>
 
-        <div className="inline-form">
-          <IngredientInput value={draft} onChange={setDraft} />
+        {/* La stessa griglia della riga in modifica: sono la stessa riga in due
+            momenti — quella che si aggiunge e quella che si corregge — e devono
+            assomigliarsi. */}
+        <div className="pantry-edit aggiungi">
+          <IngredientInput value={draft} onChange={setDraft} placeholder="Nome dell'alimento…" />
           <input
             type="number"
+            inputMode="decimal"
             placeholder="Quantità"
             value={quantity}
             onChange={(e) => setQuantity(e.target.value)}
-            style={{ maxWidth: 110 }}
           />
-          <select value={unit} onChange={(e) => setUnit(e.target.value)} style={{ maxWidth: 100 }}>
+          <select value={unit} onChange={(e) => setUnit(e.target.value)}>
             <option value="g">g</option>
             <option value="ml">ml</option>
             <option value="unità">unità</option>
           </select>
-          <button className="btn btn-secondary" onClick={add}>
+          <button className="btn btn-primary" onClick={add}>
             Aggiungi
           </button>
         </div>
+        <p className="field-hint" style={{ marginTop: 12 }}>
+          Si riempie da sola quando segni una spesa come fatta: gli articoli spuntati
+          finiscono qui. A mano serve per quello che era già in casa prima — il pacco di
+          riso aperto, i legumi in barattolo, quello che ti hanno regalato.
+        </p>
+      </div>
 
-        <div className="list-rows" style={{ marginTop: 14 }}>
+      {/* Le scorte non stanno dentro un riquadro: sono una lista, e il riquadro del
+          modulo qui sopra basta a separarle da lui. In due colonne perché la riga è
+          corta e le voci sono tante. */}
+      <div className="pantry-list">
           {items.map((i) =>
             editing === i.id ? (
               <PantryRowEditor
@@ -144,7 +153,6 @@ export default function PantryPage() {
               ricette.
             </p>
           )}
-        </div>
       </div>
     </div>
   );
@@ -188,26 +196,28 @@ function PantryRowEditor({ item, onDone, onCancel, innerRef }) {
   };
 
   return (
-    <div className="list-row" ref={innerRef}>
-      <div className="inline-form" style={{ flex: 1 }}>
-        <IngredientInput value={name} onChange={setName} />
-        <input
-          type="number"
-          placeholder="Quantità"
-          value={quantity}
-          onChange={(e) => setQuantity(e.target.value)}
-          style={{ maxWidth: 110 }}
-        />
-        <select value={unit} onChange={(e) => setUnit(e.target.value)} style={{ maxWidth: 100 }}>
-          <option value="g">g</option>
-          <option value="ml">ml</option>
-          <option value="unità">unità</option>
-        </select>
-      </div>
-      <button className="icon-button" onClick={save} disabled={busy} title="Salva">
+    // Una **griglia**, non una riga che va a capo: nome, quantità, unità e i due
+    // comandi hanno ognuno la sua colonna e si stringono insieme. Con `flex-wrap`
+    // in una colonna da 320px il nome scendeva sotto e i pulsanti restavano
+    // appesi a destra della riga di sopra, con l'indentazione sfasata.
+    <div className="pantry-edit" ref={innerRef}>
+      <IngredientInput value={name} onChange={setName} placeholder="Nome dell'alimento…" />
+      <input
+        type="number"
+        inputMode="decimal"
+        placeholder="Quantità"
+        value={quantity}
+        onChange={(e) => setQuantity(e.target.value)}
+      />
+      <select value={unit} onChange={(e) => setUnit(e.target.value)}>
+        <option value="g">g</option>
+        <option value="ml">ml</option>
+        <option value="unità">unità</option>
+      </select>
+      <button className="pantry-edit-ok" onClick={save} disabled={busy} title="Salva">
         <Check size={16} />
       </button>
-      <button className="icon-button" onClick={onCancel} disabled={busy} title="Annulla">
+      <button className="pantry-edit-no" onClick={onCancel} disabled={busy} title="Annulla">
         <X size={16} />
       </button>
     </div>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { Link, NavLink, Navigate, useParams } from 'react-router-dom';
 import { KeyRound, ShieldOff, Sparkles, Trash2, UserPlus, X } from 'lucide-react';
 import { api, formatDate } from '../api';
@@ -16,11 +16,15 @@ import NormalizationSettings from '../components/NormalizationSettings';
 // Due schede sono dell'amministratore soltanto: i modelli AI (li paga lui, e valgono
 // per tutti) e gli utenti. Non è una questione di ordine — chi non amministra, quelle
 // rotte le riceve con un 403.
+// Le schede sono sette e non sono tutte la stessa cosa: le prime tre le tocca
+// chiunque, quelle in mezzo solo chi paga la chiave. Il titoletto le separa invece
+// di lasciarle in un elenco unico dove «Modelli AI» sta accanto ad «Alimenti
+// esclusi» come se fossero due preferenze qualsiasi.
 const TABS = [
   { key: 'preferences', label: 'Preferenze' },
   { key: 'base', label: 'Ingredienti di base' },
   { key: 'excluded', label: 'Alimenti esclusi' },
-  { key: 'normalization', label: 'Nomi e accorpamenti', adminOnly: true },
+  { key: 'normalization', label: 'Nomi e accorpamenti', adminOnly: true, apre: 'Amministrazione' },
   { key: 'models', label: 'Modelli AI', adminOnly: true },
   { key: 'users', label: 'Utenti', adminOnly: true },
   { key: 'account', label: 'Account' },
@@ -54,13 +58,15 @@ export default function SettingsPage() {
       <div className="settings-layout">
         <nav className="settings-nav">
           {tabs.map((t) => (
-            <NavLink
-              key={t.key}
-              to={`/settings/${t.key}`}
-              className={({ isActive }) => (isActive ? 'active' : '')}
-            >
-              {t.label}
-            </NavLink>
+            <Fragment key={t.key}>
+              {t.apre && <div className="settings-nav-section">{t.apre}</div>}
+              <NavLink
+                to={`/settings/${t.key}`}
+                className={({ isActive }) => (isActive ? 'active' : '')}
+              >
+                {t.label}
+              </NavLink>
+            </Fragment>
           ))}
         </nav>
 
@@ -206,6 +212,17 @@ function ExcludedTab() {
 
 // ── Preferenze ─────────────────────────────────────────────────────────────────
 
+// L'ultima tacca del cursore del tempo vuol dire «senza limite»: sopra i 90 minuti
+// una ricetta non è più una cena della settimana, e mettere un secondo comando per
+// dire «non mi interessa» quando il gesto è lo stesso sarebbe un comando in più.
+const TEMPO_LIBERO = 90;
+
+const BUDGET = [
+  { key: 'economico', label: 'Basso' },
+  { key: 'medio', label: 'Medio' },
+  { key: 'premium', label: 'Alto' },
+];
+
 function PreferencesTab() {
   const { addToast } = useApp();
   const [prefs, setPrefs] = useState(null);
@@ -230,68 +247,94 @@ function PreferencesTab() {
     }
   };
 
+  // Il cursore lavora su un numero, la preferenza ammette anche «nessun limite».
+  // Il fondo scala (`TEMPO_LIBERO`) è l'ultima tacca: portarlo in fondo vuol dire
+  // «non mi interessa», che è la stessa cosa detta con lo stesso gesto — invece di
+  // una casella «senza limite» accanto a un cursore che allora non si sa cosa dica.
+  const tempo = prefs.max_prep_time_min ?? TEMPO_LIBERO;
+
   return (
     <div className="card">
       <div className="card-title">Preferenze di cucina</div>
+      <p className="field-hint" style={{ marginBottom: 24 }}>
+        Entrano nel prompt di ogni generazione: quanto tempo hai e quanto vuoi spendere.
+        Cambiarle cambia le ricette della prossima settimana.
+      </p>
 
-      <div className="toggle-row">
-        <div className="toggle-text">
-          <strong>Ingredienti di stagione</strong>
-          <span>Costano meno, sanno di più e la spesa cambia con i mesi</span>
+      <div className="field">
+        <div className="range-head">
+          <label className="field-label" htmlFor="tempo">
+            Tempo massimo di preparazione
+          </label>
+          <span className="range-value">
+            {tempo >= TEMPO_LIBERO ? 'senza limite' : `${tempo} min`}
+          </span>
         </div>
-        <button
-          className={`toggle ${prefs.prefer_seasonal ? 'on' : ''}`}
+        <input
+          id="tempo"
+          type="range"
+          min="10"
+          max={TEMPO_LIBERO}
+          step="5"
+          value={tempo}
           disabled={busy}
-          onClick={() => save({ ...prefs, prefer_seasonal: !prefs.prefer_seasonal })}
-        >
-          <i />
-        </button>
-      </div>
-
-      <div className="toggle-row">
-        <div className="toggle-text">
-          <strong>Cucina italiana</strong>
-          <span>Piatti di casa con ingredienti da supermercato italiano</span>
+          onChange={(e) => {
+            const n = Number(e.target.value);
+            save({ ...prefs, max_prep_time_min: n >= TEMPO_LIBERO ? null : n });
+          }}
+        />
+        <div className="range-ends">
+          <span>10 min</span>
+          <span>senza limite</span>
         </div>
-        <button
-          className={`toggle ${prefs.prefer_italian ? 'on' : ''}`}
-          disabled={busy}
-          onClick={() => save({ ...prefs, prefer_italian: !prefs.prefer_italian })}
-        >
-          <i />
-        </button>
-      </div>
-
-      <div className="field" style={{ marginTop: 18 }}>
-        <label className="field-label">Tempo massimo di preparazione</label>
-        <select
-          value={prefs.max_prep_time_min ?? ''}
-          onChange={(e) =>
-            save({
-              ...prefs,
-              max_prep_time_min: e.target.value ? Number(e.target.value) : null,
-            })
-          }
-        >
-          <option value="">Nessun limite</option>
-          <option value="15">15 minuti</option>
-          <option value="30">30 minuti</option>
-          <option value="45">45 minuti</option>
-          <option value="60">1 ora</option>
-        </select>
       </div>
 
       <div className="field">
         <label className="field-label">Budget</label>
-        <select
-          value={prefs.budget_level ?? ''}
-          onChange={(e) => save({ ...prefs, budget_level: e.target.value || null })}
-        >
-          <option value="">Non specificato</option>
-          <option value="economico">Economico</option>
-          <option value="medio">Medio</option>
-          <option value="premium">Senza pensieri</option>
-        </select>
+        <div className="segmented">
+          {BUDGET.map(({ key, label }) => (
+            <button
+              key={label}
+              className={(prefs.budget_level ?? null) === key ? 'on' : ''}
+              disabled={busy}
+              onClick={() => save({ ...prefs, budget_level: key })}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Gli interruttori stanno ognuno nel suo riquadro, con la levetta a sinistra:
+          sono due frasi che si accendono, non due voci di un elenco. */}
+      <div className="field">
+        <label className="field-label">Come devono essere le ricette</label>
+        <div className="switch-row">
+          <button
+            className={`toggle ${prefs.prefer_seasonal ? 'on' : ''}`}
+            disabled={busy}
+            onClick={() => save({ ...prefs, prefer_seasonal: !prefs.prefer_seasonal })}
+          >
+            <i />
+          </button>
+          <div className="toggle-text">
+            <strong>Frutta e verdura di stagione</strong>
+            <span>Costano meno, sanno di più, e la spesa cambia coi mesi</span>
+          </div>
+        </div>
+        <div className="switch-row">
+          <button
+            className={`toggle ${prefs.prefer_italian ? 'on' : ''}`}
+            disabled={busy}
+            onClick={() => save({ ...prefs, prefer_italian: !prefs.prefer_italian })}
+          >
+            <i />
+          </button>
+          <div className="toggle-text">
+            <strong>Cucina italiana</strong>
+            <span>Piatti di casa, con ingredienti da supermercato italiano</span>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChefHat, Clock, Heart, Search } from 'lucide-react';
+import { ChefHat, Heart, Search, UtensilsCrossed } from 'lucide-react';
 import { api } from '../api';
 import { useApp } from '../App';
 import EmptyState from '../components/EmptyState';
@@ -52,25 +52,41 @@ export default function RecipesPage() {
         <div>
           <h1 className="page-title">Ricettario</h1>
           <p className="page-subtitle">
-            Tutto quello che è passato dalla tua cucina. I voti guidano le generazioni
-            future.
+            {data ? `${data.total} ricette · ` : ''}i voti guidano le generazioni future
           </p>
+        </div>
+        {/* La ricerca sta nella testata, non in mezzo ai filtri: cercare per nome e
+            filtrare per voto sono due gesti diversi — il primo si fa quando si sa già
+            cosa si vuole, gli altri per guardarsi intorno. */}
+        <div className="page-actions">
+          <div className="search-field">
+            <Search />
+            <input
+              type="text"
+              className="search-field-input"
+              placeholder="Cerca una ricetta..."
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+            />
+          </div>
         </div>
       </div>
 
       <div className="filters">
-        <div className="search-field">
-          <Search />
-          <input
-            type="text"
-            placeholder="Cerca una ricetta..."
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-          />
-        </div>
+        <button
+          className={`chip ${!onlyFavorites && minRating === null && difficulty === null ? 'active' : ''}`}
+          onClick={() => {
+            setOnlyFavorites(false);
+            setMinRating(null);
+            setDifficulty(null);
+            setPage(1);
+          }}
+        >
+          Tutte
+        </button>
 
         <button
           className={`chip ${onlyFavorites ? 'active' : ''}`}
@@ -125,16 +141,25 @@ export default function RecipesPage() {
           <div className="recipe-grid">
             {data.items.map((r) => (
               <Link key={r.id} to={`/recipes/${r.id}`} className="recipe-card">
-                <div className="recipe-card-title">{r.title}</div>
-                <div className="meal-meta">
-                  <span>{r.calories} kcal</span>
-                  <span>
-                    <Clock size={12} /> {r.prep_time_min + r.cook_time_min} min
-                  </span>
-                  {r.is_favorite && <Heart size={13} color="var(--terracotta)" fill="currentColor" />}
+                {/* Il piatto non ha una fotografia: al suo posto un segnaposto
+                    dichiarato. In una griglia da dieci a farsi riconoscere è il nome,
+                    che infatti è la cosa più grande della card. */}
+                <div className="dish">
+                  <UtensilsCrossed />
+                  {r.is_favorite && (
+                    <span className="dish-fav" title="Preferita">
+                      <Heart size={13} fill="currentColor" />
+                    </span>
+                  )}
                 </div>
+                <div className="recipe-card-title">{r.title}</div>
                 <MacroBar protein={r.protein_g} carbs={r.carbs_g} fat={r.fat_g} />
-                <StarRating value={r.rating} readOnly />
+                <div className="recipe-card-foot">
+                  <StarRating value={r.rating} readOnly />
+                  <span className="meal-facts">
+                    {r.calories} kcal · {r.prep_time_min + r.cook_time_min} min
+                  </span>
+                </div>
               </Link>
             ))}
           </div>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import {
   ArrowLeft,
   BookOpen,
@@ -192,12 +192,15 @@ export default function MealDetailPage() {
 
   return (
     <>
-      <div className="page-header">
+      {/* A casella piena questa testata non c'è: il titolo della pagina è il nome
+          del piatto, ed è scritto sul foglio, con sopra la stessa riga di contesto e
+          accanto il tondo per tornare indietro. Tenerla vorrebbe dire dire due volte
+          dove ci si trova. A casella vuota invece il foglio non c'è, e allora è
+          l'unica cosa che dice di che pasto si tratta. */}
+      {!meal.recipe && (
+      <div className="page-header page-header-magra">
         <div>
-          <button className="btn btn-ghost" onClick={tornaIndietro}>
-            <ArrowLeft size={16} /> Indietro
-          </button>
-          <h1 className="page-title" style={{ marginTop: 6 }}>
+          <h1 className="page-title">
             {meal.slot_name} · {meal.day_name}
           </h1>
           <p className="page-subtitle">
@@ -206,55 +209,8 @@ export default function MealDetailPage() {
             {meal.target.notes ? ` · ${meal.target.notes}` : ''}
           </p>
         </div>
-
-        <div className="page-actions">
-          {meal.recipe && (
-            <>
-              <button
-                className={`btn btn-secondary ${meal.recipe.is_favorite ? 'active' : ''}`}
-                onClick={toggleFavorite}
-                title="Aggiungi ai preferiti"
-              >
-                <Heart
-                  size={16}
-                  fill={meal.recipe.is_favorite ? 'currentColor' : 'none'}
-                  color={meal.recipe.is_favorite ? 'var(--terracotta)' : 'currentColor'}
-                />
-                Preferita
-              </button>
-              <button
-                className="btn btn-secondary"
-                onClick={toggleRecurring}
-                disabled={frozen}
-                title={
-                  meal.is_recurring
-                    ? 'Smetti di ripeterlo: lo toglie anche dai giorni successivi che lo hanno ricevuto'
-                    : 'Ripeti questo pasto ogni settimana'
-                }
-              >
-                <Pin size={16} color={meal.is_recurring ? 'var(--accent)' : 'currentColor'} />
-                {meal.is_recurring ? 'Fisso' : 'Rendi fisso'}
-              </button>
-            </>
-          )}
-          {/* Solo a casella piena: quando è vuota le vie per riempirla stanno tutte e
-              tre in fila qui sotto, e un quarto pulsante quassù sarebbe il gemello di
-              uno di quelli — stessa azione, nome quasi uguale, due posti diversi. */}
-          {meal.recipe && (
-            <button
-              className="btn btn-primary"
-              onClick={() => setGenerator(true)}
-              disabled={busy || frozen}
-            >
-              {/* Scintille e non la freccia circolare: qui il verde e questa icona
-                  vogliono dire "chiama il modello", ed è la stessa coppia dei due
-                  pulsanti a casella vuota. */}
-              {busy ? <span className="spinner-inline" /> : <Sparkles size={16} />}
-              Rigenera
-            </button>
-          )}
-        </div>
       </div>
+      )}
 
       {skipped && (
         <div className="notice notice-skip">
@@ -297,47 +253,94 @@ export default function MealDetailPage() {
                 target={meal.target}
                 onSubstitute={frozen ? null : substitute}
                 substituting={substituting}
-              />
-
-              <div className="card" style={{ marginTop: 14 }}>
-                <div className="card-title">Com'è andata?</div>
-                <div className="andata-row">
-                  {/* Sul telefono queste due stanno nella barra in fondo, sotto il
-                      pollice: qui sarebbero in fondo a una pagina lunga un metro. */}
-                  <div className="andata-answers">
-                    <button
-                      className={`btn btn-sm ${
-                        meal.is_followed === true ? 'btn-primary' : 'btn-secondary'
-                      }`}
-                      onClick={() => setFollowed(true)}
-                    >
-                      <Check size={14} /> L'ho seguito
-                    </button>
-                    <button
-                      className={`btn btn-sm ${
-                        meal.is_followed === false ? 'btn-moved' : 'btn-secondary'
-                      }`}
-                      onClick={() => setFollowed(false)}
-                    >
-                      <X size={14} /> Ho mangiato altro
-                    </button>
-                  </div>
-                  <div className="andata-rating">
-                    <span>Voto</span>
-                    <StarRating value={meal.recipe.rating} onChange={rate} />
-                  </div>
-                </div>
-
-                {!frozen && (
-                  <button
-                    className="btn btn-ghost btn-sm"
-                    style={{ marginTop: 12 }}
-                    onClick={() => setConfirmClear(true)}
-                  >
-                    <Trash2 size={14} /> Svuota questa casella
+                eyebrow={`${meal.slot_name} di ${meal.day_name.toLowerCase()} ${formatDate(
+                  meal.date,
+                  { day: 'numeric', month: 'long' }
+                )}`}
+                indietro={
+                  <button className="recipe-back" onClick={tornaIndietro} title="Indietro">
+                    <ArrowLeft />
                   </button>
-                )}
-              </div>
+                }
+                azioni={
+                  <>
+                    {/* Le due risposte aprono la riga: sono la ragione per cui il
+                        pasto si apre la sera, e stanno alla fine del procedimento —
+                        cioè nel punto della pagina in cui si è quando si è cucinato.
+                        Sul telefono le stesse due sono anche nella barra in fondo
+                        (`.meal-bar`), e lì queste si nascondono per non doppiarle. */}
+                    <div className="andata-answers">
+                      <button
+                        className={`btn ${
+                          meal.is_followed === true ? 'btn-primary' : 'btn-secondary'
+                        }`}
+                        onClick={() => setFollowed(true)}
+                      >
+                        <Check size={16} /> L'ho seguito
+                      </button>
+                      <button
+                        className={`btn ${
+                          meal.is_followed === false ? 'btn-moved' : 'btn-secondary'
+                        }`}
+                        onClick={() => setFollowed(false)}
+                      >
+                        <X size={16} /> Ho mangiato altro
+                      </button>
+                    </div>
+
+                    <div className="andata-rating spinta">
+                      <span>Voto</span>
+                      <StarRating value={meal.recipe.rating} onChange={rate} />
+                    </div>
+
+                    <button
+                      className="btn btn-secondary"
+                      onClick={toggleRecurring}
+                      disabled={frozen}
+                      title={
+                        meal.is_recurring
+                          ? 'Smetti di ripeterlo: lo toglie anche dai giorni successivi che lo hanno ricevuto'
+                          : 'Ripeti questo pasto ogni settimana'
+                      }
+                    >
+                      <Pin size={16} color={meal.is_recurring ? 'var(--accent)' : 'currentColor'} />
+                      {meal.is_recurring ? 'Fisso' : 'Rendi fisso'}
+                    </button>
+
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => setGenerator(true)}
+                      disabled={busy || frozen}
+                    >
+                      {/* Scintille e non la freccia circolare: qui l'icona vuol dire
+                          "chiama il modello", ed è la stessa coppia dei due pulsanti
+                          a casella vuota. */}
+                      {busy ? <span className="spinner-inline" /> : <Sparkles size={16} />}
+                      Rigenera
+                    </button>
+
+                    <button
+                      className="btn btn-secondary btn-icon"
+                      onClick={toggleFavorite}
+                      title={meal.recipe.is_favorite ? 'Togli dai preferiti' : 'Aggiungi ai preferiti'}
+                    >
+                      <Heart
+                        size={17}
+                        fill={meal.recipe.is_favorite ? 'currentColor' : 'none'}
+                        color={meal.recipe.is_favorite ? 'var(--terracotta)' : 'currentColor'}
+                      />
+                    </button>
+
+                    {!frozen && (
+                      <div className="recipe-actions-quiet">
+                        <button className="btn btn-ghost btn-sm" onClick={() => setConfirmClear(true)}>
+                          <Trash2 size={14} /> Svuota questa casella
+                        </button>
+                      </div>
+                    )}
+                  </>
+                }
+              />
             </>
           ) : (
             <EmptyState

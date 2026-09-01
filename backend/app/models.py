@@ -581,6 +581,12 @@ class ShoppingListItem(Base):
     # misura, e per 140 g di tacchino si porta a casa il pacco da 400. NULL = ho preso
     # quello che c'era scritto. È questo che finisce in dispensa a spesa fatta.
     bought_quantity = Column(Float)
+    # Quanto è costato davvero questa riga, se l'utente l'ha scritto. È un fatto — la
+    # cifra sullo scaffale o sullo scontrino — e per questo si conserva com'è: il
+    # prezzo al chilo che se ne ricava (`Ingredient.avg_price_per_unit`) serve a
+    # stimare le righe che un prezzo non ce l'hanno, non a riscrivere questa.
+    paid_price = Column(Float)
+    # Quanto costa la riga: il prezzo pagato se c'è, altrimenti la stima dal catalogo.
     estimated_price = Column(Float)
 
     __table_args__ = (

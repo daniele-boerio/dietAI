@@ -71,13 +71,16 @@ def check_item(
     db: Session = Depends(get_db),
 ):
     """Spunta un articolo."""
-    row, _lst, _week = _own_item(db, user_id, item_id)
+    row, lst, _week = _own_item(db, user_id, item_id)
 
     row.is_checked = body.is_checked
-    # Togliere la spunta vuol dire "non l'ho preso": anche la quantità che avevo
-    # segnato non vale più.
+    # Togliere la spunta vuol dire "non l'ho preso": la quantità che avevo segnato non
+    # vale più, e nemmeno la cifra che avevo scritto di averci speso. Il prezzo al
+    # chilo imparato resta sull'ingrediente: quello lo si è visto davvero.
     if not body.is_checked:
         row.bought_quantity = None
+        row.paid_price = None
+        _refresh_prices(db, lst)
     db.commit()
     return {"id": row.id, "is_checked": row.is_checked}
 
@@ -103,19 +106,48 @@ def set_bought_quantity(
     if body.quantity is not None:
         row.is_checked = True
 
-    # Il costo della riga segue quello che si porta a casa, e con esso il totale.
+    # La cifra pagata resta quella: è uno scontrino, non una stima. Al chilo però vuol
+    # dire un'altra cosa — se il pacco era da 400 g e non da 140, l'app deve impararlo
+    # giusto — quindi il prezzo unitario si rifà sulla quantità nuova.
+    if row.paid_price is not None:
+        _impara_prezzo_unitario(db, row)
+
+    # Il costo delle righe *senza* un prezzo scritto segue quello che si porta a casa.
     _refresh_prices(db, lst)
     db.commit()
 
     return serialize_shopping_list(db, user_id, lst)
 
 
-def _refresh_prices(db: Session, lst: ShoppingList) -> None:
-    """Ricalcola il costo di ogni riga e il totale della lista.
+def _impara_prezzo_unitario(db: Session, row: ShoppingListItem) -> bool:
+    """Dal prezzo scritto sulla riga ricava il prezzo al chilo dell'ingrediente.
 
-    Il prezzo di una riga dipende da due cose che cambiano mentre si fa la spesa: la
-    quantità che si è presa e il prezzo che si è pagato. Rifarli tutti costa una query
-    e toglie il dubbio su quale riga fosse rimasta indietro.
+    È l'unica cosa che la cifra pagata insegna al resto dell'app: da lì in poi tutte
+    le liste stimano con quella invece che con la media nazionale del catalogo.
+    Restituisce False quando dalla quantità non si ricava niente (un'unità che non si
+    converte): chi scrive il prezzo lo dice all'utente, chi corregge la quantità si
+    tiene il prezzo di prima — meglio uno vecchio che uno inventato.
+    """
+    ingredient = db.get(Ingredient, row.ingredient_id)
+    learned = unit_price_from(
+        row.paid_price, row.bought_quantity or row.total_quantity, row.unit
+    )
+    if not learned:
+        return False
+    ingredient.avg_price_per_unit, ingredient.price_unit = learned
+    ingredient.price_by_user = True
+    ingredient.last_paid_at = datetime.now(timezone.utc)
+    return True
+
+
+def _refresh_prices(db: Session, lst: ShoppingList) -> None:
+    """Ricalcola il costo delle righe che un prezzo scritto non ce l'hanno, e il totale.
+
+    Quello che l'utente ha battuto sulla riga non si tocca mai: è la cifra che ha sotto
+    gli occhi, e ricalcolarla dal prezzo al chilo per la quantità del momento voleva
+    dire riscrivergliela addosso ogni volta che la quantità cambiava — correggendo il
+    pacco preso, o semplicemente rigenerando una ricetta che di quell'ingrediente ne
+    chiede di più. Al supermercato sembrava che l'app cambiasse i prezzi da sé.
     """
     totale = 0.0
     rows = (
@@ -125,11 +157,15 @@ def _refresh_prices(db: Session, lst: ShoppingList) -> None:
         .all()
     )
     for item, ingredient in rows:
-        item.estimated_price = price_for(
-            item.bought_quantity or item.total_quantity,
-            item.unit,
-            ingredient.avg_price_per_unit,
-            ingredient.price_unit,
+        item.estimated_price = (
+            item.paid_price
+            if item.paid_price is not None
+            else price_for(
+                item.bought_quantity or item.total_quantity,
+                item.unit,
+                ingredient.avg_price_per_unit,
+                ingredient.price_unit,
+            )
         )
         totale += item.estimated_price or 0
     lst.estimated_cost = round(totale, 2) if totale else None
@@ -157,20 +193,18 @@ def set_paid_price(
     ingredient = db.get(Ingredient, row.ingredient_id)
 
     if body.paid is None:
+        row.paid_price = None
         entry = catalog_entry(ingredient.name)
         ingredient.avg_price_per_unit = entry[1] if entry else None
         ingredient.price_unit = entry[2] if entry else None
         ingredient.price_by_user = False
         ingredient.last_paid_at = None
     else:
-        learned = unit_price_from(
-            body.paid, row.bought_quantity or row.total_quantity, row.unit
-        )
-        if not learned:
+        # La cifra si salva sulla riga così com'è, e resta quella: il prezzo al chilo
+        # che se ne ricava serve a stimare le altre liste, non a riscrivere questa.
+        row.paid_price = body.paid
+        if not _impara_prezzo_unitario(db, row):
             raise HTTPException(400, "Non riesco a ricavare un prezzo da questa quantità.")
-        ingredient.avg_price_per_unit, ingredient.price_unit = learned
-        ingredient.price_by_user = True
-        ingredient.last_paid_at = datetime.now(timezone.utc)
 
     _refresh_prices(db, lst)
     db.commit()

@@ -2,14 +2,14 @@ import { formatNumber } from '../api';
 
 // Barra proporzionale P/C/G. Le proporzioni sono per grammi, non per calorie: è la
 // lettura immediata ("quante proteine ha questo piatto") che serve guardando la card.
-export default function MacroBar({ protein, carbs, fat, legend = false }) {
+export default function MacroBar({ protein, carbs, fat, legend = false, className = '' }) {
   const total = (protein || 0) + (carbs || 0) + (fat || 0);
   if (!total) return null;
 
   const pct = (v) => `${((v / total) * 100).toFixed(1)}%`;
 
   return (
-    <div>
+    <div className={className}>
       <div className="macro-bar">
         <span className="macro-p" style={{ width: pct(protein) }} />
         <span className="macro-c" style={{ width: pct(carbs) }} />

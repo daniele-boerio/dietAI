@@ -111,15 +111,18 @@ function AuthenticatedApp() {
   // Solo il piano, per ora: è la pagina che si scorre a lungo con una mano sola.
   const testataPropria = pathname === '/plan' || pathname.startsWith('/plan/');
 
+  // Due nomi per voce: quello intero per il cassetto del telefono, quello corto per
+  // la stecca di icone del desktop, dove sotto l'icona ci stanno sei lettere. Non
+  // sono due menu diversi — è la stessa voce, con l'etichetta che si accorcia.
   const navLinks = [
-    { to: '/', icon: LayoutDashboard, label: 'Oggi', end: true },
-    { to: '/plan', icon: CalendarDays, label: 'Settimana' },
-    { to: '/shopping', icon: ShoppingCart, label: 'Spesa' },
+    { to: '/', icon: LayoutDashboard, label: 'Oggi', short: 'Oggi', end: true },
+    { to: '/plan', icon: CalendarDays, label: 'Settimana', short: 'Sett.' },
+    { to: '/shopping', icon: ShoppingCart, label: 'Spesa', short: 'Spesa' },
     // La dispensa sta accanto alla spesa perché ne è l'altra metà: la lista è quello
     // che manca, la dispensa quello che c'è già — e la seconda si sottrae dalla prima.
-    { to: '/pantry', icon: Refrigerator, label: 'Dispensa' },
-    { to: '/recipes', icon: ChefHat, label: 'Ricettario' },
-    { to: '/tracking', icon: TrendingUp, label: 'Andamento' },
+    { to: '/pantry', icon: Refrigerator, label: 'Dispensa', short: 'Disp.' },
+    { to: '/recipes', icon: ChefHat, label: 'Ricettario', short: 'Ricette' },
+    { to: '/tracking', icon: TrendingUp, label: 'Andamento', short: 'Trend' },
   ];
 
   return (
@@ -147,41 +150,52 @@ function AuthenticatedApp() {
           }}
         >
           <div className="sidebar-logo">
-            <Sprout size={22} />
-            DietAI
+            <Sprout />
+            <span>DietAI</span>
           </div>
 
           <div className="sidebar-nav">
-            {navLinks.map(({ to, icon: Icon, label, end }) => (
+            {navLinks.map(({ to, icon: Icon, label, short, end }) => (
               <NavLink
                 key={to}
                 to={to}
                 end={end}
+                title={label}
                 className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
               >
                 <Icon />
-                <span>{label}</span>
+                <span className="sidebar-label">{label}</span>
+                <span className="sidebar-short">{short}</span>
               </NavLink>
             ))}
 
-            <div className="sidebar-section">Configurazione</div>
-            <NavLink
-              to="/diet"
-              className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
-            >
-              <Salad />
-              <span>La mia dieta</span>
-            </NavLink>
-            {/* Le impostazioni sono più di una scheda: la voce punta alla pagina, non
-                a una scheda in particolare, o le due voci del menu si accenderebbero
-                a vicenda a seconda di dove sei dentro. */}
-            <NavLink
-              to="/settings"
-              className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
-            >
-              <Settings />
-              <span>Impostazioni</span>
-            </NavLink>
+            {/* Quello che si imposta una volta sta in fondo, staccato: nella stecca
+                lo separa lo spazio vuoto invece del titoletto «Configurazione», che
+                sarebbe una parola più larga della stecca. */}
+            <div className="sidebar-config">
+              <div className="sidebar-section">Configurazione</div>
+              <NavLink
+                to="/diet"
+                title="La mia dieta"
+                className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
+              >
+                <Salad />
+                <span className="sidebar-label">La mia dieta</span>
+                <span className="sidebar-short">Dieta</span>
+              </NavLink>
+              {/* Le impostazioni sono più di una scheda: la voce punta alla pagina, non
+                  a una scheda in particolare, o le due voci del menu si accenderebbero
+                  a vicenda a seconda di dove sei dentro. */}
+              <NavLink
+                to="/settings"
+                title="Impostazioni"
+                className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
+              >
+                <Settings />
+                <span className="sidebar-label">Impostazioni</span>
+                <span className="sidebar-short">Setup</span>
+              </NavLink>
+            </div>
           </div>
 
           <div className="sidebar-footer">
@@ -190,7 +204,7 @@ function AuthenticatedApp() {
                 {user.email}
               </span>
               <ThemeToggle />
-              <button className="icon-button danger" onClick={logout} title="Esci">
+              <button className="icon-button danger" onClick={logout} title={`Esci (${user.email})`}>
                 <LogOut size={16} />
               </button>
             </div>

@@ -80,7 +80,7 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
     ├── App.jsx                 # layout, routing, gate onboarding, AppContext (toast)
     ├── AuthContext.jsx         # useAuth(): user, login, logout, refreshUser
     ├── api.js                  # TUTTE le fetch + refresh automatico sul 401
-    ├── index.css               # design system completo (variabili CSS, tema chiaro/scuro)
+    ├── index.css               # design system completo (variabili CSS, tema scuro/chiaro)
     ├── lib/macros.js           # ripartizione calorie/macro tra i pasti (+ test)
     ├── lib/generation.js       # cosa c'è da generare in settimana: la conta della dialog (+ test)
     ├── components/             # WeekGrid, WeekGenerateDialog, MealCard, DayDots, MealChat, RecipeView, MacroBar,
@@ -209,6 +209,14 @@ sposta gli articoli spuntati in dispensa e la lista si svuota da sé; una ricett
 aggiunge quello che le serve, perché in dispensa non c'è; quello che non hai spuntato
 resta, perché non l'hai comprato.
 
+La schermata è a due colonne: a sinistra i reparti (in due colonne loro, `columns: 2`
+con `break-inside: avoid` — i reparti hanno da due a dodici voci l'uno e il
+multi-colonna le altezze le bilancia da sé, mentre una griglia a due celle lascerebbe
+«frutta e verdura» da sola a sinistra); a destra il **conto**, appiccicato in alto
+perché il totale cambia a ogni spunta ed è quello che si guarda mentre si spunta,
+e sotto la chat. Sul telefono la chat torna a essere il cassetto di prima
+(`useDueColonne`), perché al supermercato lo schermo è uno solo.
+
 `meals_to_buy` è il cuore: pasti con una ricetta, da oggi in avanti, non su un giorno
 saltato, non saltati e **non già segnati come seguiti** — quel piatto è stato
 cucinato, ricomprarlo sarebbe comprarlo due volte. In avanti si arriva a **domenica
@@ -231,7 +239,23 @@ negozio dove l'utente fa la spesa valgono poco, ed è per questo che un totale s
 non dice quasi niente. `PUT /api/shopping/items/{id}/price` chiede la cifra che si ha
 sotto gli occhi — quanto è costato *quel* pacco — e `unit_price_from` (l'inverso di
 `price_for`) ne ricava il prezzo al kg/l/unità, che finisce su `Ingredient` e da lì in
-poi vale per tutte le liste. Come per il reparto serve un flag (`price_by_user`) che
+poi vale per tutte le liste.
+
+**Ma la cifra scritta a mano è un fatto, e non si ricalcola.** Sta sulla riga
+(`ShoppingListItem.paid_price`, migrazione `0019`) e il costo della riga è quello,
+punto; il prezzo unitario che se ne ricava serve a stimare le righe che un prezzo
+scritto non ce l'hanno. Prima si teneva solo il prezzo al chilo e la riga veniva
+**ricalcolata** ogni volta da quello per la quantità del momento: bastava correggere
+quanto se n'era preso davvero (il pacco da 1 kg invece dei 700 g che servivano), o
+rigenerare una ricetta che di quell'ingrediente ne chiede di più, perché il numero
+appena battuto ne diventasse un altro — e al supermercato sembrava che l'app cambiasse
+i prezzi da sé. Tre corollari: `rebuild_shopping_list` si porta dietro `paid_price`
+come già faceva con la spunta e la quantità presa, cambiare la quantità presa non
+tocca la cifra ma **rifà** il prezzo unitario (lo stesso scontrino per 400 g invece di
+140 vuol dire un altro prezzo al chilo, ed è quello che l'app impara), e togliere la
+spunta la cancella — «non l'ho preso» vuol dire che non l'ho nemmeno pagato — mentre
+il prezzo al chilo resta, perché quello lo si è visto davvero. Guardie in
+`tests/test_dispensa.py`. Come per il reparto serve un flag (`price_by_user`) che
 protegga il numero dal seed, che gira a ogni avvio del container. Il prezzo si segna
 anche a spesa fatta — lo scontrino si guarda a casa — e la lista espone `priced_items`
 perché il totale possa dire su cosa si regge invece di spacciarsi per un preventivo.
@@ -327,6 +351,23 @@ annota). È la stessa lettura del riepilogo settimanale (`entry["is_followed"]`)
 tre stati. Lo `score_pct` pesa full=1, partial=0.5, missed=0 sui soli giorni tracciati.
 Il frontend (`YearHeatmap`, scheda "Anno" in Andamento) lo disegna come griglia
 settimane×giorni riusando le tinte del tracking (`--success/--warning/--danger`).
+
+**Nel grafico della settimana il colore dice l'aderenza, non lo scarto dal target.**
+Una barra per giorno: l'altezza sono le calorie in programma, il colore è **verde se
+il giorno è stato seguito, rosso se no, grigio se non è ancora arrivato** (o se la
+giornata è saltata). Prima erano due barre — quella grigia del target dietro, quella
+colorata da `compliance_color` davanti — e il colore diceva quanto il *piano* si
+scostava dalla dieta: su un giorno che non avevi ancora segnato si accendeva di giallo
+come se fosse andato storto qualcosa, mentre la domanda che ci si fa guardando quel
+grafico è un'altra. Lo scarto dal target resta scritto in chiaro, in lettere, nella
+lista «Giorno per giorno» a fianco e nelle tre piastrelle sopra. `compliance_color`
+resta in uso per i pallini di quella lista e per il riepilogo settimanale.
+
+Un conto da tenere presente: un giorno **passato e mai segnato** finisce rosso, perché
+per l'app quella giornata una risposta non ce l'ha e non c'è modo di distinguerla da un
+«no». È l'opposto della regola del calendario dell'anno, dove un giorno non tracciato
+resta fuori — lì il numero è una media e contarlo falserebbe il conto, qui è una barra
+in un grafico di sette e toglierla lascerebbe un buco nella settimana.
 
 **"Lo faccio io" è un flag della dieta, non della settimana.** `MealSlot.auto_generate`
 a False significa che l'utente quel pasto lo prepara da sé: l'AI non lo genera mai e i
@@ -587,14 +628,32 @@ della testata cambia coi pulsanti che ci stanno dentro.
 Nella griglia il totale del giorno e i pallini stanno nell'**intestazione** della
 colonna: in fondo, dopo quattro card, finivano sotto la piega di qualunque schermo.
 
-**La home mette i pasti sopra la piega.** Quattro piastrelle di statistiche — pasti
-pianificati, articoli presi, spesa stimata, ricette in archivio — occupavano tutto lo
-spazio sopra la piega e spingevano sotto «cosa si mangia oggi», che è il motivo per cui
-si apre l'app. Adesso c'è una riga sola (`.day-summary`: quanto si mangia oggi, su
-quanto, quanti pasti segnati, i macro), poi i pasti; la spesa è una barra verde che
-porta lì col numero dentro (`.shop-bar`) — non è una statistica, è quello che si fa
-dopo aver guardato i pasti — e i numeri da guardare una volta ogni tanto sono una riga
-in fondo (`.home-stats`).
+**La home mette i pasti sopra la piega, e il resto in colonna.** Quattro piastrelle di
+statistiche occupavano tutto lo spazio sopra la piega e spingevano sotto «cosa si
+mangia oggi», che è il motivo per cui si apre l'app. Adesso a sinistra c'è la giornata
+in un numero (`.day-summary`: quanto si mangia oggi su quanto, coi macro accanto), poi
+i pasti in riga (`.today-grid`), poi la barra lime della spesa (`.shop-bar`) — che non
+è una statistica, è quello che si fa dopo aver guardato i pasti.
+
+A destra (`.page-aside`) sta quello che accompagna: i pasti che **DietAI non genera**
+(«lo prepari tu», i fissi), che una card non ce l'hanno perché non c'è niente da
+generare, ma vanno scritti lo stesso — una giornata da cinque pasti che ne mostra tre
+sembra una giornata a cui ne mancano due; la **spia dell'aderenza** delle ultime
+quattro settimane; e i tre numeri che si guardano ogni tanto (`.mini-stats`).
+
+La spia (`recent_adherence` in `services/tracking.py`, esposta dalla dashboard) è una
+barra per giorno e dice **due cose con due canali**: l'altezza è quanto il piano di
+quel giorno pesava sul suo target, il colore è com'è andata davvero. Tenerle separate
+serve: una giornata pianificata benissimo e mai seguita è alta e spenta, ed è
+esattamente quello che si vuol vedere da lontano. Un giorno senza nessun pasto
+tracciato resta grigio e **fuori dal punteggio** — è un buco di dati, non un
+fallimento, la stessa regola del calendario dell'anno.
+
+Il pulsante «Genera N pasti» della testata porta alla settimana **con la dialog già
+aperta** (`state: { genera: true }`, letto da `PlanningPage`): generare passa sempre da
+lì, perché è la schermata dove si vede cosa si sta per pagare, e un pulsante che
+promette sei pasti non può lasciare su una pagina in cui bisogna ancora cercare da dove
+si comincia.
 
 **Nel dettaglio del pasto le due risposte stanno sotto il pollice.** `.meal-bar` è
 `sticky` in fondo sul telefono, dove «l'ho seguito» era in fondo a una pagina lunga un
@@ -835,7 +894,7 @@ threadpool. La regola non ha eccezioni e `tests/test_concurrency.py` la fa rispe
   Senza, un primario è 2px più basso di un secondario — che il bordo ce l'ha davvero —
   e la sua scritta sta un pixel più su: in una riga di tre pulsanti si vede, ed è il
   tipo di disallineamento che si guarda dieci volte senza capire da dove viene.
-- **Quello che chiama il modello si vede che lo chiama:** verde della palette
+- **Quello che chiama il modello si vede che lo chiama:** il lime della palette
   (`.btn-primary` se è l'azione principale, `.btn-ai` — tinta tenue, stessa
   costruzione di `.btn-danger` — se è l'alternativa) e l'icona `Sparkles`, la stessa
   di "lo genera DietAI" nell'editor della dieta. Serve perché quelle azioni stanno in
@@ -843,6 +902,97 @@ threadpool. La regola non ha eccezioni e `tests/test_concurrency.py` la fa rispe
   gratis, generare dura minuti e si paga. Unica eccezione, l'icona tonda della griglia
   settimanale, che resta `RefreshCw` perché lì gira su sé stessa mentre lavora — e una
   scintilla che ruota non dice niente a nessuno.
+- **L'app è scura, tutta.** Il fondo è un nero caldo (`#14130f`), le card ci stanno
+  sopra col loro bordo, e l'accento è un lime (`#d9f24e`). C'era anche una superficie
+  chiara (`.on-paper`, crema) sul pasto di adesso, sul foglio della ricetta e sul
+  conto della spesa: è stata tolta ovunque — su un'app scura una macchia crema non
+  legge come «questa è la cosa», legge come una finestra di un altro programma.
+  `data-theme="light"` resta come tema a sé. Tre caratteri con tre mestieri: `--font-display` (Instrument Serif) per i nomi dei piatti e i numeri
+  grossi, `--font-body` (Instrument Sans) per il testo, `--font-mono` (JetBrains Mono)
+  per etichette e cifre, che devono incolonnarsi da sole. Il serif ha **un peso solo**,
+  il 400: scriverci `font-weight: 700` non lo ingrossa, lo fa ingrassare al browser.
+- **`--accent` si scrive, `--accent-fill` si riempie.** Sono due token perché sul
+  fondo scuro il lime fa tutte e due le cose e su un fondo chiaro nessuna delle due da
+  solo: scritto su crema non si legge, ma una pastiglia lime con l'inchiostro sopra sì.
+  Quindi al buio i due token coincidono, col tema chiaro `--accent` diventa un oliva
+  scuro (per testo, icone, voce di menu accesa) e `--accent-fill` resta il lime (per
+  pulsante primario, spunte, barre). Regola pratica: se sopra ci va del testo in
+  `--accent-contrast`, il fondo è `--accent-fill`; altrimenti è `--accent`. Stessa
+  ragione per cui `.btn-moved` scrive in `--danger-contrast` e non in
+  `--accent-contrast`: col tema chiaro il terracotta si scurisce, e l'inchiostro
+  sopra sparisce.
+- **`--accent-hover` scurisce, in tutti e due i temi.** È il fondo di un
+  riempimento — il pulsante primario, la barra della spesa — e un fondo pieno che
+  all'hover si schiarisce sembra spegnersi: col lime pallino di partenza la barra
+  della spesa diventava quasi bianca sotto il dito. Non ha un valore per tema: nel
+  tema chiaro l'oliva scuro di `--accent` ci finiva sotto il testo inchiostro, e il
+  pulsante primario all'hover diventava illeggibile.
+- **Com'è andata si dice con un anello, non con un fondo.** «Seguito» è un anello
+  lime tutt'attorno alla card (bordo più un `inset` da 1px, così segue il raggio) e la
+  parola nel piede; «ho mangiato altro» lo stesso in terracotta, più il fondo che se
+  ne va. Prima era una tinta verde stesa su tutta la card: copriva il piatto — l'unica
+  cosa che cambia da una casella all'altra — e su sette giorni segnati la settimana
+  era una parete verde. `box-shadow` **inset** e non esterno: fuori sborderebbe nella
+  griglia.
+- **All'hover la card si accende di un tono, non si sbianca.** `--bg-card-hover` sul
+  fondo e `--border-light` sul bordo. Ed è il momento in cui, nella griglia della
+  settimana, compaiono i comandi ✓ ✗ ⋯ — nascosti a riposo dentro
+  `@media (hover: hover)`, perché col dito `:hover` non esiste e quello che si mostra
+  solo all'hover non si mostra mai. Una casella **vuota** fa eccezione e il suo
+  «Genera» ce l'ha sempre: è l'unica cosa che si cerca guardando la settimana.
+- **Il menu è una stecca di icone da 84px** (`.sidebar`), non più una colonna di
+  etichette da 236: le voci sono otto e non cambiano mai, dopo il primo giorno non si
+  leggono più, si mirano. Ogni voce porta **due nomi** — `sidebar-label` intero e
+  `sidebar-short` da sei lettere — nello stesso markup, perché a cambiare fra
+  desktop e telefono è l'etichetta, non il componente: sotto i 768px la stecca torna
+  a essere il cassetto largo di prima e i due si scambiano di posto.
+- **La riga della dispensa in modifica è una griglia, non un flex che va a capo.**
+  `.pantry-edit` — nome, quantità, unità e i due comandi, una colonna ciascuno, che si
+  stringono insieme. Con `flex-wrap`, in una colonna da 320px, il nome scendeva sotto e
+  i due pulsanti restavano appesi a destra della riga di sopra. È la stessa forma in
+  due momenti: la riga che si aggiunge (`.aggiungi`, col pulsante largo in coda) e
+  quella che si corregge (✓ pieno e ✗ di contorno). Sotto i 560px va a capo **in modo
+  dichiarato**: il nome si prende tutta la prima riga, il resto sta sulla seconda.
+- **La riga di contesto sta sopra il titolo.** Nel markup di una `.page-header` viene
+  prima il titolo (è un `h1`, e mandarlo dopo il suo sottotitolo vorrebbe dire
+  scrivere la pagina al contrario per un fatto di grafica); a scambiarli è `order`,
+  dichiarato solo su quei due. **Non** `column-reverse`: la testata a volte porta
+  anche altro, e col verso rovesciato quello finirebbe in fondo. Il sottotitolo prende
+  lo stile dell'occhiello — mono, in maiuscoletto, spaziato — perché dove sei si legge
+  prima di cosa stai guardando.
+- **Metà delle schermate sono a due colonne** (`.page-split`): la cosa a sinistra
+  (`.page-main`), e a destra una colonna **stretta e fissa** (`.page-aside`) con quello
+  che la accompagna. Fissa e non proporzionale perché contiene sempre le stesse cose e
+  non ha bisogno di crescere: a guadagnare spazio su un monitor largo dev'essere la
+  lista, la griglia, il foglio della ricetta. La larghezza si passa caso per caso
+  (`--aside`: 356px sulla home, 380 sulla spesa, 400 sul pasto, sulla dieta e
+  sull'andamento). Sotto i 1100px la colonna passa sotto, nello stesso ordine di
+  lettura. `.page-split.pari` le fa alte uguale, e serve dove le due sono due letture
+  della stessa cosa — il grafico dell'andamento e i numeri che lo commentano.
+- **La ricetta è un foglio, e se lo porta dietro** (`RecipeView`): fascia
+  del piatto in cima col tondo per tornare indietro, occhiello, titolo serif,
+  pastiglie, i tre macro, ingredienti e procedimento in due colonne, e **in fondo la
+  riga delle azioni**. Le tre parti che cambiano col posto da cui si guarda la ricetta
+  si passano da fuori (`eyebrow`, `azioni`, `indietro`): dal piano è il pasto di un
+  giorno preciso e le azioni sono «l'ho seguito» e «rigenera», dal ricettario è un
+  piatto e basta. Il dettaglio del pasto **non ha una testata** quando la ricetta c'è:
+  il titolo della pagina è il nome del piatto, ed è scritto sul foglio.
+- **Il segnaposto al posto della foto** (`.dish`). Il disegno mette un'immagine su
+  ogni card e in cima al foglio della ricetta; DietAI non ha immagini — niente
+  caricamento, niente modello che le disegni — ma togliere la fascia lascerebbe le
+  card sbilenche, perché l'impaginazione ci conta sopra. Al suo posto un riquadro del
+  colore delle superfici incassate con l'icona delle posate in mezzo: dichiara di
+  essere un segnaposto invece di fingersi una foto mancante. Per un giro è stato tinto
+  dal nome della ricetta, in modo che due card vicine non fossero mai dello stesso
+  colore: sette tinte in una griglia da dieci però si guardavano più dei nomi dei
+  piatti, che sono la cosa. Il giorno che le foto arrivano, `.dish` è il posto dove ci
+  va l'`<img>`.
+- **`useDueColonne()` (`lib/schermo.js`) solo dove la larghezza cambia *cosa* è una
+  cosa**, non come è fatta. La chat della spesa sul monitor è una colonna in pagina,
+  sul telefono un cassetto che si apre da un pulsante e si chiude con la X: due
+  componenti con due comandi diversi. Nasconderne uno col CSS vorrebbe dire montarli
+  tutti e due — due conversazioni sullo stesso schermo, di cui una invisibile che
+  continua a scaricare messaggi. Dove basta il CSS si usa il CSS.
 - **Il telefono è il caso normale** (lista della spesa al supermercato, "l'ho seguito"
   dopo cena): tre regole che si dimenticano scrivendo su un monitor. Le altezze a
   schermo pieno vanno in `dvh` — `100vh` su iOS comprende la barra degli indirizzi e

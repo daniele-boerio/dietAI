@@ -277,6 +277,97 @@ def year_adherence(db: Session, user_id: int, year: int) -> dict:
     }
 
 
+# ── Aderenza recente (la spia della home) ──────────────────────────────────────
+
+# Quattro settimane esatte: "4 sett. fa → questa" è la finestra che la home dichiara,
+# e una barra per giorno la rende leggibile senza legenda.
+RECENT_DAYS = 28
+
+
+def recent_adherence(db: Session, user_id: int, days: int = RECENT_DAYS) -> dict:
+    """Le ultime quattro settimane in una barra al giorno, per la spia della home.
+
+    Ogni barra dice due cose diverse con due canali diversi: **l'altezza** è quanto
+    il piano di quel giorno pesava rispetto al target (è il grafico dell'andamento in
+    piccolo), **il colore** è com'è andata davvero — che è l'unica cosa che l'utente
+    ha dichiarato. Tenerle separate serve: una giornata pianificata benissimo e mai
+    seguita è alta e spenta, ed è esattamente quello che si vuol vedere da lontano.
+
+    Un giorno senza nessun pasto tracciato resta grigio e **fuori dal punteggio**: è
+    un buco di dati, non un fallimento — la stessa regola del calendario dell'anno.
+    """
+    end = today()
+    start = date.fromordinal(end.toordinal() - (days - 1))
+
+    rows = (
+        db.query(
+            DayPlan.date,
+            DayPlan.is_skipped,
+            PlannedMeal.is_followed,
+            PlannedMeal.is_skipped,
+            MealSlot.target_calories,
+            MealSlot.auto_generate,
+            Recipe.calories,
+        )
+        .join(PlannedMeal, PlannedMeal.day_plan_id == DayPlan.id)
+        .join(WeekPlan, WeekPlan.id == DayPlan.week_plan_id)
+        .join(MealSlot, MealSlot.id == PlannedMeal.meal_slot_id)
+        .outerjoin(Recipe, Recipe.id == PlannedMeal.recipe_id)
+        .filter(
+            WeekPlan.user_id == user_id,
+            DayPlan.date >= start,
+            DayPlan.date <= end,
+        )
+        .all()
+    )
+
+    by_day: dict[date, dict] = {}
+    for day_date, day_skipped, followed, meal_skipped, target, auto, calories in rows:
+        entry = by_day.setdefault(
+            day_date,
+            {"planned": 0, "target": 0, "followed": [], "skipped": bool(day_skipped)},
+        )
+        if followed is not None:
+            entry["followed"].append(bool(followed))
+        if meal_skipped:
+            # Rimandato: fuori dai conti del giorno, com'è già nel resto dell'app.
+            continue
+        entry["target"] += target or 0
+        # Stessa lettura di `weekly_tracking`: il pasto che prepara l'utente si dà
+        # per centrato sul suo target, o la giornata sembrerebbe più corta di com'è.
+        entry["planned"] += (calories or 0) if calories else (target or 0 if not auto else 0)
+
+    serie = []
+    punteggio = 0.0
+    tracciati = 0
+    for i in range(days):
+        giorno = date.fromordinal(start.toordinal() + i)
+        entry = by_day.get(giorno)
+        if not entry or entry["skipped"]:
+            serie.append({"date": giorno.isoformat(), "ratio": 0.0, "state": "none"})
+            continue
+        stato = _day_status(entry["followed"]) if entry["followed"] else "untracked"
+        if stato != "untracked":
+            tracciati += 1
+            punteggio += 1.0 if stato == "full" else 0.5 if stato == "partial" else 0.0
+        ratio = entry["planned"] / entry["target"] if entry["target"] else 0.0
+        serie.append(
+            {
+                "date": giorno.isoformat(),
+                # Oltre il 130% la barra non cresce più: un giorno fuori scala
+                # schiaccerebbe gli altri ventisette contro il fondo.
+                "ratio": round(min(ratio, 1.3), 3),
+                "state": stato,
+            }
+        )
+
+    return {
+        "days": serie,
+        "tracked_days": tracciati,
+        "score_pct": round(100 * punteggio / tracciati, 1) if tracciati else 0.0,
+    }
+
+
 def _tracked_years(db: Session, user_id: int) -> list[int]:
     """Gli anni in cui esiste almeno una settimana, per il selettore. Oggi c'è sempre."""
     rows = (

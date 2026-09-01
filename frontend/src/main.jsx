@@ -6,10 +6,12 @@ import { AuthProvider } from './AuthContext'
 import './index.css'
 
 // Tema applicato prima del render, così non c'è il flash del tema sbagliato al reload.
-// Default chiaro: DietAI si usa in cucina, di giorno.
+// Default scuro: è il fondo su cui il disegno è fatto — la carta chiara ci sta
+// dentro, sul pasto di adesso e sulla scheda della ricetta, e chi la vuole su
+// tutta la pagina la accende dal menu.
 document.documentElement.setAttribute(
   'data-theme',
-  localStorage.getItem('theme') || 'light'
+  localStorage.getItem('theme') || 'dark'
 )
 
 ReactDOM.createRoot(document.getElementById('root')).render(

@@ -20,7 +20,12 @@ from ..services.planner import (
     week_meals,
 )
 from ..services.shopping import current_list
-from ..services.tracking import diet_targets, weekly_tracking, year_adherence
+from ..services.tracking import (
+    diet_targets,
+    recent_adherence,
+    weekly_tracking,
+    year_adherence,
+)
 
 router = APIRouter(prefix="/api/tracking", tags=["Tracking"])
 
@@ -120,6 +125,9 @@ def dashboard(
                 # "Lo prepari tu": niente ricetta, ma i macro contano lo stesso nel
                 # totale del giorno — dati per centrati sul target.
                 "self_managed": not slot.auto_generate,
+                # La home mette in disparte i pasti già decisi (vedi «Non generati»):
+                # per dirlo le serve sapere anche quali sono fissi.
+                "is_recurring": meal.is_recurring,
                 "recipe": (
                     {
                         "id": recipe.id,
@@ -184,6 +192,9 @@ def dashboard(
             "daily_calories": diet.total_daily_calories,
             "meals_count": len(diet_targets(db, diet.id)),
         },
+        # Le ultime quattro settimane in una barra al giorno: la spia in colonna
+        # destra della home, che dice se la dieta la si sta seguendo davvero.
+        "adherence": recent_adherence(db, user_id),
         "recipes_count": db.query(Recipe).filter(Recipe.user_id == user_id).count(),
         "favorites_count": db.query(Recipe)
         .filter(Recipe.user_id == user_id, Recipe.is_favorite.is_(True))

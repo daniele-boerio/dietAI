@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   AlertTriangle,
   Archive,
@@ -63,6 +63,7 @@ function etichettaSettimana(offset) {
 export default function PlanningPage() {
   const { addToast, apriMenu } = useApp();
   const navigate = useNavigate();
+  const location = useLocation();
   const { weekStart } = useParams();
   const [week, setWeek] = useState(null);
   const [error, setError] = useState(null);
@@ -82,6 +83,11 @@ export default function PlanningPage() {
   const [eliminando, setEliminando] = useState(false);
   // Serve a distinguere "non sta generando" da "ha appena finito", per il messaggio.
   const wasGenerating = useRef(false);
+  // La home ha un pulsante «Genera 6 pasti» che porta qui: la scelta di cosa
+  // generare si fa in questa dialog e da nessun'altra parte, perché è la schermata
+  // dove si vede cosa si sta per pagare. Arrivarci e trovare la pagina ferma
+  // vorrebbe dire far cercare all'utente da dove si ricomincia.
+  const arrivatoPerGenerare = useRef(location.state?.genera === true);
   // La colonna di oggi e la settimana per cui ci si è già spostati (vedi sotto).
   const oggiRef = useRef(null);
   const scrollFatto = useRef(null);
@@ -160,6 +166,17 @@ export default function PlanningPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Arrivati dalla home col pulsante «Genera N pasti»: la dialog si apre da sé,
+  // appena la settimana è in mano (prima non saprebbe quante caselle contare).
+  // Una volta sola: il segno si consuma, o tornando indietro col tasto del browser
+  // la finestra si riaprirebbe addosso a chi voleva solo rivedere la settimana.
+  useEffect(() => {
+    if (loading || !week || !arrivatoPerGenerare.current) return;
+    arrivatoPerGenerare.current = false;
+    navigate(location.pathname, { replace: true, state: null });
+    setDialogo({ rigenera: false });
+  }, [loading, week, navigate, location.pathname]);
 
   // Sul telefono i sette giorni stanno uno sotto l'altro, e la settimana si apre su
   // lunedì: di domenica vuol dire sei giorni di scorrimento prima di arrivare a quello
@@ -357,14 +374,39 @@ export default function PlanningPage() {
             <Menu size={20} />
           </button>
 
+          {/* Il titolo della settimana **sono le sue date**, e le frecce per
+              sfogliarla stanno lì attaccate: sono la stessa cosa — dove sei e come
+              ci si sposta — e in una barra a parte, sotto, dicevano una seconda volta
+              lo stesso intervallo che il titolo aveva già scritto. */}
           <div className="plan-ident">
-            <h1 className="page-title">{etichettaSettimana(offset)}</h1>
             <p className="page-subtitle">
-              Dal {formatDate(lunediIso)} al {formatDate(domenicaIso)}
+              {etichettaSettimana(offset)}
               {mai
                 ? ' · nessun piano'
                 : ` · ${week.meals_filled} di ${week.meals_total} pasti pianificati`}
             </p>
+            <h1 className="page-title">
+              {formatDate(lunediIso, { day: 'numeric', month: 'short' })} –{' '}
+              {formatDate(domenicaIso, { day: 'numeric', month: 'long' })}
+              <span className="week-nav">
+                <button
+                  className="week-nav-btn"
+                  onClick={() => vaiA(-1)}
+                  title="Settimana precedente"
+                  aria-label="Settimana precedente"
+                >
+                  <ChevronLeft />
+                </button>
+                <button
+                  className="week-nav-btn"
+                  onClick={() => vaiA(1)}
+                  title="Settimana successiva"
+                  aria-label="Settimana successiva"
+                >
+                  <ChevronRight />
+                </button>
+              </span>
+            </h1>
           </div>
 
           <div className="page-actions">
@@ -400,46 +442,24 @@ export default function PlanningPage() {
           </div>
         </div>
 
-        {/* Il piano si sfoglia una settimana alla volta, indietro e avanti senza
-            limite: indietro per rivedere cos'è stato, avanti per pianificare quanto si
-            vuole. Le frecce restano sempre attive — una settimana mai pianificata si
-            apre lo stesso, e dice che è vuota. */}
-        <div className="week-toolbar">
-          <div className="week-nav">
-            <button
-              className="week-nav-btn"
-              onClick={() => vaiA(-1)}
-              title="Settimana precedente"
-              aria-label="Settimana precedente"
-            >
-              <ChevronLeft />
-            </button>
-            <span className="week-nav-label">
-              {formatDate(lunediIso, { day: 'numeric', month: 'short' })} –{' '}
-              {formatDate(domenicaIso, { day: 'numeric', month: 'short' })}
-            </span>
-            <button
-              className="week-nav-btn"
-              onClick={() => vaiA(1)}
-              title="Settimana successiva"
-              aria-label="Settimana successiva"
-            >
-              <ChevronRight />
-            </button>
+        {/* Una riga sola, e solo quando c'è qualcosa da dire: quanto manca e la via
+            di ritorno da una settimana che non è questa. Le frecce sono salite nel
+            titolo (vedi sopra), e le date pure. */}
+        {(offset !== 0 || (!mai && !week.is_past)) && (
+          <div className="week-toolbar">
+            {offset !== 0 && (
+              <button className="btn btn-ghost btn-sm" onClick={() => navigate('/plan')}>
+                <CalendarDays size={15} /> Torna a questa settimana
+              </button>
+            )}
+
+            {!mai && !week.is_past && (
+              <span className="week-progress">
+                {emptySlots > 0 ? `${emptySlots} pasti da riempire` : 'Piano completo'}
+              </span>
+            )}
           </div>
-
-          {offset !== 0 && (
-            <button className="btn btn-ghost btn-sm" onClick={() => navigate('/plan')}>
-              <CalendarDays size={15} /> Torna a questa settimana
-            </button>
-          )}
-
-          {!mai && !week.is_past && (
-            <span className="week-progress">
-              {emptySlots > 0 ? `${emptySlots} pasti da riempire` : 'Piano completo'}
-            </span>
-          )}
-        </div>
+        )}
 
         {/* La settimana intera in una striscia: dove sei, com'è andato ogni giorno, e
             un tocco per saltarci. Sul telefono i sette giorni stanno uno sotto l'altro

@@ -5,8 +5,11 @@ import {
   Check,
   ChefHat,
   ChevronRight,
+  MessageCircle,
+  Pin,
   ShoppingCart,
   Sparkles,
+  UtensilsCrossed,
   X,
 } from 'lucide-react';
 import { api, formatDate, formatMoney, formatNumber } from '../api';
@@ -38,6 +41,17 @@ function totaliDiOggi(meals) {
     { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, target: 0, segnati: 0 }
   );
 }
+
+// Le parole con cui la spia dell'aderenza si spiega passandoci sopra. Il colore da
+// solo non basta — daltonismo, schermo al sole — ed è la stessa ragione per cui nella
+// griglia della settimana lo stato è scritto accanto al filetto colorato.
+const ETICHETTE_ADERENZA = {
+  full: 'seguito',
+  partial: 'in parte',
+  missed: 'non seguito',
+  untracked: 'non segnato',
+  none: 'nessun piano',
+};
 
 export default function DashboardPage() {
   const { addToast } = useApp();
@@ -94,187 +108,285 @@ export default function DashboardPage() {
   }
 
   const { today, week, shopping, diet } = data;
+  // Il backend può non averla (una risposta più vecchia di questa schermata): meglio
+  // una spia vuota che una pagina che non si disegna.
+  const adherence = data.adherence || { days: [], tracked_days: 0, score_pct: 0 };
   const emptySlots = week.meals_total - week.meals_filled;
   const totali = totaliDiOggi(today.meals);
   const daPrendere = shopping.total_items - shopping.checked_items;
+
+  // Il pasto che viene adesso è l'unico messo in evidenza: è quello per cui si è
+  // aperta l'app, e in una fila di card tutte uguali si perdeva fra le altre. È il
+  // primo della giornata che ha una ricetta e su cui non si è ancora detto niente —
+  // quelli già segnati sono storia, e una casella vuota non è un piatto.
+  const adesso = today.meals.find((m) => m.recipe && !m.is_skipped && m.is_followed === null);
+
+  // I pasti che DietAI non genera non stanno in griglia: «lo prepari tu» non è una
+  // casella da riempire, e dargli una card vuol dire una card con dentro niente.
+  // Restano però scritti in colonna a destra — una giornata da cinque pasti che ne
+  // mostra tre sembra una giornata a cui ne mancano due.
+  const inGriglia = today.meals.filter((m) => !m.self_managed);
+  const inDisparte = today.meals.filter((m) => m.self_managed);
 
   return (
     <>
       <div className="page-header">
         <div>
-          <h1 className="page-title">{today.day_name}</h1>
+          <h1 className="page-title">Si mangia</h1>
           <p className="page-subtitle">
-            {formatDate(today.date, { day: 'numeric', month: 'long', year: 'numeric' })} ·{' '}
-            {diet.daily_calories} kcal al giorno su {diet.meals_count} pasti
+            {today.day_name} {formatDate(today.date, { day: 'numeric', month: 'long' })} ·{' '}
+            {diet.daily_calories} kcal su {diet.meals_count} pasti
           </p>
         </div>
         <div className="page-actions">
           <Link className="btn btn-secondary" to="/plan">
-            <CalendarDays size={16} /> Settimana
+            <CalendarDays size={16} /> Vai alla settimana
           </Link>
+          {/* Porta alla settimana **con la finestra già aperta**: generare passa
+              sempre da lì — è la schermata dove si sceglie cosa si sta per pagare —
+              e un pulsante che promette sei pasti non può lasciare su una pagina in
+              cui bisogna ancora cercare da dove si comincia. */}
+          {emptySlots > 0 && (
+            <Link className="btn btn-primary" to="/plan" state={{ genera: true }}>
+              <Sparkles size={16} /> Genera {emptySlots} {emptySlots === 1 ? 'pasto' : 'pasti'}
+            </Link>
+          )}
         </div>
       </div>
 
-      {emptySlots > 0 && (
-        <div className="notice">
-          <Sparkles />
-          <div>
-            Mancano <strong>{emptySlots} pasti</strong> in questa settimana.{' '}
-            <Link to="/plan" style={{ color: 'var(--accent)', fontWeight: 600 }}>
-              Genera il piano
-            </Link>
-          </div>
-        </div>
-      )}
-
-      {/* La giornata in una riga sola. Erano quattro piastrelle di statistiche — pasti
-          pianificati, articoli presi, spesa stimata, ricette in archivio — che sul
-          telefono prendevano tutto lo spazio sopra la piega e spingevano sotto
-          "cosa si mangia oggi", che è il motivo per cui si apre l'app. Quei numeri
-          non sono spariti: sono scesi in fondo, dove si guardano una volta ogni tanto. */}
-      {today.meals.length > 0 && (
-        <div className="card day-summary">
-          <div className="day-summary-top">
-            <strong>{formatNumber(totali.calories)}</strong>
-            <span>di {formatNumber(totali.target)} kcal in programma</span>
-            <span className="day-summary-tracked">
-              {totali.segnati} di {today.meals.length} segnati
-            </span>
-          </div>
-          <MacroBar
-            protein={totali.protein_g}
-            carbs={totali.carbs_g}
-            fat={totali.fat_g}
-            legend
-          />
-        </div>
-      )}
-
-      <h2 className="section-title">Cosa si mangia oggi</h2>
-
-      {today.meals.length === 0 ? (
-        <EmptyState
-          icon={CalendarDays}
-          title="Niente in programma per oggi"
-          text="Genera il piano della settimana e i pasti compariranno qui."
-          action={
-            <Link className="btn btn-primary" to="/plan">
-              Vai alla settimana
-            </Link>
-          }
-        />
-      ) : (
-        <div className="recipe-grid fill">
-          {today.meals.map((meal) => (
-            <div
-              key={meal.meal_id}
-              className={`card today-card ${meal.is_skipped ? 'skipped' : ''} ${
-                meal.is_followed === true ? 'followed' : ''
-              }`}
-            >
-              <div className="meal-slot">
-                <span className="meal-slot-name">{meal.slot_name}</span>
+      <div className="page-split" style={{ '--aside': '356px' }}>
+        <div className="page-main">
+          {today.meals.length > 0 && (
+            <div className="day-summary">
+              <div className="day-summary-top">
+                <strong>{formatNumber(totali.calories)}</strong>
+                <span>
+                  / {formatNumber(totali.target)} kcal
+                  <br />
+                  in programma
+                </span>
               </div>
-
-              {meal.recipe ? (
-                <>
-                  {/* `title` perché il nome tagliato dall'ellissi resta leggibile
-                      passandoci sopra, senza aprire il pasto. */}
-                  <div
-                    className="today-card-title"
-                    title={meal.recipe.title}
-                    onClick={() => navigate(`/meals/${meal.meal_id}`)}
-                  >
-                    {meal.recipe.title}
-                  </div>
-                  <div className="today-card-foot">
-                    <div className="meal-foot">
-                      <span className="meal-facts">
-                        {meal.recipe.calories} kcal · target {meal.target_calories} kcal
-                      </span>
-                      {meal.is_followed === true && (
-                        <span className="meal-state done">
-                          <Check /> seguito
-                        </span>
-                      )}
-                      {meal.is_skipped && <span className="meal-state moved">rimandato</span>}
-                    </div>
-                    <MacroBar
-                      protein={meal.recipe.protein_g}
-                      carbs={meal.recipe.carbs_g}
-                      fat={meal.recipe.fat_g}
-                    />
-
-                    <div className="today-card-actions">
-                      <button
-                        className={`btn btn-sm ${
-                          meal.is_followed === true ? 'btn-primary' : 'btn-secondary'
-                        }`}
-                        onClick={() => markFollowed(meal.meal_id, true)}
-                      >
-                        <Check size={14} /> Fatto
-                      </button>
-                      <button
-                        className={`btn btn-sm ${
-                          meal.is_followed === false ? 'btn-moved' : 'btn-secondary'
-                        }`}
-                        onClick={() => markFollowed(meal.meal_id, false)}
-                      >
-                        <X size={14} /> Ho mangiato altro
-                      </button>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="meal-empty">
-                    Nessuna ricetta · target {meal.target_calories} kcal
-                  </div>
-                  <div className="today-card-foot">
-                    <div className="today-card-actions">
-                      <Link
-                        className="btn btn-secondary btn-sm"
-                        to={`/meals/${meal.meal_id}`}
-                      >
-                        Scegli cosa mangiare
-                      </Link>
-                    </div>
-                  </div>
-                </>
-              )}
+              <MacroBar
+                className="macro-holder"
+                protein={totali.protein_g}
+                carbs={totali.carbs_g}
+                fat={totali.fat_g}
+                legend
+              />
+              <span className="day-summary-tracked">
+                {totali.segnati} di {today.meals.length} segnati
+              </span>
             </div>
-          ))}
-        </div>
-      )}
+          )}
 
-      {/* La spesa non è una statistica, è la cosa che si fa dopo aver guardato i
-          pasti: una riga che porta lì, col numero dentro. */}
-      <Link className="shop-bar" to="/shopping">
-        <ShoppingCart />
-        <div>
-          <strong>Lista della spesa</strong>
-          <span>
-            {daPrendere > 0
-              ? `${daPrendere} ${daPrendere === 1 ? 'articolo' : 'articoli'} da prendere`
-              : 'Niente da prendere'}
-            {shopping.estimated_cost
-              ? ` · ${formatMoney(shopping.estimated_cost)} stimati`
-              : ''}
-          </span>
-        </div>
-        <ChevronRight />
-      </Link>
+          {inGriglia.length === 0 ? (
+            <EmptyState
+              icon={CalendarDays}
+              title="Niente in programma per oggi"
+              text="Genera il piano della settimana e i pasti compariranno qui."
+              action={
+                <Link className="btn btn-primary" to="/plan" state={{ genera: true }}>
+                  <Sparkles size={16} /> Genera la settimana
+                </Link>
+              }
+            />
+          ) : (
+            <div className="today-grid">
+              {inGriglia.map((meal) => (
+                <div
+                  key={meal.meal_id}
+                  className={`card today-card ${meal.is_skipped ? 'skipped' : ''} ${
+                    meal.is_followed === true ? 'followed' : ''
+                  } ${adesso && adesso.meal_id === meal.meal_id ? 'adesso' : ''}`}
+                >
+                  <div className="meal-slot">
+                    <span className="meal-slot-name">
+                      {meal.slot_name}
+                      {adesso && adesso.meal_id === meal.meal_id && ' · adesso'}
+                    </span>
+                    {meal.is_followed === true && (
+                      <span className="slot-state" title="L'hai seguito">
+                        <Check />
+                      </span>
+                    )}
+                    {meal.is_skipped && (
+                      <span className="slot-state moved" title="Hai mangiato altro">
+                        <X />
+                      </span>
+                    )}
+                  </div>
 
-      <div className="home-stats">
-        <span>
-          Piano <strong>{week.meals_filled}</strong> di {week.meals_total}
-        </span>
-        <span>
-          Ricettario <strong>{data.recipes_count}</strong>
-        </span>
-        <span>
-          Preferite <strong>{data.favorites_count}</strong>
-        </span>
+                  {meal.recipe ? (
+                    <>
+                      {/* Il piatto non ha una fotografia: al suo posto un
+                          segnaposto dichiarato, che tiene il posto all'immagine
+                          senza far sembrare rotta la card finché non c'è. */}
+                      <Link
+                        className="dish"
+                        to={`/meals/${meal.meal_id}`}
+                        aria-label={meal.recipe.title}
+                      >
+                        <UtensilsCrossed />
+                      </Link>
+                      {/* `title` perché il nome tagliato dall'ellissi resta leggibile
+                          passandoci sopra, senza aprire il pasto. */}
+                      <div
+                        className="today-card-title"
+                        title={meal.recipe.title}
+                        onClick={() => navigate(`/meals/${meal.meal_id}`)}
+                      >
+                        {meal.recipe.title}
+                      </div>
+                      <div className="today-card-foot">
+                        <span className="meal-facts">
+                          {meal.recipe.calories} kcal · target {meal.target_calories} ·{' '}
+                          {meal.recipe.prep_time_min + meal.recipe.cook_time_min} min
+                        </span>
+                        <div className="today-card-actions">
+                          <button
+                            className={`btn btn-sm ${
+                              meal.is_followed === true ? 'btn-primary' : 'btn-secondary'
+                            }`}
+                            onClick={() => markFollowed(meal.meal_id, true)}
+                          >
+                            <Check size={14} /> L&rsquo;ho mangiato
+                          </button>
+                          <button
+                            className={`btn btn-sm btn-icon ${
+                              meal.is_followed === false ? 'btn-moved' : 'btn-secondary'
+                            }`}
+                            title="Ho mangiato altro"
+                            onClick={() => markFollowed(meal.meal_id, false)}
+                          >
+                            <X size={15} />
+                          </button>
+                          <Link
+                            className="btn btn-sm btn-secondary btn-icon"
+                            title="Apri il pasto"
+                            to={`/meals/${meal.meal_id}`}
+                          >
+                            <MessageCircle size={15} />
+                          </Link>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <Link
+                        className="dish vuoto"
+                        to={`/meals/${meal.meal_id}`}
+                        aria-label="Scegli cosa mangiare"
+                      >
+                        <UtensilsCrossed />
+                      </Link>
+                      <div className="today-card-title vuoto">Ancora niente</div>
+                      <div className="today-card-foot">
+                        <span className="meal-facts">target {meal.target_calories} kcal</span>
+                        <div className="today-card-actions">
+                          <Link className="btn btn-sm btn-secondary" to={`/meals/${meal.meal_id}`}>
+                            Scegli cosa mangiare
+                          </Link>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* La spesa non è una statistica, è la cosa che si fa dopo aver guardato i
+              pasti: una riga che porta lì, col numero dentro. */}
+          <Link className="shop-bar" to="/shopping">
+            <ShoppingCart />
+            <div>
+              <strong>
+                {daPrendere > 0
+                  ? `${daPrendere} ${daPrendere === 1 ? 'cosa da prendere' : 'cose da prendere'}`
+                  : 'Non manca niente'}
+              </strong>
+              <span>
+                {daPrendere > 0
+                  ? shopping.estimated_cost
+                    ? `${formatMoney(shopping.estimated_cost)} stimati`
+                    : 'per il piano da oggi in avanti'
+                  : 'quello che il piano chiede è già in dispensa'}
+              </span>
+            </div>
+            <ChevronRight />
+          </Link>
+        </div>
+
+        <aside className="page-aside">
+          {inDisparte.length > 0 && (
+            <div className="card">
+              <div className="card-title">Non generati</div>
+              <div className="side-list">
+                {inDisparte.map((meal) => (
+                  <div key={meal.meal_id} className="side-row mine">
+                    {meal.is_recurring ? <Pin /> : <ChefHat />}
+                    <span>
+                      {meal.slot_name} — {meal.is_recurring ? 'pasto fisso' : 'lo prepari tu'}
+                    </span>
+                    <em>{meal.target_calories}</em>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="card">
+            <div className="adherence-head">
+              <span className="card-title" style={{ marginBottom: 0 }}>
+                Aderenza · 4 settimane
+              </span>
+              <span className="adherence-score">
+                {adherence.tracked_days ? `${Math.round(adherence.score_pct)}%` : '—'}
+              </span>
+            </div>
+            {/* Altezza = quanto pesava il piano di quel giorno sul suo target,
+                colore = com'è andata davvero. Due domande, due canali: una giornata
+                pianificata benissimo e mai seguita si legge alta e spenta. */}
+            <div className="spark">
+              {adherence.days.map((g) => (
+                <span
+                  key={g.date}
+                  className={g.state}
+                  style={{ height: `${Math.max(4, Math.round(g.ratio * 100))}%` }}
+                  title={`${formatDate(g.date, { day: 'numeric', month: 'short' })} · ${
+                    ETICHETTE_ADERENZA[g.state]
+                  }`}
+                />
+              ))}
+            </div>
+            <div className="spark-foot">
+              <span>4 sett. fa</span>
+              <span>
+                {adherence.tracked_days
+                  ? `${adherence.tracked_days} giorni segnati`
+                  : 'niente segnato'}
+              </span>
+              <span>oggi</span>
+            </div>
+          </div>
+
+          <div className="mini-stats">
+            <Link className="mini-stat" to="/plan">
+              <strong>
+                {week.meals_filled}/{week.meals_total}
+              </strong>
+              piano
+            </Link>
+            <Link className="mini-stat" to="/recipes">
+              <strong>{data.recipes_count}</strong>
+              ricette
+            </Link>
+            <Link className="mini-stat" to="/recipes">
+              <strong>{data.favorites_count}</strong>
+              preferite
+            </Link>
+          </div>
+        </aside>
       </div>
     </>
   );

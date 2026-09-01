@@ -581,7 +581,16 @@ def clear_meal_cell(db: Session, meal: PlannedMeal) -> None:
     un'altra parte, qui non c'è più — e infatti spegne anche il pasto fisso: una
     casella vuota che si ripete ogni settimana non vuol dire niente. La ricetta resta
     nel ricettario: quello che si svuota è il posto, non il piatto.
+
+    Se il pasto è rimandato (is_skipped), svuota anche la casella dove era stata
+    accodata la ricetta, altrimenti rimane orfana.
     """
+    # Se il pasto è rimandato, svuota anche la casella dove era stata accodata la ricetta
+    if meal.is_skipped and meal.skipped_to_meal_id:
+        accodata = db.get(PlannedMeal, meal.skipped_to_meal_id)
+        if accodata is not None and accodata.recipe_id and not accodata.is_skipped:
+            _empty_meal(db, accodata)
+
     meal.recipe_id = None
     meal.source = "ai_generated"
     meal.is_recurring = False

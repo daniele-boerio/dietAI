@@ -642,11 +642,21 @@ in un numero (`.day-summary`: quanto si mangia oggi su quanto, coi macro accanto
 i pasti in riga (`.today-grid`), poi la barra lime della spesa (`.shop-bar`) — che non
 è una statistica, è quello che si fa dopo aver guardato i pasti.
 
-A destra (`.page-aside`) sta quello che accompagna: i pasti che **DietAI non genera**
-(«lo prepari tu», i fissi), che una card non ce l'hanno perché non c'è niente da
-generare, ma vanno scritti lo stesso — una giornata da cinque pasti che ne mostra tre
-sembra una giornata a cui ne mancano due; la **spia dell'aderenza** delle ultime
-quattro settimane; e i tre numeri che si guardano ogni tanto (`.mini-stats`).
+**In griglia ci sono tutti i pasti, anche quelli che DietAI non genera.** Per un giro
+«lo prepari tu» era finito in un riquadro a parte, in colonna a destra, col
+ragionamento che una card senza ricetta è una card con dentro niente. Sbagliato: quel
+pasto **lo mangi**, quindi va segnato come tutti gli altri — «l'ho seguito» e «ho
+mangiato altro» contano nella giornata e nell'aderenza esattamente uguale, e il
+riquadro li rendeva le uniche due caselle della giornata su cui non si poteva
+rispondere. Adesso stanno in fila con gli altri, con le stesse tre azioni, e a
+distinguerli è il **cappello** accanto al nome del pasto (`.meal-mark.mine`, lo stesso
+segno della griglia della settimana) più il segnaposto in terracotta (`.dish.mio`) —
+che non è tratteggiato come quello di una casella vuota: lì non manca niente da
+riempire. Il backend li accettava già: `consume_from_pantry` prende un `recipe_id`
+nullo e `skip_meal` non sposta un pasto che prepari tu.
+
+A destra (`.page-aside`) resta quello che si guarda ogni tanto: la **spia
+dell'aderenza** delle ultime quattro settimane e i tre numeri (`.mini-stats`).
 
 La spia (`recent_adherence` in `services/tracking.py`, esposta dalla dashboard) è una
 barra per giorno e dice **due cose con due canali**: l'altezza è quanto il piano di

@@ -6,7 +6,6 @@ import {
   ChefHat,
   ChevronRight,
   MessageCircle,
-  Pin,
   ShoppingCart,
   Sparkles,
   UtensilsCrossed,
@@ -161,12 +160,6 @@ export default function DashboardPage() {
   // quelli già segnati sono storia, e una casella vuota non è un piatto.
   const adesso = today.meals.find((m) => m.recipe && !m.is_skipped && m.is_followed === null);
 
-  // I pasti che DietAI non genera non stanno in griglia: «lo prepari tu» non è una
-  // casella da riempire, e dargli una card vuol dire una card con dentro niente.
-  // Restano però scritti in colonna a destra — una giornata da cinque pasti che ne
-  // mostra tre sembra una giornata a cui ne mancano due.
-  const inGriglia = today.meals.filter((m) => !m.self_managed);
-  const inDisparte = today.meals.filter((m) => m.self_managed);
 
   return (
     <>
@@ -221,7 +214,7 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {inGriglia.length === 0 ? (
+          {today.meals.length === 0 ? (
             <EmptyState
               icon={CalendarDays}
               title="Niente in programma per oggi"
@@ -234,7 +227,7 @@ export default function DashboardPage() {
             />
           ) : (
             <div className="today-grid">
-              {inGriglia.map((meal) =>
+              {today.meals.map((meal) =>
                 telefono && !(adesso && adesso.meal_id === meal.meal_id) ? (
                   <MealRow key={meal.meal_id} meal={meal} />
                 ) : (
@@ -249,6 +242,13 @@ export default function DashboardPage() {
                       {meal.slot_name}
                       {adesso && adesso.meal_id === meal.meal_id && ' · adesso'}
                     </span>
+                    {/* Il cappello dice che quel pasto lo prepari tu — è lo stesso
+                        segno della griglia della settimana. Distinguerli basta: la
+                        giornata è una sola, e un pasto che mangi conta come gli
+                        altri, quindi va segnato come gli altri. */}
+                    {meal.self_managed && (
+                      <ChefHat className="meal-mark mine" aria-label="Lo prepari tu" />
+                    )}
                     {meal.is_followed === true && (
                       <span className="slot-state" title="L'hai seguito">
                         <Check />
@@ -315,6 +315,49 @@ export default function DashboardPage() {
                         </div>
                       </div>
                     </>
+                  ) : meal.self_managed ? (
+                    /* Non è una casella vuota da riempire: è un pasto che hai già
+                       risolto per conto tuo. Non ha una ricetta e non ne avrà una,
+                       ma lo mangi — quindi le due risposte ci vogliono uguali, e
+                       contano nella giornata e nell'aderenza come tutte le altre. */
+                    <>
+                      {/* Il segnaposto non è tratteggiato come quello di una
+                          casella vuota: qui non manca niente da riempire, il pasto
+                          c'è e lo cucini tu. */}
+                      <Link className="dish mio" to={`/meals/${meal.meal_id}`} aria-label="Lo prepari tu">
+                        <ChefHat />
+                      </Link>
+                      <div className="today-card-title">Lo prepari tu</div>
+                      <div className="today-card-foot">
+                        <span className="meal-facts">{meal.target_calories} kcal · lo fai tu</span>
+                        <div className="today-card-actions">
+                          <button
+                            className={`btn btn-sm ${
+                              meal.is_followed === true ? 'btn-primary' : 'btn-secondary'
+                            }`}
+                            onClick={() => markFollowed(meal.meal_id, true)}
+                          >
+                            <Check size={14} /> L&rsquo;ho mangiato
+                          </button>
+                          <button
+                            className={`btn btn-sm btn-icon ${
+                              meal.is_followed === false ? 'btn-moved' : 'btn-secondary'
+                            }`}
+                            title="Ho mangiato altro"
+                            onClick={() => markFollowed(meal.meal_id, false)}
+                          >
+                            <X size={15} />
+                          </button>
+                          <Link
+                            className="btn btn-sm btn-secondary btn-icon"
+                            title="Apri il pasto"
+                            to={`/meals/${meal.meal_id}`}
+                          >
+                            <MessageCircle size={15} />
+                          </Link>
+                        </div>
+                      </div>
+                    </>
                   ) : (
                     <>
                       <Link
@@ -338,11 +381,6 @@ export default function DashboardPage() {
                 </div>
                 )
               )}
-              {/* Anche i pasti che DietAI non genera sono righe della giornata: sul
-                  monitor stanno in colonna a destra, ma su un telefono una colonna a
-                  destra non c'è, e una giornata da cinque pasti che ne mostra tre
-                  sembra una giornata a cui ne mancano due. */}
-              {telefono && inDisparte.map((meal) => <MealRow key={meal.meal_id} meal={meal} />)}
             </div>
           )}
 
@@ -369,23 +407,6 @@ export default function DashboardPage() {
         </div>
 
         <aside className="page-aside">
-          {inDisparte.length > 0 && (
-            <div className="card solo-largo">
-              <div className="card-title">Non generati</div>
-              <div className="side-list">
-                {inDisparte.map((meal) => (
-                  <div key={meal.meal_id} className="side-row mine">
-                    {meal.is_recurring ? <Pin /> : <ChefHat />}
-                    <span>
-                      {meal.slot_name} — {meal.is_recurring ? 'pasto fisso' : 'lo prepari tu'}
-                    </span>
-                    <em>{meal.target_calories}</em>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
           <div className="card solo-largo">
             <div className="adherence-head">
               <span className="card-title" style={{ marginBottom: 0 }}>

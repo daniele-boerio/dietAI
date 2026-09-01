@@ -1968,55 +1968,6 @@ textarea {
    erano tutti in fila sotto i piatti, dove non li apriva nessuno.
    ─────────────────────────────────────────────────────────────── */
 
-/* I pasti che una card non ce l'hanno perché non c'è niente da generare: «lo
-   prepari tu» e i fissi. Scriverli è meglio che ometterli — una giornata da cinque
-   pasti che ne mostra tre sembra una giornata a cui ne mancano due. */
-.side-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.side-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 0.875rem;
-  min-width: 0;
-}
-
-.side-row > svg {
-  width: 30px;
-  height: 30px;
-  flex: none;
-  padding: 7px;
-  border-radius: 50%;
-  border: 1px solid var(--border-light);
-  color: var(--text-muted);
-}
-
-/* Il pasto che prepara l'utente porta il bordo tratteggiato: è una casella che
-   nessuno riempirà, non una in attesa. */
-.side-row.mine > svg {
-  border-style: dashed;
-}
-
-.side-row span {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.side-row em {
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  font-style: normal;
-  color: var(--text-muted);
-  flex: none;
-}
-
 /* La spia dell'aderenza: una barra per giorno, quattro settimane. L'altezza dice
    quanto pesava il piano di quel giorno sul target, il colore com'è andata davvero —
    due canali per due domande diverse, così una giornata pianificata benissimo e mai
@@ -2200,6 +2151,17 @@ textarea {
    dire «qui non c'è niente», non «qui c'è un piatto senza foto». */
 .dish.vuoto > svg {
   opacity: 0.3;
+}
+
+/* Il pasto che prepari tu invece non è vuoto: il segnaposto è pieno come gli altri e
+   porta il cappello, che nell'app vuol dire «questo lo fai tu». Tratteggiarlo lo
+   farebbe leggere come una casella da riempire, che è l'unica cosa che non è. */
+.dish.mio {
+  color: var(--terracotta);
+}
+
+.dish.mio > svg {
+  opacity: 0.7;
 }
 
 .today-card-title.vuoto {

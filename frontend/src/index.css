@@ -67,9 +67,9 @@
   --macro-c: #e9bb4a;
   --macro-f: #7fa6d4;
 
-  --font-display: 'Instrument Serif', Georgia, serif;
-  --font-body: 'Instrument Sans', system-ui, -apple-system, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  --font-display: "Instrument Serif", Georgia, serif;
+  --font-body: "Instrument Sans", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 
   /* Raggi larghi: la card è una piastrella, non un riquadro di modulo. */
   --radius-sm: 12px;
@@ -89,7 +89,7 @@
 /* Il tema chiaro è la carta del tema scuro allargata a tutta la pagina: stessi
    inchiostri, stessi bordi, stesso lime — che qui però riempie soltanto, e per
    scrivere si scurisce in oliva (`--accent`). */
-:root[data-theme='light'] {
+:root[data-theme="light"] {
   --bg-primary: #f1ece0;
   --bg-secondary: #faf7f0;
   --bg-card: #faf7f0;
@@ -120,7 +120,8 @@
   --macro-c: #96731a;
   --macro-f: #4c7099;
 
-  --shadow-card: 0 1px 2px rgba(45, 38, 25, 0.06), 0 8px 20px rgba(45, 38, 25, 0.05);
+  --shadow-card:
+    0 1px 2px rgba(45, 38, 25, 0.06), 0 8px 20px rgba(45, 38, 25, 0.05);
   --shadow-popup: 0 12px 40px rgba(45, 38, 25, 0.18);
 
   color-scheme: light;
@@ -215,8 +216,8 @@ textarea {
   background: var(--bg-secondary);
   border-right: 1px solid var(--border);
   /* In orizzontale la tacca sta sul fianco sinistro, cioè esattamente sopra il menu. */
-  padding: calc(22px + env(safe-area-inset-top)) 0 calc(18px + env(safe-area-inset-bottom))
-    env(safe-area-inset-left);
+  padding: calc(22px + env(safe-area-inset-top)) 0
+    calc(18px + env(safe-area-inset-bottom)) env(safe-area-inset-left);
   position: fixed;
   top: 0;
   left: 0;
@@ -289,7 +290,9 @@ textarea {
   line-height: 1.1;
   text-align: center;
   color: var(--text-muted);
-  transition: background var(--transition), color var(--transition);
+  transition:
+    background var(--transition),
+    color var(--transition);
 }
 
 .sidebar-link:hover {
@@ -375,7 +378,9 @@ textarea {
   height: 34px;
   border-radius: var(--radius-sm);
   color: var(--text-muted);
-  transition: background var(--transition), color var(--transition);
+  transition:
+    background var(--transition),
+    color var(--transition);
 }
 
 .icon-button:hover {
@@ -458,7 +463,8 @@ textarea {
   border-top: 1px solid var(--border);
   /* Sotto le schede c'è la barra di scorrimento dell'iPhone: senza questo margine le
      parole ci finiscono dentro e le icone si toccano male. */
-  padding: 8px calc(6px + env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom))
+  padding: 8px calc(6px + env(safe-area-inset-right))
+    calc(8px + env(safe-area-inset-bottom))
     calc(6px + env(safe-area-inset-left));
 }
 
@@ -496,7 +502,6 @@ textarea {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
 
 /* ── La pagina «Altro» ─────────────────────────────────────────────
    Un elenco, non una griglia di riquadri: sono voci che si leggono in fila e si
@@ -656,7 +661,9 @@ textarea {
   border: 1px solid var(--border-light);
   border-radius: 16px;
   color: var(--terracotta);
-  transition: border-color var(--transition), background var(--transition);
+  transition:
+    border-color var(--transition),
+    background var(--transition);
 }
 
 .altro-esci {
@@ -767,7 +774,10 @@ textarea {
   font-size: 0.875rem;
   font-weight: 600;
   line-height: 1;
-  transition: background var(--transition), border-color var(--transition), opacity var(--transition);
+  transition:
+    background var(--transition),
+    border-color var(--transition),
+    opacity var(--transition);
   white-space: nowrap;
 }
 
@@ -881,7 +891,6 @@ textarea {
 .btn-block {
   width: 100%;
 }
-
 
 /* ── Card e box ────────────────────────────────────────────────── */
 
@@ -1240,7 +1249,9 @@ textarea {
   font-size: 0.82rem;
   font-weight: 500;
   color: var(--text-secondary);
-  transition: background var(--transition), color var(--transition);
+  transition:
+    background var(--transition),
+    color var(--transition);
 }
 
 .week-tab.active {
@@ -1270,7 +1281,9 @@ textarea {
   border-radius: 99px;
   border: 1px solid var(--border-light);
   color: var(--text-secondary);
-  transition: background var(--transition), color var(--transition);
+  transition:
+    background var(--transition),
+    color var(--transition);
 }
 
 .week-nav-btn:hover {
@@ -1362,7 +1375,9 @@ textarea {
   color: var(--text-muted);
   cursor: pointer;
   opacity: 0;
-  transition: opacity var(--transition), color var(--transition);
+  transition:
+    opacity var(--transition),
+    color var(--transition);
 }
 
 .day-skip svg {
@@ -1513,7 +1528,10 @@ textarea {
   text-align: left;
   width: 100%;
   min-width: 0; /* senza, i titoli lunghi allargano la colonna della griglia */
-  transition: border-color var(--transition), background var(--transition), box-shadow var(--transition);
+  transition:
+    border-color var(--transition),
+    background var(--transition),
+    box-shadow var(--transition);
 }
 
 /* Il corpo cliccabile. Era un <a> con `display: contents`, che non poteva fare da
@@ -2088,7 +2106,9 @@ textarea {
   gap: 12px;
   min-width: 0;
   padding: 18px;
-  transition: background var(--transition), border-color var(--transition);
+  transition:
+    background var(--transition),
+    border-color var(--transition);
 }
 
 /* Come nella griglia della settimana: si accende di un tono, non si sbianca. */
@@ -2255,7 +2275,9 @@ textarea {
   padding: 4px;
   border-radius: 6px;
   color: var(--text-muted);
-  transition: background var(--transition), color var(--transition);
+  transition:
+    background var(--transition),
+    color var(--transition);
 }
 
 .meal-action:hover:not(:disabled) {
@@ -2339,7 +2361,9 @@ textarea {
   font-weight: 600;
   color: var(--text-secondary);
   white-space: nowrap;
-  transition: border-color var(--transition), color var(--transition);
+  transition:
+    border-color var(--transition),
+    color var(--transition);
 }
 
 .meal-more-btn svg {
@@ -2379,7 +2403,9 @@ textarea {
   font-family: inherit;
   font-size: 0.74rem;
   font-weight: 600;
-  transition: background var(--transition), color var(--transition);
+  transition:
+    background var(--transition),
+    color var(--transition);
 }
 
 .meal-gen svg {
@@ -2431,12 +2457,16 @@ textarea {
   position: relative;
 }
 
-/* Il tondo per tornare indietro sta **sulla** fascia, non sopra la pagina: è il
-   posto in cui il pollice arriva senza risalire, e non ruba una riga al foglio. */
+/* Header del pasto col tondo di tornare indietro: solo quando c'è ricetta. */
+.recipe-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16px;
+  height: 38px;
+}
+
+/* Il tondo per tornare indietro sta all'inizio della riga. */
 .recipe-back {
-  position: absolute;
-  top: 16px;
-  left: 16px;
   width: 38px;
   height: 38px;
   border-radius: 50%;
@@ -2447,6 +2477,7 @@ textarea {
   align-items: center;
   justify-content: center;
   transition: background var(--transition);
+  padding: 0;
 }
 
 .recipe-back:hover {
@@ -2468,7 +2499,9 @@ textarea {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background var(--transition), color var(--transition);
+  transition:
+    background var(--transition),
+    color var(--transition);
 }
 
 .recipe-fav svg {
@@ -2874,7 +2907,9 @@ textarea {
   border-radius: 99px;
   border: 1px solid var(--border-light);
   color: var(--text-secondary);
-  transition: border-color var(--transition), color var(--transition);
+  transition:
+    border-color var(--transition),
+    color var(--transition);
 }
 
 .chat-suggestion:hover {
@@ -3002,8 +3037,14 @@ textarea {
 }
 
 @keyframes blink {
-  0%, 60%, 100% { opacity: 0.25; }
-  30% { opacity: 1; }
+  0%,
+  60%,
+  100% {
+    opacity: 0.25;
+  }
+  30% {
+    opacity: 1;
+  }
 }
 
 /* ── Lista della spesa ─────────────────────────────────────────── */
@@ -3337,7 +3378,9 @@ textarea {
   border: 1px solid var(--border-light);
   border-radius: 99px;
   font-size: 0.85rem;
-  transition: border-color var(--transition), background var(--transition);
+  transition:
+    border-color var(--transition),
+    background var(--transition);
 }
 
 .category-option:hover {
@@ -3374,7 +3417,7 @@ textarea {
 }
 
 .chart-legend span::before {
-  content: '';
+  content: "";
   display: inline-block;
   width: 8px;
   height: 8px;
@@ -3483,7 +3526,7 @@ textarea {
 /* Il buco della ciambella prende il colore della card che la ospita, non della
    pagina: mezzo tono di differenza in mezzo a un anello si vede come una macchia. */
 .gauge-ring::after {
-  content: '';
+  content: "";
   position: absolute;
   inset: 11px;
   background: var(--bg-card);
@@ -3913,10 +3956,10 @@ textarea {
   line-height: 1.5;
 }
 
-input[type='text'],
-input[type='email'],
-input[type='password'],
-input[type='number'],
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
 select,
 textarea {
   width: 100%;
@@ -3942,11 +3985,11 @@ textarea:focus {
    più. Da lì in poi ci si trova a navigare tutto ingrandito, apparentemente senza
    motivo. Le dimensioni più piccole restano su desktop, dove il problema non esiste. */
 @media (pointer: coarse) {
-  input[type='text'],
-  input[type='email'],
-  input[type='password'],
-  input[type='number'],
-  input[type='search'],
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  input[type="search"],
   select,
   textarea,
   .auth-input,
@@ -3982,7 +4025,9 @@ textarea:focus {
   font-size: 0.88rem;
   font-weight: 600;
   color: var(--text-secondary);
-  transition: background var(--transition), color var(--transition);
+  transition:
+    background var(--transition),
+    color var(--transition);
 }
 
 .segmented button.on {
@@ -4048,7 +4093,7 @@ textarea:focus {
   border-radius: 12px;
 }
 
-.pantry-edit input[type='number'] {
+.pantry-edit input[type="number"] {
   font-family: var(--font-mono);
   font-size: 0.85rem;
   text-align: right;
@@ -4068,7 +4113,9 @@ textarea:focus {
   height: 40px;
   flex: none;
   border-radius: 12px;
-  transition: background var(--transition), border-color var(--transition);
+  transition:
+    background var(--transition),
+    border-color var(--transition);
 }
 
 /* Confermare è l'azione della riga e si vede: pieno lime. Annullare è il contorno —
@@ -4154,7 +4201,9 @@ textarea:focus {
   height: 20px;
   border-radius: 50%;
   background: var(--text-primary);
-  transition: transform var(--transition), background var(--transition);
+  transition:
+    transform var(--transition),
+    background var(--transition);
 }
 
 .toggle.on i {
@@ -4311,7 +4360,9 @@ textarea:focus {
   border-radius: 14px;
   font-size: 0.88rem;
   color: var(--text-secondary);
-  transition: background var(--transition), color var(--transition);
+  transition:
+    background var(--transition),
+    color var(--transition);
 }
 
 .settings-nav a:hover {
@@ -4494,7 +4545,9 @@ textarea:focus {
   font-size: 0.82rem;
   text-align: right;
   font-variant-numeric: tabular-nums;
-  transition: background var(--transition), border-color var(--transition);
+  transition:
+    background var(--transition),
+    border-color var(--transition);
 }
 
 /* Il nome del pasto è una parola, non una cifra: si legge da sinistra e col
@@ -4519,13 +4572,13 @@ textarea:focus {
    corregge 552 kcal a colpi di uno — e si prendono un terzo di una casella larga
    67px: i grassi a 156,5 finivano sotto la freccia. Il tastierino numerico sul
    telefono lo dà `inputMode`, non lo spinner. */
-.meal-editor-row input[type='number'] {
+.meal-editor-row input[type="number"] {
   appearance: textfield;
   -moz-appearance: textfield;
 }
 
-.meal-editor-row input[type='number']::-webkit-outer-spin-button,
-.meal-editor-row input[type='number']::-webkit-inner-spin-button {
+.meal-editor-row input[type="number"]::-webkit-outer-spin-button,
+.meal-editor-row input[type="number"]::-webkit-inner-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
@@ -4572,7 +4625,7 @@ textarea:focus {
   color: var(--text-muted);
 }
 
-input[type='range'] {
+input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
@@ -4586,7 +4639,7 @@ input[type='range'] {
 
 /* Il pomello va dichiarato due volte: i due motori non accettano un selettore
    comune, e messi in una regola sola la buttano via tutta e due. */
-input[type='range']::-webkit-slider-thumb {
+input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
   width: 20px;
@@ -4597,7 +4650,7 @@ input[type='range']::-webkit-slider-thumb {
   cursor: pointer;
 }
 
-input[type='range']::-moz-range-thumb {
+input[type="range"]::-moz-range-thumb {
   width: 20px;
   height: 20px;
   border: none;
@@ -4606,12 +4659,12 @@ input[type='range']::-moz-range-thumb {
   cursor: pointer;
 }
 
-input[type='range']:focus-visible {
+input[type="range"]:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
 
-input[type='range']:disabled {
+input[type="range"]:disabled {
   opacity: 0.5;
 }
 
@@ -4878,7 +4931,9 @@ input[type='range']:disabled {
   padding: 28px 20px;
   text-align: center;
   color: var(--text-secondary);
-  transition: border-color var(--transition), background var(--transition);
+  transition:
+    border-color var(--transition),
+    background var(--transition);
   cursor: pointer;
 }
 
@@ -5015,7 +5070,9 @@ input[type='range']:disabled {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 22px;
-  transition: border-color var(--transition), background var(--transition);
+  transition:
+    border-color var(--transition),
+    background var(--transition);
 }
 
 .choice-card:hover {
@@ -5185,7 +5242,7 @@ input[type='range']:disabled {
 }
 
 .spinner::after {
-  content: '';
+  content: "";
   width: 30px;
   height: 30px;
   border: 3px solid var(--border);
@@ -5277,7 +5334,9 @@ input[type='range']:disabled {
   border-radius: var(--radius-sm);
   font-size: 0.8rem;
   color: var(--text-muted);
-  transition: background var(--transition), color var(--transition);
+  transition:
+    background var(--transition),
+    color var(--transition);
 }
 
 .generation-log-tab:hover:not(:disabled) {
@@ -5336,8 +5395,10 @@ input[type='range']:disabled {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: calc(20px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right))
-    calc(20px + env(safe-area-inset-bottom)) calc(20px + env(safe-area-inset-left));
+  padding: calc(20px + env(safe-area-inset-top))
+    calc(20px + env(safe-area-inset-right))
+    calc(20px + env(safe-area-inset-bottom))
+    calc(20px + env(safe-area-inset-left));
 }
 
 .modal {
@@ -5643,8 +5704,10 @@ input[type='range']:disabled {
     /* In cima non c'è più niente di fermo: la pagina comincia dalla sua testata, con
        lo spazio della tacca sopra. In fondo il posto per le schede, che sono
        `fixed` e non ne occupano — più la barra di scorrimento dell'iPhone. */
-    padding: calc(16px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right))
-      calc(86px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
+    padding: calc(16px + env(safe-area-inset-top))
+      calc(16px + env(safe-area-inset-right))
+      calc(86px + env(safe-area-inset-bottom))
+      calc(16px + env(safe-area-inset-left));
   }
   /* Dove la pagina ha già la sua barra in fondo — il dettaglio del pasto — le schede
      non ci sono, e lo spazio serve a lei. */
@@ -5998,6 +6061,7 @@ input[type='range']:disabled {
      non copre l'ultima riga della pagina come farebbe una barra `fixed`. */
   .meal-bar {
     display: flex;
+    flex-wrap: wrap;
     gap: 8px;
     position: sticky;
     bottom: 0;
@@ -6005,7 +6069,8 @@ input[type='range']:disabled {
     margin: 16px calc(-14px - env(safe-area-inset-right)) 0
       calc(-14px - env(safe-area-inset-left));
     padding: 10px calc(14px + env(safe-area-inset-right))
-      calc(10px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left));
+      calc(10px + env(safe-area-inset-bottom))
+      calc(14px + env(safe-area-inset-left));
     background: var(--bg-primary);
     border-top: 1px solid var(--border);
   }
@@ -6013,10 +6078,16 @@ input[type='range']:disabled {
     flex: 1 1 auto;
     min-height: 46px;
   }
-  .meal-bar-chat {
+  .meal-bar .btn.meal-bar-chat {
     flex: none;
     width: 52px;
     padding: 0;
+  }
+  .meal-bar .btn.meal-bar-delete {
+    flex: 0 0 52px;
+    width: 52px;
+    padding: 0;
+    color: var(--danger);
   }
   /* Le stesse due risposte, nella card della ricetta: qui sarebbero un doppione. */
   .andata-answers {

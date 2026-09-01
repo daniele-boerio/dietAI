@@ -587,6 +587,7 @@ def clear_meal_cell(db: Session, meal: PlannedMeal) -> None:
     meal.is_recurring = False
     meal.recurring_rule = None
     meal.is_followed = None
+    meal.is_skipped = False
     meal.deviation_notes = None
     meal.pantry_used = None
     meal.skipped_to_meal_id = None

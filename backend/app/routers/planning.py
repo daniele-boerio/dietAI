@@ -61,7 +61,9 @@ def _get_week(db: Session, user_id: int, week_id: int) -> WeekPlan:
     return week
 
 
-def _get_meal(db: Session, user_id: int, meal_id: int) -> tuple[PlannedMeal, DayPlan, WeekPlan]:
+def _get_meal(
+    db: Session, user_id: int, meal_id: int
+) -> tuple[PlannedMeal, DayPlan, WeekPlan]:
     """Recupera il pasto verificando che la catena pasto → giorno → settimana sia dell'utente.
 
     Il filtro su user_id sta qui e non nel chiamante apposta: dimenticarlo in uno
@@ -187,7 +189,9 @@ def generate(
 
 @router.get("/weeks/{week_id}/progress")
 def generation_progress(
-    week_id: int, user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
+    week_id: int,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
 ):
     """Cosa sta scrivendo il modello in questo momento.
 
@@ -213,7 +217,9 @@ def generation_progress(
 
 @router.get("/meals/{meal_id}")
 def get_meal(
-    meal_id: int, user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
+    meal_id: int,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
 ):
     meal, day, week = _get_meal(db, user_id, meal_id)
     slot = db.get(MealSlot, meal.meal_slot_id)
@@ -288,7 +294,9 @@ def assign_meal(
 
 @router.delete("/meals/{meal_id}/recipe")
 def clear_meal(
-    meal_id: int, user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
+    meal_id: int,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
 ):
     """Svuota la casella (la ricetta resta nel ricettario).
 
@@ -296,8 +304,15 @@ def clear_meal(
     in programma e si è deciso altrimenti — resta scritto, e si accoda più avanti —
     qui invece in programma non c'è più, e la casella torna vuota come se non fosse
     mai stata riempita.
+
+    Se il pasto era stato segnato come "seguito", gli ingredienti che erano stati
+    tolti dalla dispensa vengono reimmessi prima di eliminare la ricetta.
     """
     meal, day, week = _get_meal(db, user_id, meal_id)
+
+    # Se il pasto era stato tracciato come seguito, reimmetti gli ingredienti nella dispensa
+    if meal.is_followed is True and meal.pantry_used:
+        restore_to_pantry(db, user_id, meal.pantry_used)
 
     clear_meal_cell(db, meal)
     db.commit()
@@ -378,7 +393,9 @@ def set_followed(
         unskip_meal(db, meal)
         moved = {"moved_to": None}
         if meal.pantry_used is None:
-            pantry_used, pantry_skipped = consume_from_pantry(db, user_id, meal.recipe_id)
+            pantry_used, pantry_skipped = consume_from_pantry(
+                db, user_id, meal.recipe_id
+            )
             # Niente scalato, niente da ricordare: `pantry_used` risponde a "cosa ho
             # tolto", ed è anche la guardia contro il doppio scalo. Segnarci una lista
             # vuota vorrebbe dire "già fatto" per sempre, e un pasto segnato prima

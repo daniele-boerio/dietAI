@@ -38,7 +38,15 @@ from .recipes import create_recipe, recipe_for_prompt, serialize_recipe
 
 logger = logging.getLogger(__name__)
 
-DAY_NAMES = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
+DAY_NAMES = [
+    "Lunedì",
+    "Martedì",
+    "Mercoledì",
+    "Giovedì",
+    "Venerdì",
+    "Sabato",
+    "Domenica",
+]
 
 
 # ── Settimane ──────────────────────────────────────────────────────────────────
@@ -241,7 +249,10 @@ def ensure_week_structure(db: Session, week: WeekPlan, slots: list[MealSlot]) ->
     proprio sostituita, prima si riportano le caselle esistenti sui pasti di quella
     attiva (`realign_to_diet`), altrimenti alle vecchie si sommerebbero le nuove.
     """
-    days = {d.day_of_week: d for d in db.query(DayPlan).filter(DayPlan.week_plan_id == week.id)}
+    days = {
+        d.day_of_week: d
+        for d in db.query(DayPlan).filter(DayPlan.week_plan_id == week.id)
+    }
 
     for offset in range(7):
         if offset not in days:
@@ -264,7 +275,9 @@ def ensure_week_structure(db: Session, week: WeekPlan, slots: list[MealSlot]) ->
         }
         for slot_id in slot_ids - existing:
             db.add(
-                PlannedMeal(day_plan_id=day.id, meal_slot_id=slot_id, source="ai_generated")
+                PlannedMeal(
+                    day_plan_id=day.id, meal_slot_id=slot_id, source="ai_generated"
+                )
             )
     db.flush()
 
@@ -371,7 +384,8 @@ class GenerationProgress:
         session = self._session_factory()
         try:
             session.query(WeekPlan).filter(WeekPlan.id == self.week_id).update(
-                {WeekPlan.generation_progress: self.snapshot()}, synchronize_session=False
+                {WeekPlan.generation_progress: self.snapshot()},
+                synchronize_session=False,
             )
             session.commit()
         except Exception:
@@ -461,7 +475,7 @@ def ensure_not_skipped(day: DayPlan, meal: PlannedMeal | None = None) -> None:
         raise HTTPException(
             409,
             "Questo pasto è saltato: la sua ricetta si è accodata più avanti. "
-            'Segnalo come seguito per riportarlo qui.',
+            "Segnalo come seguito per riportarlo qui.",
         )
     if day.is_skipped:
         raise HTTPException(
@@ -499,7 +513,9 @@ def apply_recurring_meals(db: Session, user_id: int, week: WeekPlan) -> int:
     """
     previous = (
         db.query(WeekPlan)
-        .filter(WeekPlan.user_id == user_id, WeekPlan.week_start_date < week.week_start_date)
+        .filter(
+            WeekPlan.user_id == user_id, WeekPlan.week_start_date < week.week_start_date
+        )
         .order_by(WeekPlan.week_start_date.desc())
         .first()
     )
@@ -519,7 +535,10 @@ def apply_recurring_meals(db: Session, user_id: int, week: WeekPlan) -> int:
     if not recurring:
         return 0
 
-    days = {d.day_of_week: d for d in db.query(DayPlan).filter(DayPlan.week_plan_id == week.id)}
+    days = {
+        d.day_of_week: d
+        for d in db.query(DayPlan).filter(DayPlan.week_plan_id == week.id)
+    }
     applied = 0
 
     for meal, source_day in recurring:
@@ -574,7 +593,9 @@ def clear_meal_cell(db: Session, meal: PlannedMeal) -> None:
     forget_queued_meal(db, meal)
 
 
-def stop_recurring_forward(db: Session, user_id: int, meal: PlannedMeal, day: DayPlan) -> int:
+def stop_recurring_forward(
+    db: Session, user_id: int, meal: PlannedMeal, day: DayPlan
+) -> int:
     """Togliendo il «fisso», leva quel piatto anche dalle caselle che l'hanno ricevuto.
 
     Un pasto fisso si ricopia da sé sulle settimane che si aprono — e una settimana si
@@ -662,7 +683,9 @@ def _overflow_week(db: Session, user_id: int, week: WeekPlan) -> WeekPlan | None
     return get_or_create_week(db, user_id, week.week_start_date + timedelta(days=7))
 
 
-def _free_cells(db: Session, user_id: int, week: WeekPlan, slot_id: int) -> list[PlannedMeal]:
+def _free_cells(
+    db: Session, user_id: int, week: WeekPlan, slot_id: int
+) -> list[PlannedMeal]:
     """Le caselle libere di quello slot da oggi in avanti, in ordine di giorno.
 
     Prima quelle rimaste vuote in questa settimana, poi quelle della prossima: è la
@@ -684,8 +707,10 @@ def _free_cells(db: Session, user_id: int, week: WeekPlan, slot_id: int) -> list
     return out
 
 
-def skip_meal(db: Session, user_id: int, meal: PlannedMeal, day: DayPlan, week: WeekPlan) -> dict:
-    """"Ho mangiato altro": il piatto non è stato cucinato, la ricetta va in fondo.
+def skip_meal(
+    db: Session, user_id: int, meal: PlannedMeal, day: DayPlan, week: WeekPlan
+) -> dict:
+    """ "Ho mangiato altro": il piatto non è stato cucinato, la ricetta va in fondo.
 
     Non fa slittare niente: gli altri giorni restano dove sono e la ricetta saltata si
     accoda sulla prima casella libera di quel pasto — più avanti in settimana se ce
@@ -749,7 +774,9 @@ def unskip_meal(db: Session, meal: PlannedMeal) -> None:
 
     meal.is_skipped = False
     accodata = (
-        db.get(PlannedMeal, meal.skipped_to_meal_id) if meal.skipped_to_meal_id else None
+        db.get(PlannedMeal, meal.skipped_to_meal_id)
+        if meal.skipped_to_meal_id
+        else None
     )
     meal.skipped_to_meal_id = None
 
@@ -764,7 +791,9 @@ def unskip_meal(db: Session, meal: PlannedMeal) -> None:
     db.flush()
 
 
-def skip_day(db: Session, user_id: int, day: DayPlan, week: WeekPlan, skipped: bool) -> None:
+def skip_day(
+    db: Session, user_id: int, day: DayPlan, week: WeekPlan, skipped: bool
+) -> None:
     """Salta (o rimette) l'intera giornata: vale per tutti i suoi pasti insieme.
 
     Serve per il weekend fuori, e vale da oggi in avanti: una giornata già passata la
@@ -794,7 +823,11 @@ def _excluded_names(db: Session, user_id: int) -> list[str]:
         .filter(ExcludedIngredient.user_id == user_id)
         .all()
     )
-    return [ing.name if ing else (exc.custom_name or "") for exc, ing in rows if ing or exc.custom_name]
+    return [
+        ing.name if ing else (exc.custom_name or "")
+        for exc, ing in rows
+        if ing or exc.custom_name
+    ]
 
 
 def _base_names(db: Session, user_id: int) -> list[str]:
@@ -817,7 +850,9 @@ def _pantry_descriptions(db: Session, user_id: int) -> list[str]:
     out = []
     for item, ing in rows:
         if item.quantity_available:
-            out.append(f"{ing.name} ({format_quantity(item.quantity_available, item.unit or 'unità')})")
+            out.append(
+                f"{ing.name} ({format_quantity(item.quantity_available, item.unit or 'unità')})"
+            )
         else:
             out.append(ing.name)
     return out
@@ -825,7 +860,9 @@ def _pantry_descriptions(db: Session, user_id: int) -> list[str]:
 
 def _rated_titles(db: Session, user_id: int, high: bool) -> list[str]:
     query = db.query(Recipe.title).filter(Recipe.user_id == user_id)
-    query = query.filter(Recipe.rating >= 4) if high else query.filter(Recipe.rating <= 2)
+    query = (
+        query.filter(Recipe.rating >= 4) if high else query.filter(Recipe.rating <= 2)
+    )
     return [r[0] for r in query.order_by(Recipe.id.desc()).limit(15).all()]
 
 
@@ -893,7 +930,9 @@ def build_context(db: Session, user_id: int) -> str:
 # ── Lettura della settimana ────────────────────────────────────────────────────
 
 
-def week_meals(db: Session, week: WeekPlan) -> list[tuple[DayPlan, PlannedMeal, MealSlot]]:
+def week_meals(
+    db: Session, week: WeekPlan
+) -> list[tuple[DayPlan, PlannedMeal, MealSlot]]:
     return (
         db.query(DayPlan, PlannedMeal, MealSlot)
         .join(PlannedMeal, PlannedMeal.day_plan_id == DayPlan.id)
@@ -1124,7 +1163,8 @@ def generate_week(
     for day, _meal, slot in to_fill:
         by_day.setdefault(day.day_of_week, []).append(_slot_line(slot))
     slots_to_fill = "\n".join(
-        f"{DAY_NAMES[dow]} (day_of_week {dow}):\n" + "\n".join(f"  · {line}" for line in lines)
+        f"{DAY_NAMES[dow]} (day_of_week {dow}):\n"
+        + "\n".join(f"  · {line}" for line in lines)
         for dow, lines in sorted(by_day.items())
     )
 
@@ -1214,13 +1254,19 @@ def _apply_generated_week(
             if not target:
                 # L'AI ha inventato un pasto che non esiste (o l'ha già riempito):
                 # ignorarlo è meglio che sovrascrivere qualcosa a caso.
-                logger.info("Pasto ignorato dalla risposta AI: giorno %s, slot %r", dow, slot_name)
+                logger.info(
+                    "Pasto ignorato dalla risposta AI: giorno %s, slot %r",
+                    dow,
+                    slot_name,
+                )
                 continue
             recipe_data = meal_data.get("recipe") or {}
             if not recipe_data.get("title"):
                 continue
             _day, meal, _slot = target
-            recipe = create_recipe(db, user.id, recipe_data, generation_prompt="week_plan")
+            recipe = create_recipe(
+                db, user.id, recipe_data, generation_prompt="week_plan"
+            )
             meal.recipe_id = recipe.id
             meal.source = "ai_generated"
             meal.is_followed = None
@@ -1232,7 +1278,9 @@ def _apply_generated_week(
     if filled == 0:
         # Niente commit: a rimettere in ordine la settimana — sbloccarla e segnare
         # perché — ci pensa chi cattura, che è anche l'unico a saperlo dire all'utente.
-        raise AIError("Il modello non ha prodotto nessuna ricetta utilizzabile. Riprova.")
+        raise AIError(
+            "Il modello non ha prodotto nessuna ricetta utilizzabile. Riprova."
+        )
 
     if week.status == "draft" and week.week_start_date == current_week_start():
         week.status = "active"
@@ -1254,7 +1302,9 @@ def _apply_generated_week(
     }
 
 
-def _partial_ingredients(db: Session, week: WeekPlan, exclude_meal_id: int) -> list[str]:
+def _partial_ingredients(
+    db: Session, week: WeekPlan, exclude_meal_id: int
+) -> list[str]:
     """Ingredienti già previsti in settimana: la nuova ricetta dovrebbe riusarli."""
     rows = (
         db.query(Ingredient.name)
@@ -1312,7 +1362,9 @@ def regenerate_meal(
         slot_notes=slot.notes or "nessuna",
         previous_recipe=previous.title if previous else "nessuna",
         week_recipes=_fmt_list(week_titles, "nessuna"),
-        partial_ingredients=_fmt_list(_partial_ingredients(db, week, meal.id), "nessuno"),
+        partial_ingredients=_fmt_list(
+            _partial_ingredients(db, week, meal.id), "nessuno"
+        ),
         user_request=(
             "\nRICHIESTA DELL'UTENTE (ha la precedenza sulle regole di varietà qui "
             f"sopra): {user_request}\n"
@@ -1331,10 +1383,20 @@ def regenerate_meal(
     if not isinstance(data, dict) or not data.get("title"):
         raise AIError("Claude non ha restituito una ricetta valida.")
 
-    recipe = create_recipe(db, user.id, data, generation_prompt=json.dumps({"slot": slot.name}))
+    recipe = create_recipe(
+        db, user.id, data, generation_prompt=json.dumps({"slot": slot.name})
+    )
+
+    # Se il pasto era stato tracciato come seguito, reimmetti gli ingredienti nella dispensa
+    if meal.is_followed is True and meal.pantry_used:
+        from .shopping import restore_to_pantry
+
+        restore_to_pantry(db, user.id, meal.pantry_used)
+
     meal.recipe_id = recipe.id
     meal.source = "ai_generated"
     meal.is_followed = None
+    meal.pantry_used = None  # Reset since we're getting a new recipe
     # Qui dentro c'è un piatto nuovo, scelto adesso: se questa casella era la coda di un
     # pasto rimandato, non lo è più.
     forget_queued_meal(db, meal)

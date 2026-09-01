@@ -56,6 +56,7 @@ function passi(testo) {
  *  - `eyebrow`: la riga di contesto sopra il titolo («Pranzo di lunedì 1 settembre»)
  *  - `azioni`: la riga in fondo al foglio (com'è andata, rigenera, preferita)
  *  - `indietro`: il tondo in alto a sinistra sulla fascia del piatto
+ *  - `preferita`: il tondo in alto a destra, sulla stessa fascia
  */
 export default function RecipeView({
   recipe,
@@ -65,6 +66,7 @@ export default function RecipeView({
   eyebrow,
   azioni,
   indietro,
+  preferita,
 }) {
   if (!recipe) return null;
 
@@ -79,6 +81,7 @@ export default function RecipeView({
       <div className="recipe-hero dish">
         <UtensilsCrossed />
         {indietro}
+        {preferita}
       </div>
 
       <div className="recipe-sheet-body">

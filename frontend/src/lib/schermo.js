@@ -31,3 +31,10 @@ export function useMediaQuery(query) {
 // La soglia oltre la quale le pagine si aprono in due colonne. È la stessa dei
 // blocchi `@media (max-width: 1100px)` del foglio di stile: se cambia lì, cambia qui.
 export const useDueColonne = () => useMediaQuery('(min-width: 1101px)');
+
+// Il telefono: la stessa soglia dei blocchi `@media (max-width: 768px)`, dove la
+// stecca di icone lascia il posto alle schede in fondo. Serve dove una cosa non
+// cambia forma ma **identità**: nella home i pasti già decisi sono card su un
+// monitor e righe di elenco su un telefono, e sono due markup diversi — una card
+// spiegazzata in riga dal CSS resta una card con dentro dei pezzi che non servono.
+export const useTelefono = () => useMediaQuery('(max-width: 768px)');

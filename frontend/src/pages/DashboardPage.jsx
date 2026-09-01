@@ -17,6 +17,7 @@ import { useApp } from '../App';
 import EmptyState from '../components/EmptyState';
 import MacroBar from '../components/MacroBar';
 import { nonScalatiDallaDispensa, scalatiDallaDispensa } from '../lib/pantry';
+import { useTelefono } from '../lib/schermo';
 
 // Quanto si mangia oggi, sommando i piatti in programma. Un pasto rimandato non
 // conta (si cucina un altro giorno) e uno che prepara l'utente conta col suo target:
@@ -53,9 +54,48 @@ const ETICHETTE_ADERENZA = {
   none: 'nessun piano',
 };
 
+// Un pasto della giornata, in riga. Il tondo a sinistra dice com'è andata — o che
+// quel pasto non lo genera nessuno — poi il nome del pasto con le sue calorie in
+// monospaziato e sotto il piatto. È la forma che il telefono chiede: quattro righe
+// per una giornata, contro quattro card da 215px l'una.
+function MealRow({ meal }) {
+  const stato = meal.is_followed === true ? 'done' : meal.is_skipped ? 'moved' : '';
+  const Icona =
+    meal.is_followed === true
+      ? Check
+      : meal.is_skipped
+        ? X
+        : meal.self_managed
+          ? ChefHat
+          : UtensilsCrossed;
+  return (
+    <Link className={`meal-row ${stato}`} to={`/meals/${meal.meal_id}`}>
+      <span className={`meal-tondo ${stato} ${meal.self_managed ? 'mine' : ''}`}>
+        <Icona />
+      </span>
+      <span className="meal-row-testo">
+        <span className="meal-slot">
+          {meal.slot_name} · {meal.recipe ? meal.recipe.calories : meal.target_calories} kcal
+        </span>
+        <span className="meal-row-titolo">
+          {meal.recipe
+            ? meal.recipe.title
+            : meal.self_managed
+              ? 'Lo prepari tu'
+              : 'Scegli cosa mangiare'}
+        </span>
+      </span>
+      <ChevronRight className="meal-row-freccia" />
+    </Link>
+  );
+}
+
 export default function DashboardPage() {
   const { addToast } = useApp();
   const navigate = useNavigate();
+  // Sul telefono i pasti già decisi sono righe di elenco, non card: vedi
+  // `lib/schermo.js`. Il pasto di adesso resta una card in tutti e due i casi.
+  const telefono = useTelefono();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -139,7 +179,9 @@ export default function DashboardPage() {
           </p>
         </div>
         <div className="page-actions">
-          <Link className="btn btn-secondary" to="/plan">
+          {/* Sul telefono no: la settimana è una scheda in fondo, e un pulsante che
+              porta dove porta già una scheda è un comando che ripete un comando. */}
+          <Link className="btn btn-secondary solo-largo" to="/plan">
             <CalendarDays size={16} /> Vai alla settimana
           </Link>
           {/* Porta alla settimana **con la finestra già aperta**: generare passa
@@ -192,7 +234,10 @@ export default function DashboardPage() {
             />
           ) : (
             <div className="today-grid">
-              {inGriglia.map((meal) => (
+              {inGriglia.map((meal) =>
+                telefono && !(adesso && adesso.meal_id === meal.meal_id) ? (
+                  <MealRow key={meal.meal_id} meal={meal} />
+                ) : (
                 <div
                   key={meal.meal_id}
                   className={`card today-card ${meal.is_skipped ? 'skipped' : ''} ${
@@ -291,7 +336,13 @@ export default function DashboardPage() {
                     </>
                   )}
                 </div>
-              ))}
+                )
+              )}
+              {/* Anche i pasti che DietAI non genera sono righe della giornata: sul
+                  monitor stanno in colonna a destra, ma su un telefono una colonna a
+                  destra non c'è, e una giornata da cinque pasti che ne mostra tre
+                  sembra una giornata a cui ne mancano due. */}
+              {telefono && inDisparte.map((meal) => <MealRow key={meal.meal_id} meal={meal} />)}
             </div>
           )}
 
@@ -319,7 +370,7 @@ export default function DashboardPage() {
 
         <aside className="page-aside">
           {inDisparte.length > 0 && (
-            <div className="card">
+            <div className="card solo-largo">
               <div className="card-title">Non generati</div>
               <div className="side-list">
                 {inDisparte.map((meal) => (
@@ -335,7 +386,7 @@ export default function DashboardPage() {
             </div>
           )}
 
-          <div className="card">
+          <div className="card solo-largo">
             <div className="adherence-head">
               <span className="card-title" style={{ marginBottom: 0 }}>
                 Aderenza · 4 settimane
@@ -370,7 +421,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="mini-stats">
+          <div className="mini-stats solo-largo">
             <Link className="mini-stat" to="/plan">
               <strong>
                 {week.meals_filled}/{week.meals_total}

@@ -437,13 +437,236 @@ textarea {
   color: var(--text-primary);
 }
 
-.sidebar-backdrop {
+/* ── Le schede del telefono ────────────────────────────────────────
+   Cinque, in fondo, dove arriva il pollice: Oggi, Settimana, Spesa, Ricette e
+   «Altro», che raccoglie il resto. Prima al loro posto c'erano una barra in alto col
+   pulsante del menu e un cassetto che entrava da sinistra: due elementi fermi e due
+   gesti per arrivare dove adesso si arriva con un dito, e 54px di schermo spesi per
+   scrivere il nome dell'app a chi l'app l'ha già aperta.
+
+   Sopra i 769px non si vedono: lì il loro posto ce l'ha la stecca di icone.
+   ─────────────────────────────────────────────────────────────── */
+.tabbar {
+  display: none;
   position: fixed;
-  inset: 0;
-  z-index: 45;
-  background: rgba(10, 9, 6, 0.6);
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 60;
+  align-items: stretch;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+  /* Sotto le schede c'è la barra di scorrimento dell'iPhone: senza questo margine le
+     parole ci finiscono dentro e le icone si toccano male. */
+  padding: 8px calc(6px + env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom))
+    calc(6px + env(safe-area-inset-left));
 }
 
+.tab {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  /* 52 di contenuto: sopra i 44 che ci vogliono per un bersaglio da dito. */
+  min-height: 52px;
+  padding: 4px 2px;
+  border-radius: 14px;
+  font-size: 0.63rem;
+  line-height: 1;
+  color: var(--text-muted);
+  transition: color var(--transition);
+}
+
+.tab svg {
+  width: 21px;
+  height: 21px;
+}
+
+.tab.active {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.tab span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+/* ── La pagina «Altro» ─────────────────────────────────────────────
+   Un elenco, non una griglia di riquadri: sono voci che si leggono in fila e si
+   toccano una alla volta, e dodici scatole sarebbero dodici cose da scandagliare.
+   ─────────────────────────────────────────────────────────────── */
+.altro-account {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 20px;
+  margin-bottom: 8px;
+  transition: background var(--transition);
+}
+
+.altro-account:hover {
+  background: var(--bg-card-hover);
+}
+
+.altro-account > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.altro-account strong {
+  display: block;
+  font-size: 0.92rem;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.altro-account span {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: var(--text-muted);
+  margin-top: 3px;
+}
+
+.altro-avatar {
+  width: 42px;
+  height: 42px;
+  flex: none;
+  border-radius: 50%;
+  border: 1px solid var(--border-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+}
+
+.altro-avatar svg {
+  width: 19px;
+  height: 19px;
+}
+
+.altro-gruppo {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 26px 0 4px;
+}
+
+.altro-elenco {
+  display: flex;
+  flex-direction: column;
+}
+
+.altro-voce {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  /* Alta 52: è un elenco che si scorre col pollice, e le voci vanno prese al primo
+     colpo. */
+  min-height: 52px;
+  padding: 6px 2px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.95rem;
+  transition: color var(--transition);
+}
+
+.altro-voce:last-child {
+  border-bottom: none;
+}
+
+.altro-voce:hover {
+  color: var(--accent);
+}
+
+.altro-voce > svg:first-child {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  color: var(--text-secondary);
+}
+
+.altro-voce > span {
+  flex: 1;
+  min-width: 0;
+}
+
+.altro-freccia {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  color: var(--text-muted);
+}
+
+/* Le due cose che non sono pagine: cambiare tema e uscire. In riga, in fondo,
+   perché sono comandi e non destinazioni. */
+.altro-piede {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  margin-top: 26px;
+}
+
+.altro-tema {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 50px;
+  padding: 0 16px;
+  border: 1px solid var(--border-light);
+  border-radius: 16px;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  transition: border-color var(--transition);
+}
+
+.altro-tema:hover {
+  border-color: var(--text-muted);
+}
+
+.altro-tema svg {
+  flex: none;
+  color: var(--text-secondary);
+}
+
+.altro-tema > span:first-of-type {
+  flex: 1;
+  text-align: left;
+}
+
+.altro-esci {
+  flex: none;
+  gap: 9px;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-light);
+  border-radius: 16px;
+  color: var(--terracotta);
+  transition: border-color var(--transition), background var(--transition);
+}
+
+.altro-esci {
+  font-size: 0.9rem;
+}
+
+.altro-esci:hover {
+  border-color: var(--terracotta);
+  background: var(--terracotta-soft);
+}
 
 /* ── Testate ───────────────────────────────────────────────────── */
 
@@ -1070,10 +1293,8 @@ textarea {
 }
 
 /* Roba da telefono, spenta di qui in su: la striscia dei sette giorni (in griglia
-   sono già tutti a schermo), il menu dentro la testata del piano (qui c'è la barra
-   laterale) e l'etichetta corta del pulsante «genera». */
+   sono già tutti a schermo) e l'etichetta corta del pulsante «genera». */
 .day-strip,
-.plan-menu,
 .solo-stretto {
   display: none;
 }
@@ -1533,6 +1754,87 @@ textarea {
 .meal-card.skipped .macro-bar,
 .card.skipped .macro-bar {
   opacity: 0.45;
+}
+
+/* ── Il pasto in riga (solo telefono) ──────────────────────────────
+   Sul monitor un pasto di oggi è una card; su un telefono è una riga di elenco —
+   tondo dello stato, nome del pasto con le sue calorie, il piatto sotto. Quattro
+   card impilate erano 860px per una giornata, cioè due schermate per sapere cosa si
+   mangia. Il markup lo sceglie `useTelefono()`: una card spiegazzata in riga dal
+   CSS resta una card con dentro dei pezzi che lì non servono.
+   ─────────────────────────────────────────────────────────────── */
+.meal-row {
+  display: none;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 16px;
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  background: var(--bg-card);
+}
+
+.meal-tondo {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 50%;
+  border: 1px solid var(--border-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.meal-tondo svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Seguito e rimandato si dicono col tondo pieno: è l'unico posto della riga in cui
+   ci sta un segno, e la parola l'ha già presa il nome del piatto. */
+.meal-tondo.done {
+  background: var(--accent-fill);
+  border-color: transparent;
+  color: var(--accent-contrast);
+}
+
+.meal-tondo.moved {
+  background: var(--terracotta);
+  border-color: transparent;
+  color: var(--danger-contrast);
+}
+
+/* Un pasto che prepari tu non è una casella in attesa: il contorno lo dice. */
+.meal-tondo.mine {
+  border-style: dashed;
+}
+
+.meal-row-testo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.meal-row-titolo {
+  font-size: 0.95rem;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meal-row.done .meal-row-titolo,
+.meal-row.moved .meal-row-titolo {
+  color: var(--text-secondary);
+}
+
+.meal-row-freccia {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  color: var(--text-muted);
 }
 
 /* ── Home ──────────────────────────────────────────────────────── */
@@ -2187,6 +2489,37 @@ textarea {
 
 .recipe-back:hover {
   background: var(--bg-card-hover);
+}
+
+/* Il gemello a destra: il preferito. Sta sulla fascia perché in fondo al foglio era
+   il sesto comando di una riga che sul telefono va a capo tre volte. */
+.recipe-fav {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition), color var(--transition);
+}
+
+.recipe-fav svg {
+  width: 18px;
+  height: 18px;
+}
+
+.recipe-fav:hover {
+  background: var(--bg-card-hover);
+}
+
+.recipe-fav.on {
+  color: var(--terracotta);
 }
 
 .recipe-back svg {
@@ -5332,106 +5665,35 @@ input[type='range']:disabled {
 }
 
 @media (max-width: 768px) {
-  .topbar {
+  /* Le schede prendono il posto della barra in alto e del cassetto: la stecca di
+     icone e la barra sparaiscono del tutto, non si travestono. */
+  .tabbar {
     display: flex;
   }
-  /* Qui in cima ci sono due cose ferme — la barra dell'app e la testata del piano —
-     e senza questo margine il giorno su cui la pagina si posiziona da sola
-     arriverebbe proprio sotto: si vedrebbero i pasti di un giorno di cui non si
-     legge il nome. Il valore buono lo misura `PlanningPage` sui due elementi veri
-     (l'altezza della testata cambia coi pulsanti che ci stanno dentro); questo è il
-     ripiego per quando la misura non si può prendere. */
-  .day-column {
-    scroll-margin-top: calc(190px + env(safe-area-inset-top));
-  }
-  /* Qui la stecca ridiventa un cassetto: entra da fuori, largo abbastanza da
-     scriverci le voci per intero. La stecca di icone vive di spazio che avanza, e
-     su un telefono non ne avanza — e un cassetto che occupa mezzo schermo per
-     mostrare otto disegni sarebbe il peggio dei due mondi. */
-  .sidebar {
-    width: 258px;
-    align-items: stretch;
-    padding: calc(26px + env(safe-area-inset-top)) 0 calc(16px + env(safe-area-inset-bottom))
-      env(safe-area-inset-left);
-    transform: translateX(-100%);
-    transition: transform var(--transition);
-    z-index: 50;
-    box-shadow: var(--shadow-popup);
-    overscroll-behavior: contain;
-  }
-  .sidebar.open {
-    transform: translateX(0);
-  }
-  .sidebar-logo {
-    justify-content: flex-start;
-    padding: 0 20px 22px;
-    margin-bottom: 0;
-    color: var(--text-primary);
-  }
-  .sidebar-logo svg {
-    width: 34px;
-    height: 34px;
-    padding: 7px;
-    border-radius: 11px;
-  }
-  .sidebar-logo span {
-    display: block;
-  }
-  .sidebar-nav {
-    align-items: stretch;
-    gap: 2px;
-    padding: 0 12px;
-  }
-  .sidebar-link {
-    flex-direction: row;
-    justify-content: flex-start;
-    gap: 12px;
-    width: auto;
-    padding: 11px 14px;
-    border-radius: var(--radius-sm);
-    font-size: 0.92rem;
-    text-align: left;
-  }
-  .sidebar-label {
-    display: block;
-  }
-  .sidebar-short {
+  .sidebar,
+  .topbar {
     display: none;
   }
-  .sidebar-section {
-    display: block;
-    font-family: var(--font-mono);
-    font-size: 0.62rem;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    color: var(--text-muted);
-    padding: 18px 14px 6px;
-  }
-  .sidebar-config {
-    align-items: stretch;
-    padding-top: 0;
-  }
-  .sidebar-footer {
-    width: auto;
-    padding: 14px 18px 0;
-    margin: 10px 12px 0;
-  }
-  .sidebar-user {
-    flex-direction: row;
-    gap: 6px;
-  }
-  .sidebar-username {
-    display: block;
-  }
-  /* Il menu qui è un cassetto che scorre da fuori: non tiene più il suo posto. */
   .app-layout {
     padding-left: 0;
   }
   .main-content {
-    /* In cima ci va la topbar (54px) più la fascia della tacca; ai lati e in fondo
-       quel che serve a non finire sotto i bordi curvi e la barra di scorrimento. */
-    padding: calc(70px + env(safe-area-inset-top)) calc(14px + env(safe-area-inset-right))
-      calc(40px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left));
+    /* In cima non c'è più niente di fermo: la pagina comincia dalla sua testata, con
+       lo spazio della tacca sopra. In fondo il posto per le schede, che sono
+       `fixed` e non ne occupano — più la barra di scorrimento dell'iPhone. */
+    padding: calc(16px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right))
+      calc(86px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
+  }
+  /* Dove la pagina ha già la sua barra in fondo — il dettaglio del pasto — le schede
+     non ci sono, e lo spazio serve a lei. */
+  .main-content.senza-schede {
+    padding-bottom: calc(96px + env(safe-area-inset-bottom));
+  }
+  /* La testata del piano è l'unica cosa ferma rimasta in cima: il valore buono lo
+     misura `PlanningPage` sull'elemento vero (l'altezza cambia coi pulsanti che ci
+     stanno dentro), questo è il ripiego per quando la misura non si può prendere. */
+  .day-column {
+    scroll-margin-top: calc(150px + env(safe-area-inset-top));
   }
   .page-title {
     font-size: 2rem;
@@ -5464,57 +5726,35 @@ input[type='range']:disabled {
 
   /* ── La testata del piano ─────────────────────────────────────────────────
      Sul telefono i sette giorni stanno uno sotto l'altro: arrivati a domenica,
-     titolo, pulsanti e frecce erano una settimana più su, e per cambiare
-     settimana o generare bisognava risalire tutto. Qui restano fermi in cima e a
-     scorrere è solo la griglia.
+     titolo, frecce e striscia erano una settimana più su, e per cambiare settimana
+     o generare bisognava risalire tutto. Qui restano fermi in cima e a scorrere è
+     solo la griglia.
 
-     È anche la barra dell'app: su questa pagina quella globale non viene
-     renderizzata (`senza-topbar`), perché due barre in cima facevano 219px prima
-     del primo piatto — un quarto di schermo per dire due volte dove sei.
-
-     Il fondo è pieno e il blocco si allarga fino ai bordi dello schermo
-     (margini negativi quanto il padding di `.main-content`, ripresi come
-     padding): senza, le card passerebbero dietro nei due margini laterali. */
-  .main-content.senza-topbar {
-    padding-top: calc(8px + env(safe-area-inset-top));
-  }
+     Il fondo è pieno e il blocco si allarga fino ai bordi dello schermo (margini
+     negativi quanto il padding di `.main-content`, ripresi come padding): senza,
+     le card passerebbero dietro nei due margini laterali. */
   .plan-head {
     position: sticky;
     top: 0;
     z-index: 40;
     background: var(--bg-primary);
     border-bottom: 1px solid var(--border);
-    margin: calc(-8px - env(safe-area-inset-top))
-      calc(-14px - env(safe-area-inset-right)) 14px
-      calc(-14px - env(safe-area-inset-left));
-    padding: calc(8px + env(safe-area-inset-top))
-      calc(14px + env(safe-area-inset-right)) 10px
-      calc(14px + env(safe-area-inset-left));
+    margin: calc(-16px - env(safe-area-inset-top))
+      calc(-16px - env(safe-area-inset-right)) 14px
+      calc(-16px - env(safe-area-inset-left));
+    padding: calc(14px + env(safe-area-inset-top))
+      calc(16px + env(safe-area-inset-right)) 12px
+      calc(16px + env(safe-area-inset-left));
   }
-  /* Dentro una testata che resta sempre a schermo ogni riga si paga in griglia
-     visibile, e questa non dice niente di nuovo: le date stanno nella striscia
-     dei giorni qui sotto, e quanti pasti mancano lo dice il pulsante. */
-  .plan-head .page-subtitle {
-    display: none;
-  }
+  /* La riga di contesto resta: adesso è l'unica cosa che dice quale settimana si
+     sta guardando, perché le frecce sono nel titolo e la striscia dice i giorni. */
   .plan-head .page-header {
-    align-items: center;
-    gap: 8px;
+    align-items: flex-start;
+    gap: 10px;
     margin-bottom: 0;
   }
   .plan-head .page-title {
-    font-size: 1.15rem;
-  }
-  /* Il menu, che qui non ha una barra sua. */
-  .plan-menu {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 40px;
-    height: 40px;
-    margin-left: -9px;
-    flex: none;
-    color: var(--text-secondary);
+    font-size: 1.5rem;
   }
   .plan-ident {
     min-width: 0;
@@ -5525,28 +5765,57 @@ input[type='range']:disabled {
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  /* I pulsanti non prendono più la riga per intero: qui la riga è condivisa col
-     titolo, e andare a capo vorrebbe dire un'altra fascia ferma a schermo. */
+  /* «Genera» scende in fondo, sopra le schede, e prende tutta la riga: è il
+     comando della pagina, si preme una volta e costa — e in testata rubava metà
+     della riga al titolo, che qui è già stretto. */
   .plan-head .page-actions {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(70px + env(safe-area-inset-bottom));
+    z-index: 55;
     width: auto;
-    flex: none;
+    gap: 8px;
+    padding: 10px calc(16px + env(safe-area-inset-right)) 10px
+      calc(16px + env(safe-area-inset-left));
+    background: linear-gradient(transparent, var(--bg-primary) 40%);
   }
   .plan-head .page-actions > .btn {
-    flex: none;
+    flex: 1;
+    height: 52px;
+    border-radius: 18px;
   }
   /* Con qualcosa da riempire il primario basta: rifare tutto si spunta dentro la
      dialog, ed è la stessa identica cosa. */
   .plan-secondaria {
     display: none;
   }
+  /* Quello che si guarda seduti: la spia dell'aderenza e i tre numeri in fondo
+     alla colonna. Sul telefono la home è «cosa mangio adesso», e quei due riquadri
+     spingerebbero i pasti sotto la piega — che è esattamente il problema da cui
+     questa pagina è stata rifatta. */
   .solo-largo {
     display: none;
   }
-  /* La striscia dei giorni fa da indice e da frecce: `.week-nav` direbbe le stesse
-     date una seconda volta, e «N pasti da riempire» è già scritto sul pulsante. */
-  .plan-head .week-nav,
+  /* E l'etichetta corta si accende: senza, il pulsante «genera» del piano restava
+     con la sola scintilla e nessuna parola. */
+  .solo-stretto {
+    display: inline;
+  }
+  /* Le frecce stanno nel titolo, come sul monitor, e la testata resta a schermo:
+     quelle della striscia sarebbero le stesse due a tre centimetri di distanza.
+     «N pasti da riempire» è già scritto sul pulsante in fondo. */
+  .day-strip-nav,
   .plan-head .week-progress {
     display: none;
+  }
+  .plan-head .week-nav {
+    margin-left: 10px;
+    gap: 4px;
+  }
+  .plan-head .week-nav-btn {
+    width: 36px;
+    height: 36px;
   }
   .plan-head .week-toolbar {
     margin-bottom: 0;
@@ -5556,24 +5825,16 @@ input[type='range']:disabled {
   }
 
   /* ── La striscia dei giorni ───────────────────────────────────────────────
-     Sette giorni in 51px: dove sei, com'è andato ognuno (i pallini), e un tocco
-     per saltarci. Fa anche da frecce della settimana, così `.week-nav` non serve
-     più. Non va a capo e non scorre di lato — sette voci contate ci stanno — e
-     resta ferma in testata con tutto il resto. */
+     Sette tessere: il nome del giorno in monospaziato, il numero in serif e sotto
+     i quattro pallini che dicono com'è andata. Un tocco salta al giorno — che era
+     il problema di partenza: di domenica bisognava risalire tutta la settimana.
+     Non va a capo e non scorre di lato (sette voci contate ci stanno) e resta
+     ferma in testata con tutto il resto. */
   .day-strip {
     display: flex;
     align-items: stretch;
-    gap: 3px;
-    margin-top: 10px;
-  }
-  .day-strip-nav {
-    width: 26px;
-    flex: none;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 8px;
-    color: var(--text-secondary);
+    gap: 5px;
+    margin-top: 14px;
   }
   .day-pick {
     flex: 1 1 0;
@@ -5581,53 +5842,148 @@ input[type='range']:disabled {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
-    padding: 6px 0 7px;
-    border-radius: 10px;
+    gap: 6px;
+    padding: 9px 0 8px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
     background: none;
-  }
-  .day-pick-name {
-    font-size: 0.6rem;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--text-muted);
-  }
-  .day-pick-num {
-    font-size: 0.95rem;
-    font-weight: 700;
-    line-height: 1;
     color: var(--text-secondary);
   }
+  .day-pick-name {
+    font-family: var(--font-mono);
+    font-size: 0.56rem;
+    font-weight: 400;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: inherit;
+  }
+  .day-pick-num {
+    font-family: var(--font-display);
+    font-size: 1.25rem;
+    font-weight: 400;
+    line-height: 1;
+    color: inherit;
+  }
+  /* Il giorno che si sta guardando è pieno di lime, come nel disegno: è l'unico
+     posto della striscia in cui serve dire «sei qui», e un contorno acceso da
+     51px di larghezza non si vede. */
   .day-pick.today {
-    background: var(--accent-soft);
+    background: var(--accent-fill);
+    border-color: transparent;
+    color: var(--accent-contrast);
   }
   .day-pick.today .day-pick-name,
   .day-pick.today .day-pick-num {
-    color: var(--accent);
+    color: inherit;
+  }
+  /* I pallini dentro la tessera accesa devono staccarsi dal lime, non dal nero. */
+  .day-pick.today .day-dot {
+    background: rgba(20, 19, 15, 0.32);
+  }
+  .day-pick.today .day-dot.done,
+  .day-pick.today .day-dot.moved {
+    background: var(--accent-contrast);
+  }
+  .day-pick.off {
+    border-style: dashed;
   }
   .day-pick.off .day-pick-num {
     color: var(--text-muted);
     text-decoration: line-through;
   }
 
-  /* ── La card del pasto diventa una riga ───────────────────────────────────
-     Il testo a sinistra, le due risposte a destra: ~90px invece di 215, e una
-     giornata intera sta sopra la piega. Quello che si fa di rado (rigenera,
-     elimina) si apre sotto, a tutta larghezza, premendo il «⋯». */
+  /* ── La card del pasto diventa una riga con un filetto ────────────────────
+     Non più una scheda ma una riga di elenco: etichetta del pasto a sinistra, nome
+     al centro, calorie e la risposta a destra. Una card impilata era alta 215px —
+     due pasti e mezzo per schermata — e anche in riga il riquadro attorno a ognuna
+     faceva ventotto cornici per una giornata che sono quattro righe di testo.
+
+     In coda resta **un bersaglio solo**, «l'ho seguito»: è la cosa che si fa più
+     spesso col telefono in mano. Le altre due — «ho mangiato altro» e il cassetto
+     con rigenera ed elimina — si aprono dal pasto, dove la barra in fondo le ha
+     già tutte sotto il pollice. Tre comandi per riga, su quattro righe, erano
+     dodici bersagli sopra i quattro nomi dei piatti. */
   .meal-card {
     flex-direction: row;
     align-items: center;
-    flex-wrap: wrap;
     gap: 10px;
-    padding: 11px 11px 11px 13px;
+    padding: 4px 0;
+    background: none;
+    /* Larghezza esplicita a zero sui tre lati, non `border: none`: la scorciatoia
+       lascia la larghezza a `medium`, e basta che una regola più sotto rimetta uno
+       stile perché tornino tre bordi da 3px — cioè la scatola che si voleva
+       togliere. */
+    border-width: 0 0 1px;
+    border-style: solid;
+    border-color: var(--border);
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .meal-card:hover {
+    background: none;
+  }
+  /* Anello e fondo dello stato non valgono qui: la riga non ha un riquadro su cui
+     disegnarli, e com'è andata lo dice il tondo in coda. */
+  .meal-card.followed,
+  .meal-card.skipped,
+  .meal-card.quiet,
+  .meal-card.da-riempire {
+    background: none;
+    border-color: var(--border);
+    box-shadow: none;
+  }
+  .meal-card.skipped {
+    opacity: 0.6;
+  }
+  /* I comandi qui ci sono sempre: nasconderli fino all'hover è una scelta da
+     monitor, e col dito l'hover non esiste. Il selettore ripete il `:not()` di
+     quella regola perché il `:not()` pesa quanto una classe: senza, questa avrebbe
+     specificità più bassa e perderebbe comunque vada l'ordine. */
+  .meal-card:not(.da-riempire) .meal-actions,
+  .meal-card .meal-actions {
+    visibility: visible;
+    opacity: 1;
+  }
+  /* Le righe si toccano: il filetto le separa già, e otto pixel di aria per riga
+     su quattro pasti sono una riga intera di schermo buttata. */
+  .day-column {
+    gap: 0;
+  }
+  .day-head {
+    margin-top: 18px;
+    border-bottom-width: 2px;
+  }
+  /* Le tre colonne della riga. `.meal-main` è il bersaglio che apre il pasto: prende
+     tutto tranne il tondo della risposta. */
+  .meal-main {
+    display: grid;
+    grid-template-columns: 58px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    min-height: 52px;
+  }
+  .meal-slot {
+    font-size: 0.56rem;
+  }
+  .meal-slot-name {
+    white-space: normal;
   }
   .meal-title {
     font-size: 0.92rem;
+    /* Una riga sola con l'ellissi: due righe farebbero ballare l'altezza da un
+       pasto all'altro, e l'elenco è la cosa che si scorre. */
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
-  /* Nel piede restano i numeri e la parola dello stato: il filetto dei macro è un
-     dettaglio da colpo d'occhio che qui ruba la larghezza a tutti e due, e i macro
-     per esteso stanno nel pasto. */
+  .meal-foot {
+    margin-top: 0;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+  }
+  /* Nel piede resta il numero: il filetto dei macro qui ruba la larghezza al nome,
+     e i macro per esteso stanno nel pasto. */
   .meal-foot > div {
     display: none;
   }
@@ -5636,6 +5992,11 @@ input[type='range']:disabled {
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  .meal-state {
+    margin-left: 0;
+  }
+  /* Delle tre risposte resta la prima. Le altre due non spariscono dall'app: si
+     aprono dal pasto, che è a un tocco. */
   .meal-actions {
     border-top: none;
     padding-top: 0;
@@ -5643,25 +6004,22 @@ input[type='range']:disabled {
     gap: 4px;
     flex: none;
   }
+  .meal-action.no,
+  .meal-action.more,
+  .meal-more {
+    display: none;
+  }
   .meal-action {
     flex: none;
     width: 44px;
     height: 44px;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    background: var(--bg-card);
+    border: 1px solid var(--border-light);
+    border-radius: 50%;
+    background: none;
   }
   .meal-action svg {
     width: 18px;
     height: 18px;
-  }
-  .meal-more {
-    width: 100%;
-    padding-top: 0;
-  }
-  .meal-more-btn {
-    padding: 11px 8px;
-    font-size: 0.78rem;
   }
   .meal-gen {
     flex: none;
@@ -5711,53 +6069,49 @@ input[type='range']:disabled {
   .week-grid {
     grid-template-columns: minmax(0, 1fr);
   }
-  .nutrition-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
   /* ── L'editor della dieta sul telefono ────────────────────────────────────
-     Sette colonne su 300px di larghezza non sono una tabella, sono un imbuto: i
-     campi finivano a due per riga sotto intestazioni che ne annunciavano sei, e
-     quale numero fosse quale non lo diceva più niente. Ogni pasto diventa una
-     scheda a sé — il nome sopra, i quattro numeri in fila con la loro etichetta,
-     e sotto chi lo prepara. Le etichette scendono nelle celle (`.meal-editor-cell
-     > span`), quindi la riga di intestazione qui non serve più. */
+     Resta una tabella, ma di cinque colonne invece di sette: nome, kcal e le tre
+     iniziali dei macro. Per un giro ogni pasto era diventato una scheda a sé, con
+     l'etichetta dentro ogni casella — leggibile, ma cinque schede da 110px per
+     cinque righe di numeri, e per confrontare le calorie di due pasti bisognava
+     scorrere. Le intestazioni tornano in cima, dove sono una riga sola per tutti.
+
+     Chi prepara il pasto e il cestino scendono sotto: sono due comandi, non due
+     numeri, e in colonna toglierebbero larghezza alle cifre. */
   .meal-editor-head {
+    grid-template-columns: minmax(0, 1fr) 54px 40px 40px 40px;
+    gap: 6px;
+    padding-bottom: 6px;
+  }
+  /* «Chi lo prepara» e la colonna del cestino non hanno un'intestazione qui: quello
+     che sta sotto si spiega da sé. */
+  .meal-editor-head > span:nth-child(n + 6) {
     display: none;
   }
   .meal-editor-row {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 6px 5px;
-    padding: 12px;
-    margin-bottom: 10px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    background: var(--bg-surface);
+    grid-template-columns: minmax(0, 1fr) 54px 40px 40px 40px;
+    gap: 4px 6px;
+    padding: 9px 0;
   }
   .meal-editor-cell > span {
-    display: block;
-    font-size: 0.68rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--text-muted);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    display: none;
   }
   .meal-editor-cell.wide {
-    grid-column: 1 / -1;
+    grid-column: auto;
   }
   /* Quattro caselle in fila su 300px: il respiro ai lati del numero è la prima
-     cosa che si può togliere, e centrato si legge meglio di così. */
-  .meal-editor-row input[type='number'] {
-    padding-left: 6px;
-    padding-right: 6px;
-    text-align: center;
+     cosa che si può togliere. */
+  .meal-editor-row input {
+    padding-left: 4px;
+    padding-right: 4px;
   }
   .meal-editor-row .who-toggle {
     grid-column: 1 / 4;
+    justify-content: flex-start;
+    padding-left: 0;
   }
   .meal-editor-row .icon-button {
+    grid-column: 5 / 6;
     justify-self: end;
   }
   /* Il numero del giorno si accorcia: 3,6rem su 320px, con accanto «kcal al giorno»,
@@ -5801,6 +6155,140 @@ input[type='range']:disabled {
     grid-area: 2 / 3;
     font-size: 0.84rem;
   }
+  /* La riga della home esiste solo qui (vedi `.meal-row`), e la griglia dei pasti
+     diventa una colonna sola. */
+  .meal-row {
+    display: flex;
+  }
+  .today-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+  /* Il pasto di adesso tiene la sua card, ma **senza la fascia**: il segnaposto
+     tiene il posto a un'immagine che non c'è, e su 358px di larghezza sono 130px di
+     rettangolo vuoto — un terzo della card, in una schermata dove lo spazio in
+     verticale è l'unica cosa che scarseggia. La card si riconosce lo stesso: fondo
+     più chiaro, «· adesso» in lime, il nome in serif e i tre comandi. */
+  .today-card .dish {
+    display: none;
+  }
+  /* Le tre parole dei macro per esteso non stanno in 326px: qui si stringono, così
+     restano su una riga sola con «2 di 5 segnati» a fianco. */
+  .macro-legend {
+    font-size: 0.6rem;
+    gap: 10px;
+  }
+  .day-summary-tracked {
+    font-size: 0.72rem;
+  }
+
+  /* Le due barre che stanno in fondo — «Genera» sul piano e il conto sulla spesa —
+     sono `fixed` e non occupano posto nel flusso: lo spazio glielo lascia quello che
+     ci finirebbe sotto, o l'ultima riga della pagina resta coperta. */
+  .week-grid,
+  .shopping-list {
+    padding-bottom: 78px;
+  }
+
+  /* ── Il conto della spesa ─────────────────────────────────────────────────
+     Da riquadro in colonna a **barra in fondo**, sopra le schede: il totale cambia
+     a ogni spunta ed è quello che si guarda mentre si spunta, non qualcosa da
+     cercare scorrendo fino in fondo alla lista. Il titolo del riquadro e la frase
+     lunga qui non ci stanno e non servono: la barra dice il numero e il pulsante. */
+  .shopping-total-card {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(70px + env(safe-area-inset-bottom));
+    top: auto;
+    z-index: 55;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 14px;
+    margin: 0;
+    padding: 12px calc(16px + env(safe-area-inset-right)) 12px
+      calc(16px + env(safe-area-inset-left));
+    border-radius: 0;
+    border: none;
+    border-top: 1px solid var(--border);
+    background: var(--bg-secondary);
+    box-shadow: none;
+  }
+  .shopping-total-card .card-title,
+  .shopping-total-hint {
+    display: none;
+  }
+  .shopping-total {
+    grid-area: 1 / 1;
+    font-size: 1.7rem;
+  }
+  .shopping-total-note {
+    grid-area: 2 / 1;
+    margin: 2px 0 0;
+  }
+  .shopping-total-card .btn {
+    grid-area: 1 / 2 / 3 / 3;
+    width: auto;
+    height: 48px;
+  }
+
+  /* Due colonne, come nel disegno: a una sola le card diventano larghe quanto lo
+     schermo e in una schermata ne entrano due. */
+  .recipe-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 18px 14px;
+  }
+  .recipe-card-title {
+    font-size: 1rem;
+  }
+  /* In 163px di card le stelle a 16px si prendevano la riga e le calorie finivano
+     tagliate: qui valgono dodici pixel l'una. */
+  .recipe-card-foot .star-rating svg {
+    width: 12px;
+    height: 12px;
+  }
+  /* E i numeri si stringono con loro: in 163px «620 kcal · 25 min» accanto a cinque
+     stelle non ci sta, e a tagliarsi era sempre il tempo. */
+  .recipe-card-foot .meal-facts {
+    font-size: 0.6rem;
+  }
+
+  /* I tre macro restano tre in riga anche su 358px: a due più uno il terzo sembra
+     un dato di un altro tipo. Si stringono i numeri, non la griglia. */
+  .nutrition-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px;
+  }
+  .nutrition-cell {
+    padding: 11px 10px;
+  }
+  .nutrition-value {
+    font-size: 1.45rem;
+  }
+  .nutrition-target {
+    font-size: 0.58rem;
+  }
+
+  /* Le due schede dell'andamento si dividono la riga: in testata, larghe quanto le
+     loro parole, restavano due pastiglie perse a destra. */
+  .week-tabs {
+    display: flex;
+    width: 100%;
+  }
+  .week-tab {
+    flex: 1;
+    text-align: center;
+  }
+  .page-actions > .week-tabs {
+    flex: 1;
+  }
+
+  /* Le ciambelle dei macro si stringono ma restano tre in riga. */
+  .gauge-row {
+    gap: 6px;
+  }
+
   /* Quattro colonne di totali su un telefono spezzano "Carboidrati" a metà parola. */
   .totals-lock-grid {
     grid-template-columns: repeat(2, 1fr);
@@ -5812,12 +6300,6 @@ input[type='range']:disabled {
   }
   .toast {
     max-width: none;
-  }
-}
-
-@media (min-width: 769px) {
-  .sidebar-backdrop {
-    display: none;
   }
 }
 

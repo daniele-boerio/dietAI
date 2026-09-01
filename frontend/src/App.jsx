@@ -1,11 +1,11 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useState } from 'react';
 import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import {
   CalendarDays,
   ChefHat,
+  Ellipsis,
   LayoutDashboard,
   LogOut,
-  Menu,
   Refrigerator,
   Salad,
   Settings,
@@ -25,6 +25,7 @@ import TrackingPage from './pages/TrackingPage';
 import DietPage from './pages/DietPage';
 import PantryPage from './pages/PantryPage';
 import SettingsPage from './pages/SettingsPage';
+import AltroPage from './pages/AltroPage';
 import LoginPage from './pages/LoginPage';
 import OnboardingPage from './pages/OnboardingPage';
 import Toast from './components/Toast';
@@ -65,7 +66,6 @@ function AuthenticatedApp() {
   const { user, logout } = useAuth();
   const { pathname } = useLocation();
   const [toasts, setToasts] = useState([]);
-  const [navOpen, setNavOpen] = useState(false);
 
   const addToast = useCallback((message, type = 'success') => {
     const id = Date.now() + Math.random();
@@ -73,21 +73,7 @@ function AuthenticatedApp() {
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3600);
   }, []);
 
-  // Col menu aperto la pagina dietro non deve scorrere: sul telefono il dito prende
-  // quasi sempre la pagina invece del cassetto, e si finisce altrove senza capire perché.
-  useEffect(() => {
-    if (!navOpen) return undefined;
-    const precedente = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = precedente;
-    };
-  }, [navOpen]);
-
-  // `apriMenu` sta nel contesto perché il piano si tiene la propria testata: sul
-  // telefono la barra dell'app e quella della pagina erano due, 219px prima del primo
-  // piatto, e per fonderle in una sola serve che quella pagina possa aprire il menu.
-  const ctx = { addToast, apriMenu: () => setNavOpen(true) };
+  const ctx = { addToast };
 
   // Finché mancano la API key o la dieta non c'è niente da pianificare: l'app
   // mostra solo il percorso guidato, non una interfaccia piena di stati vuoti.
@@ -108,12 +94,15 @@ function AuthenticatedApp() {
     );
   }
 
-  // Solo il piano, per ora: è la pagina che si scorre a lungo con una mano sola.
-  const testataPropria = pathname === '/plan' || pathname.startsWith('/plan/');
+  // Il dettaglio del pasto la barra in fondo ce l'ha già — «l'ho seguito», «ho
+  // mangiato altro» e la chat — e due barre impilate sono centotrenta pixel di
+  // comandi sopra la piega. Lì le schede si tolgono di mezzo: da quella schermata si
+  // torna indietro col tondo sulla fascia del piatto.
+  const senzaSchede = pathname.startsWith('/meals/');
 
-  // Due nomi per voce: quello intero per il cassetto del telefono, quello corto per
-  // la stecca di icone del desktop, dove sotto l'icona ci stanno sei lettere. Non
-  // sono due menu diversi — è la stessa voce, con l'etichetta che si accorcia.
+  // Due nomi per voce: quello intero per il menu del desktop, quello corto per la
+  // stecca di icone, dove sotto l'icona ci stanno sei lettere. Non sono due menu
+  // diversi — è la stessa voce, con l'etichetta che si accorcia.
   const navLinks = [
     { to: '/', icon: LayoutDashboard, label: 'Oggi', short: 'Oggi', end: true },
     { to: '/plan', icon: CalendarDays, label: 'Settimana', short: 'Sett.' },
@@ -125,30 +114,27 @@ function AuthenticatedApp() {
     { to: '/tracking', icon: TrendingUp, label: 'Andamento', short: 'Trend' },
   ];
 
+  // Le schede del telefono sono cinque e non otto: quattro sono i posti in cui si
+  // sta — cosa mangio, la settimana, la spesa, il ricettario — e la quinta raccoglie
+  // tutto il resto in una pagina sua. Non è la stessa cosa del menu qui sopra, e non
+  // si può ricavare da quello: un cassetto può permettersi otto voci, cinque schede
+  // larghe 78px no.
+  const schede = [
+    { to: '/', icon: LayoutDashboard, label: 'Oggi', end: true },
+    { to: '/plan', icon: CalendarDays, label: 'Settimana' },
+    { to: '/shopping', icon: ShoppingCart, label: 'Spesa' },
+    { to: '/recipes', icon: ChefHat, label: 'Ricette' },
+    { to: '/altro', icon: Ellipsis, label: 'Altro' },
+  ];
+
   return (
     <AppContext.Provider value={ctx}>
       <div className="app-layout">
-        {/* Il piano ha una testata sua che fa anche da barra dell'app: titolo, frecce
-            e la striscia dei sette giorni stanno insieme, e restano ferme mentre la
-            settimana scorre. Averne due, una sopra l'altra, voleva dire cominciare a
-            leggere i pasti a 219px dal bordo dello schermo. */}
-        {!testataPropria && (
-          <header className="topbar">
-            <button className="icon-button" onClick={() => setNavOpen(true)} aria-label="Apri menu">
-              <Menu size={20} />
-            </button>
-            <span className="topbar-logo">DietAI</span>
-          </header>
-        )}
-
-        {navOpen && <div className="sidebar-backdrop" onClick={() => setNavOpen(false)} />}
-
-        <nav
-          className={`sidebar ${navOpen ? 'open' : ''}`}
-          onClick={(e) => {
-            if (e.target.closest('a')) setNavOpen(false);
-          }}
-        >
+        {/* La stecca di icone è del monitor: sul telefono si nasconde e al suo
+            posto ci sono le schede in fondo. Prima qui c'era un cassetto che entrava
+            da sinistra, aperto da un pulsante in una barra in alto: due elementi
+            fermi per arrivare dove adesso si arriva con un pollice. */}
+        <nav className="sidebar">
           <div className="sidebar-logo">
             <Sprout />
             <span>DietAI</span>
@@ -211,7 +197,7 @@ function AuthenticatedApp() {
           </div>
         </nav>
 
-        <main className={`main-content ${testataPropria ? 'senza-topbar' : ''}`}>
+        <main className={`main-content ${senzaSchede ? 'senza-schede' : ''}`}>
           {/* Un errore in una pagina non deve spegnere l'app: senza questa rete
               resterebbe una finestra vuota, nera col tema scuro, e sul telefono
               nemmeno un modo per capire cosa sia successo. */}
@@ -229,6 +215,11 @@ function AuthenticatedApp() {
               <Route path="/tracking" element={<TrackingPage />} />
               <Route path="/diet" element={<DietPage />} />
               <Route path="/pantry" element={<PantryPage />} />
+              {/* La quinta scheda del telefono: tutto quello che non sta nelle
+                  quattro. Sul monitor non c'è una voce che ci porti — quelle cose
+                  sono già nella stecca — ma la rotta vale lo stesso, ed è solo un
+                  elenco di collegamenti. */}
+              <Route path="/altro" element={<AltroPage />} />
               {/* Dieta e dispensa stavano fra le impostazioni: i vecchi indirizzi restano
                   validi per i collegamenti già in giro (e per chi li aveva nei preferiti). */}
               <Route path="/settings/diet" element={<Navigate to="/diet" replace />} />
@@ -241,6 +232,25 @@ function AuthenticatedApp() {
             </Routes>
           </ErrorBoundary>
         </main>
+
+        {/* Le schede stanno in fondo, dove arriva il pollice. Renderizzate sempre e
+            nascoste dal foglio di stile sopra i 769px: sul monitor il loro posto ce
+            l'ha già la stecca di icone a sinistra. */}
+        {!senzaSchede && (
+          <nav className="tabbar">
+            {schede.map(({ to, icon: Icon, label, end }) => (
+              <NavLink
+                key={to}
+                to={to}
+                end={end}
+                className={({ isActive }) => `tab ${isActive ? 'active' : ''}`}
+              >
+                <Icon />
+                <span>{label}</span>
+              </NavLink>
+            ))}
+          </nav>
+        )}
       </div>
 
       <Toast toasts={toasts} />

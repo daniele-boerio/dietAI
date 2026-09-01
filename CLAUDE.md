@@ -86,7 +86,8 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
     ├── components/             # WeekGrid, WeekGenerateDialog, MealCard, DayDots, MealChat, RecipeView, MacroBar,
     │                           # Questionnaire (dieta calcolata, onboarding + /diet)...
     └── pages/                  # Dashboard, Planning, MealDetail, Shopping, Pantry,
-                                # Recipes, Tracking, Diet, Settings, Onboarding, Login
+                                # Recipes, Tracking, Diet, Settings, Altro (la quinta
+                                # scheda del telefono), Onboarding, Login
 ```
 
 ## Concetti da avere in testa
@@ -611,19 +612,25 @@ sempre a schermo erano quattro icone per cella, centoventi bersagli che nessuno 
 Una casella vuota non ne mostra nessuno e ha un solo pulsante «Genera», invece delle
 stesse quattro icone di cui tre spente.
 
-**Il piano si tiene la barra dell'app.** Sul telefono `.plan-head` è `sticky` in cima
-e contiene menu, titolo, pulsanti e la striscia dei sette giorni; la barra globale su
-quella rotta non viene renderizzata affatto (`testataPropria` in `App.jsx`, che passa
-anche `apriMenu` nel contesto). Due barre in fila facevano 219px prima del primo
-piatto — un quarto di schermo per dire due volte dove sei.
+**Il piano si tiene la sua testata.** Sul telefono `.plan-head` è `sticky` in cima e
+contiene titolo, frecce e la striscia dei sette giorni: arrivati a domenica erano una
+settimana più su, e per cambiare settimana bisognava risalire tutto. Una barra dell'app
+sopra non c'è — la navigazione sta in fondo (vedi *Sul telefono si naviga da sotto*) —
+e questa è l'unica cosa ferma della pagina.
 
-La striscia (`.day-strip`, con `DayDots`) è insieme indice e frecce: quattro pallini
-per giorno dicono com'è andata — verde seguito, terracotta rimandato, grigio ancora da
-vivere, vuoto da riempire — e un tocco salta al giorno, che era il problema di partenza
-(di domenica bisognava risalire tutta la settimana). Per questo `.week-nav` e
-`.week-progress` lì spariscono: direbbero le stesse date e lo stesso numero una seconda
-volta. Dove fermarsi lo misura `margineTestata()` sugli elementi veri, perché l'altezza
-della testata cambia coi pulsanti che ci stanno dentro.
+La striscia (`.day-strip`, con `DayDots`) è insieme indice e stato: una tessera per
+giorno — nome in monospaziato, numero in serif, e sotto quattro pallini che dicono
+com'è andata (verde seguito, terracotta rimandato, grigio ancora da vivere, vuoto da
+riempire) — e un tocco salta al giorno, che era il problema di partenza. Il giorno che
+si sta guardando è **pieno di lime**: un contorno acceso su una tessera da 51px non si
+vede. Le frecce della settimana stanno nel titolo, come sul monitor, e quelle della
+striscia sono sparite: erano le stesse due a tre centimetri di distanza. Dove fermarsi
+lo misura `margineTestata()` sull'elemento vero, perché l'altezza della testata cambia
+coi pulsanti che ci stanno dentro.
+
+«Genera i N mancanti» scende in fondo, sopra le schede, e prende tutta la riga: è il
+comando della pagina, si preme una volta e si paga, e in testata rubava metà riga al
+titolo.
 
 Nella griglia il totale del giorno e i pallini stanno nell'**intestazione** della
 colonna: in fondo, dopo quattro card, finivano sotto la piega di qualunque schermo.
@@ -943,9 +950,30 @@ threadpool. La regola non ha eccezioni e `tests/test_concurrency.py` la fa rispe
 - **Il menu è una stecca di icone da 84px** (`.sidebar`), non più una colonna di
   etichette da 236: le voci sono otto e non cambiano mai, dopo il primo giorno non si
   leggono più, si mirano. Ogni voce porta **due nomi** — `sidebar-label` intero e
-  `sidebar-short` da sei lettere — nello stesso markup, perché a cambiare fra
-  desktop e telefono è l'etichetta, non il componente: sotto i 768px la stecca torna
-  a essere il cassetto largo di prima e i due si scambiano di posto.
+  `sidebar-short` da sei lettere — nello stesso markup. Sotto i 768px la stecca non
+  c'è: al suo posto le schede in fondo.
+- **Sul telefono si naviga da sotto.** Cinque schede fisse (`.tabbar` in `App.jsx`):
+  Oggi, Settimana, Spesa, Ricette e **Altro**, che è una pagina vera (`/altro`,
+  `pages/AltroPage.jsx`) e raccoglie quello che non sta nelle quattro — dieta,
+  dispensa, andamento, preferenze, la parte da amministratore, l'account, il tema e
+  l'uscita. Prima c'erano una barra in alto col pulsante del menu e un cassetto che
+  entrava da sinistra: due elementi fermi e due gesti per arrivare dove adesso si
+  arriva con un pollice, e 54px di schermo spesi per scrivere il nome dell'app a chi
+  l'app l'ha già aperta. Con loro sono spariti `navOpen`, `apriMenu` e
+  `testataPropria`, che esisteva solo perché il piano doveva fare anche da barra.
+  Le schede **non compaiono sul dettaglio del pasto**: quella schermata ha già la sua
+  barra in fondo, e due barre impilate sono centotrenta pixel di comandi sopra la
+  piega.
+  Le cinque schede non si ricavano dalle otto voci del menu (`schede` è una lista a
+  sé): un cassetto può permettersi otto voci, cinque schede larghe 78px no.
+- **Sul telefono un pasto è una riga, non una card.** Nella home (`.meal-row`, scelta
+  da `useTelefono()` in `lib/schermo.js`) e nella settimana (`.meal-card` riscritta in
+  riga con un filetto): quattro card impilate erano 860px per una giornata, cioè due
+  schermate per sapere cosa si mangia. Nella settimana in coda alla riga resta **un
+  bersaglio solo**, «l'ho seguito» — la cosa che si fa più spesso col telefono in
+  mano; «ho mangiato altro» e il cassetto con rigenera ed elimina si aprono dal pasto,
+  dove la barra in fondo li ha già tutti sotto il pollice. Tre comandi per riga su
+  quattro righe erano dodici bersagli sopra quattro nomi di piatti.
 - **La riga della dispensa in modifica è una griglia, non un flex che va a capo.**
   `.pantry-edit` — nome, quantità, unità e i due comandi, una colonna ciascuno, che si
   stringono insieme. Con `flex-wrap`, in una colonna da 320px, il nome scendeva sotto e
@@ -1038,6 +1066,11 @@ threadpool. La regola non ha eccezioni e `tests/test_concurrency.py` la fa rispe
   Non affidarsi al posizionamento automatico: il cursore di CSS Grid non torna
   indietro fra colonne e manderebbe l'intestazione del secondo giorno in fondo.
 - **Testo UI in italiano.** Codice, commenti e nomi in inglese solo dove è già così.
+- **Il conto della spesa sul telefono è una barra in fondo**, sopra le schede: il
+  totale cambia a ogni spunta ed è quello che si guarda mentre si spunta, non
+  qualcosa da cercare scorrendo fino in fondo alla lista. È la stessa
+  `.shopping-total-card` della colonna di destra, che lì si compatta — via il titolo
+  e la frase lunga, che in una barra da 80px non ci stanno.
 - **Una voce di menu, un posto.** Nelle impostazioni ci va quello che si imposta una
   volta e poi resta. Quello che cambia di continuo ha una pagina sua: la dieta
   (`/diet`), da cui nasce tutto il resto, e la dispensa (`/pantry`), che si riempie da

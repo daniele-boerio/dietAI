@@ -7,7 +7,6 @@ import {
   CalendarOff,
   ChevronLeft,
   ChevronRight,
-  Menu,
   RefreshCw,
   Sparkles,
 } from 'lucide-react';
@@ -61,7 +60,7 @@ function etichettaSettimana(offset) {
 // sempre, passato compreso: quello che è stato comprato sta in dispensa, e la
 // dispensa la corregge chi apre il frigo.
 export default function PlanningPage() {
-  const { addToast, apriMenu } = useApp();
+  const { addToast } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
   const { weekStart } = useParams();
@@ -111,14 +110,13 @@ export default function PlanningPage() {
   const domenicaIso = isoOf(addDays(lunedi, 6));
   const oggiIso = isoOf(new Date());
 
-  // Dove finisce la parte ferma della pagina: la barra dell'app, dove c'è, più la
-  // testata del piano. Si misura invece di scriverla nel CSS perché cresce e cala coi
+  // Dove finisce la parte ferma della pagina: solo la testata del piano, adesso che
+  // la barra dell'app non c'è più — sul telefono al suo posto ci sono le schede, che
+  // stanno in fondo. Si misura invece di scriverla nel CSS perché cresce e cala coi
   // pulsanti che ci stanno dentro (una settimana piena non ha «genera», una sfogliata
   // ha «torna a questa settimana»), e un numero fisso o lascerebbe un vuoto o
   // nasconderebbe il nome del giorno a cui si è saltati.
-  const margineTestata = () =>
-    (document.querySelector('.topbar')?.offsetHeight || 0) +
-    (document.querySelector('.plan-head')?.offsetHeight || 0);
+  const margineTestata = () => document.querySelector('.plan-head')?.offsetHeight || 0;
 
   // La striscia dei giorni porta alla colonna, sotto la testata.
   const vaiAlGiorno = (giorno) => {
@@ -368,12 +366,6 @@ export default function PlanningPage() {
           settimana o generare. */}
       <div className="plan-head">
         <div className="page-header">
-          {/* Sul telefono questa è anche la barra dell'app: il menu si apre da qui,
-              perché su questa pagina la barra di sopra non c'è (vedi App.jsx). */}
-          <button className="plan-menu" onClick={apriMenu} aria-label="Apri menu">
-            <Menu size={20} />
-          </button>
-
           {/* Il titolo della settimana **sono le sue date**, e le frecce per
               sfogliarla stanno lì attaccate: sono la stessa cosa — dove sei e come
               ci si sposta — e in una barra a parte, sotto, dicevano una seconda volta

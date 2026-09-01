@@ -262,6 +262,21 @@ export default function MealDetailPage() {
                     <ArrowLeft />
                   </button>
                 }
+                /* Il cuore sale sulla fascia, in alto a destra: in fondo al foglio
+                   sta in una riga di sei comandi che sul telefono va a capo tre
+                   volte, e mettere «preferita» al terzo capo vuol dire non
+                   premerlo mai. */
+                preferita={
+                  <button
+                    className={`recipe-fav ${meal.recipe.is_favorite ? 'on' : ''}`}
+                    onClick={toggleFavorite}
+                    title={
+                      meal.recipe.is_favorite ? 'Togli dai preferiti' : 'Aggiungi ai preferiti'
+                    }
+                  >
+                    <Heart fill={meal.recipe.is_favorite ? 'currentColor' : 'none'} />
+                  </button>
+                }
                 azioni={
                   <>
                     {/* Le due risposte aprono la riga: sono la ragione per cui il
@@ -317,18 +332,6 @@ export default function MealDetailPage() {
                           a casella vuota. */}
                       {busy ? <span className="spinner-inline" /> : <Sparkles size={16} />}
                       Rigenera
-                    </button>
-
-                    <button
-                      className="btn btn-secondary btn-icon"
-                      onClick={toggleFavorite}
-                      title={meal.recipe.is_favorite ? 'Togli dai preferiti' : 'Aggiungi ai preferiti'}
-                    >
-                      <Heart
-                        size={17}
-                        fill={meal.recipe.is_favorite ? 'currentColor' : 'none'}
-                        color={meal.recipe.is_favorite ? 'var(--terracotta)' : 'currentColor'}
-                      />
                     </button>
 
                     {!frozen && (

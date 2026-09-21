@@ -581,7 +581,7 @@ class UserPreferences(Base):
 
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), unique=True, nullable=False)
     prefer_seasonal: Mapped[bool] = mapped_column(Boolean, default=True)
-    cuisines: Mapped[list | None] = mapped_column(JSONB)  # chiavi di utils/cuisines.py
+    cuisines: Mapped[dict | None] = mapped_column(JSONB)  # {chiave: quota%}, utils/cuisines.py
     max_prep_time_min: Mapped[int | None] = mapped_column(Integer, nullable=True)  # Tempo max preparazione
     budget_level: Mapped[str | None] = mapped_column(String(20), nullable=True)  # "economico", "medio", "premium"
 
@@ -866,7 +866,7 @@ GET /api/config/preferences
   Response 200: UserPreferencesResponse
 
 PUT /api/config/preferences
-  Body: { "prefer_seasonal": bool, "cuisines": list[str], "max_prep_time_min"?: int, "budget_level"?: str }
+  Body: { "prefer_seasonal": bool, "cuisines": dict[str, float], "max_prep_time_min"?: int, "budget_level"?: str }
   Response 200: UserPreferencesResponse
 ```
 
@@ -969,7 +969,7 @@ CONTESTO UTENTE:
 - Ingredienti ESCLUSI (MAI usare): {excluded_ingredients}
 - Ingredienti di BASE (sempre disponibili, non mettere in lista spesa): {base_ingredients}
 - Dispensa attuale (ingredienti già in casa): {pantry_items}
-- Preferenze: cucine da cui attingere {cuisines}, ingredienti di stagione ({current_month}) {if prefer_seasonal}
+- Preferenze: cucine da cui attingere con le loro quote {cuisines}, ingredienti di stagione ({current_month}) {if prefer_seasonal}
 - Tempo preparazione massimo: {max_prep_time_min} minuti (se impostato)
 - Pasti FISSI (non generare): {recurring_meals}
 - Ricette già assegnate questa settimana (evita ripetizioni): {already_assigned}
@@ -1371,7 +1371,7 @@ Al primo avvio (`alembic upgrade head` + script seed):
 
 1. Crea l'utente seed da `.env` (`SEED_USER_EMAIL`, `SEED_USER_PASSWORD`)
 2. Popola la tabella `ingredients` con ~200 ingredienti comuni italiani (nome, categoria, stagionalità, prezzo medio)
-3. Crea `user_preferences` con defaults (prefer_seasonal=true, cuisines=["italiana"])
+3. Crea `user_preferences` con defaults (prefer_seasonal=true, cuisines={"italiana": 100})
 
 Il file seed è in `backend/app/seed.py` e viene chiamato da un comando CLI:
 

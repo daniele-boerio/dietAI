@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, X, Globe } from 'lucide-react';
 import { api } from '../api';
+import { QUOTA_MINIMA, aggiungi, normalizza, riparti, tetto, togli } from '../lib/quote';
+
+// Lo stesso tetto del server, dove e' anche validato.
+const MAX_CUCINE = 12;
 
 /**
  * Le cucine da cui attingere le ricette: si cercano e si spuntano.
@@ -10,10 +14,18 @@ import { api } from '../api';
  * si allontanano fra loro sono un 400 in faccia all'utente per una voce aggiunta da
  * una parte sola.
  *
- * Le scelte si vedono **due volte** di proposito — in pastiglia qui sopra e accese
+ * Le scelte si vedono **due volte** di proposito — in riga qui sopra e accese
  * nell'elenco — perché l'elenco scorre: con sessanta voci in sei gruppi, quello che
  * hai spuntato tre righe fa è già fuori campo, e un selettore che non sa dire cosa
  * ha dentro è un selettore da riaprire ogni volta.
+ *
+ * Ogni scelta si porta dietro la sua **quota**, che è quanta parte dei piatti prende.
+ * È la domanda del lucchetto nell'editor della dieta senza il lucchetto: il totale
+ * non è una scelta, è 100 per definizione, quindi alzare l'italiana al 70% stringe le
+ * altre in proporzione invece di allungare la somma. L'aritmetica sta in `lib/quote.js`
+ * ed è la stessa di `cuisines.clean()` nel backend: deve esserlo, perché il numero che
+ * si legge mentre si trascina è quello che verrà salvato — se il server ne
+ * restituisse un altro i cursori salterebbero da soli appena lasciati.
  */
 
 // Accenti via: si scrive "peru" nel campo di ricerca, non "perù". Vale anche al
@@ -38,17 +50,31 @@ export default function CuisinePicker({ value, onChange, disabled }) {
       .catch(() => setErrore(true));
   }, []);
 
-  const scelte = useMemo(() => new Set(value || []), [value]);
+  // La preferenza è `{chiave: quota}`, ma dall'archivio può ancora arrivare il
+  // semplice elenco della prima versione (`["italiana", "greca"]`), che vale «queste,
+  // in parti uguali»: `normalizza` fa diventare le due cose la stessa, come
+  // `clean()` di là.
+  const quote = useMemo(() => {
+    if (Array.isArray(value)) {
+      return normalizza(Object.fromEntries(value.map((k) => [k, 1])));
+    }
+    return value && Object.keys(value).length ? value : {};
+  }, [value]);
 
-  // Le pastiglie in cima seguono l'ordine del catalogo e non quello dei clic: è lo
+  // Le righe in cima seguono l'ordine del catalogo e non quello dei clic: è lo
   // stesso ordine in cui le legge il modello, e una lista che si rimescola a ogni
   // aggiunta costringe a rileggerla tutta per vedere cos'è cambiato.
   const scelteInOrdine = useMemo(() => {
     if (!groups) return [];
-    return groups
-      .flatMap((g) => g.cuisines)
-      .filter((c) => scelte.has(c.key));
-  }, [groups, scelte]);
+    return groups.flatMap((g) => g.cuisines).filter((c) => c.key in quote);
+  }, [groups, quote]);
+
+  // Le chiavi in ordine di catalogo: è l'ordine in cui vanno ricostruite le quote,
+  // perché il server le riordina comunque così e i cursori non devono saltare.
+  const inOrdine = (q) =>
+    Object.fromEntries(
+      scelteInOrdine.filter((c) => c.key in q).map((c) => [c.key, q[c.key]])
+    );
 
   const filtrati = useMemo(() => {
     if (!groups) return [];
@@ -80,27 +106,50 @@ export default function CuisinePicker({ value, onChange, disabled }) {
 
   const toggle = (key) => {
     if (disabled) return;
-    const next = scelte.has(key)
-      ? (value || []).filter((k) => k !== key)
-      : [...(value || []), key];
-    onChange(next);
+    onChange(inOrdine(key in quote ? togli(quote, key) : aggiungi(quote, key)));
   };
+
+  const muovi = (key, valore) => {
+    if (disabled) return;
+    onChange(inOrdine(riparti(quote, key, valore)));
+  };
+
+  const una = scelteInOrdine.length === 1;
+  // Il tetto è quello del server (`cuisines.MAX_CUCINE`): oltre, le quote diventano
+  // così piccole che sorteggiarle su una settimana non vuol dire più niente. Le
+  // pastiglie si spengono invece di sparire, o la ricerca risponderebbe «nessun
+  // risultato» a una cucina che c'è.
+  const pieno = scelteInOrdine.length >= MAX_CUCINE;
 
   return (
     <div className="cuisine-picker">
       <div className="cuisine-chosen">
         {scelteInOrdine.map((c) => (
-          <span key={c.key} className="tag">
-            {c.label}
+          <div key={c.key} className="cuisine-row">
+            <span className="cuisine-row-name">{c.label}</span>
+            {/* Con una cucina sola il cursore non avrebbe nulla da ripartire: il
+                100% è un fatto, non una scelta, e un comando che non si muove è un
+                comando rotto. */}
+            <input
+              type="range"
+              min={QUOTA_MINIMA}
+              max={una ? 100 : tetto(quote, c.key)}
+              value={quote[c.key] ?? 0}
+              disabled={disabled || una}
+              aria-label={`Quota di ${c.label}`}
+              onChange={(e) => muovi(c.key, Number(e.target.value))}
+            />
+            <span className="cuisine-row-share">{quote[c.key] ?? 0}%</span>
             <button
               type="button"
+              className="cuisine-row-x"
               disabled={disabled}
               aria-label={`Togli ${c.label}`}
               onClick={() => toggle(c.key)}
             >
-              <X size={13} />
+              <X size={14} />
             </button>
-          </span>
+          </div>
         ))}
         {scelteInOrdine.length === 0 && (
           <span className="cuisine-none">
@@ -109,6 +158,19 @@ export default function CuisinePicker({ value, onChange, disabled }) {
           </span>
         )}
       </div>
+
+      {/* La riga che spiega i cursori sta sotto le righe e non sopra: sopra la si
+          leggerebbe prima di aver capito di cosa parla. Con una cucina sola non c'è
+          niente da ripartire e la frase cambia, invece di restare lì a descrivere
+          un comando spento. */}
+      {scelteInOrdine.length > 0 && (
+        <p className="cuisine-hint">
+          {una
+            ? 'Una cucina sola: tutti i piatti sono suoi.'
+            : 'Alzarne una stringe le altre — la somma è sempre 100%.'}
+          {pieno && ' Sei al massimo: per aggiungerne una, togline una.'}
+        </p>
+      )}
 
       <div className="search-field cuisine-search">
         <Search />
@@ -145,9 +207,9 @@ export default function CuisinePicker({ value, onChange, disabled }) {
                 <button
                   key={c.key}
                   type="button"
-                  className={`chip ${scelte.has(c.key) ? 'active' : ''}`}
-                  disabled={disabled}
-                  aria-pressed={scelte.has(c.key)}
+                  className={`chip ${c.key in quote ? 'active' : ''}`}
+                  disabled={disabled || (!(c.key in quote) && pieno)}
+                  aria-pressed={c.key in quote}
                   onClick={() => toggle(c.key)}
                 >
                   {c.label}

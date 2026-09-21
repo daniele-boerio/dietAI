@@ -751,8 +751,8 @@ vicino e **lo scrive nella descrizione**, invece di cambiarlo in silenzio.
 Tre casi e non uno: nessuna scelta lascia mano libera (è quello che si aspetta chi
 quella schermata non l'ha aperta), la sola italiana non si porta dietro il discorso
 sugli ingredienti — ce li ha già tutti, ed è la riga che si genera più spesso —, e più
-cucine insieme si **sorteggiano** (vedi qui sotto). `clean()` rimette l'ordine del
-catalogo invece di quello dei clic: la lista finisce in un prompt, e le stesse scelte
+cucine insieme si **sorteggiano con le loro quote** (vedi qui sotto). `clean()`
+rimette l'ordine del catalogo invece di quello dei clic: la lista finisce in un prompt, e le stesse scelte
 spuntate in ordine diverso sarebbero due contesti diversi. Il catalogo è un elenco
 chiuso e non testo libero perché la chiave finisce nel prompt **e** nei tag della
 ricetta: "giapponese", "Giappone" e "cucina nipponica" scritti a mano sarebbero tre
@@ -772,12 +772,60 @@ smette di elencare le cucine e dice soltanto che il sorteggio è **già fatto**
 (`PER_GIORNO`), col divieto esplicito di ripiegare sull'italiana: senza quella riga
 «CUCINA: Greca» si legge come un suggerimento.
 
-**A mazzo, non a dadi.** Si mescola l'elenco e si distribuisce una carta per volta,
-rimescolando quando finisce: con tre cucine su sette giorni ognuna esce due o tre
-volte e nessuna resta fuori. Tirando un dado indipendente per ogni giorno, cinque
-giapponesi e due greche sono un risultato onesto — e indistinguibile dal guasto che il
-sorteggio doveva riparare. Per la stessa ragione, a cavallo di due mazzi la stessa
-cucina non esce due volte di fila.
+**E ogni cucina si porta dietro la sua quota.** `cuisines` non è un elenco ma una
+mappa `{chiave: percentuale}` — `{"italiana": 70, "greca": 30}` — perché «anche la
+giapponese» e «una cena giapponese ogni tanto» sono due richieste diverse, e un elenco
+le scrive uguali. Le quote **sommano sempre a 100**, e a garantirlo è `clean()`, che
+normalizza a ogni lettura: è l'unico modo perché la somma torni anche dopo che una
+voce è stata tolta. Sotto c'è `QUOTA_MINIMA = 1`, perché una voce spuntata che non può
+mai uscire è una voce che mente — chi non la vuole più ha la X accanto; **se c'è, è
+scelta: il numero dice solo quanto**, quindi una quota a zero si porta al minimo
+invece di scartare la cucina, che altrimenti sparirebbe dall'elenco al salvataggio.
+Il tetto di dodici (`MAX_CUCINE`) non è gusto: con quote da 8% l'una il sorteggio su
+sette giorni ne pescherebbe comunque una manciata, e «attingi a queste dodici»
+equivale a non aver chiesto niente. In archivio resta la forma della prima versione
+(`["italiana", "greca"]`), che vale «in parti uguali»: `_as_shares` la legge invece di
+migrarla, perché una migrazione che riscrive un JSON per dire la stessa cosa può solo
+introdurre bug, e la riga si risalva da sé.
+
+**Le quote si contano, non si tirano a sorte.** `draw` fa due cose che sono due
+domande diverse: **quante** caselle per ciascuna (`_quante_volte`) e **in che ordine**
+(`_distanziate`). La prima usa il metodo del resto più grande — la stessa aritmetica
+di `_share_out` e di `lib/macros.js` — così il 70% è il 70% **di questa settimana** e
+non la media di infinite settimane: con un dado indipendente per giorno, sette
+italiane di fila sono un risultato onesto e, per chi guarda il piano, sono il guasto
+che le percentuali dovevano riparare. Il resto va a chi ha la parte frazionaria più
+alta, coi pareggi sciolti a caso — senza, con tre cucine in parti uguali la carta in
+più sarebbe sempre della prima in ordine di catalogo.
+
+La seconda merita la trappola in cui è già caduta una volta. Il modo ovvio di
+distanziare — pescare ogni volta la cucina a cui ne restano di più, saltando quella
+appena uscita — distanzia benissimo ed è **sempre la stessa fila**: con 5/1/1 usciva
+«italiana, greca, italiana, giapponese, italiana, italiana, italiana» a ogni
+generazione, cioè il guasto di partenza servito una riga più in là. Ora ogni casella
+prende una posizione: la i-esima di una cucina che ne ha `n` cade **a caso dentro
+l'i-esima fetta** di settimana larga `1/n`. Le cinque italiane finiscono così una per
+fetta — sparse per costruzione — ma dove dentro la fetta lo decide il caso, e la fila
+cambia a ogni generazione. Resta da riparare ciò che le fette non garantiscono, cioè
+due fette confinanti che consegnano la stessa cucina a cavallo del confine: chi si
+trova un gemello accanto cerca uno scambio che sistemi entrambi i posti. Se non c'è si
+ripete, e va bene — con l'80% su cinque giorni due di fila sono aritmetica, ed è
+esattamente quello che l'utente ha chiesto.
+
+Le percentuali finiscono anche in `prompt_line`, cioè nel contesto di chi **non**
+sorteggia: chiedendo in chat un'alternativa a un piatto, la proporzione dice da che
+parte guardare — con 70% italiana il sostituto giusto è quasi sempre italiano, e senza
+quel numero le due cucine peserebbero uguale.
+
+Nel selettore ogni scelta è una riga con un cursore (`lib/quote.js`, con
+`quote.test.js`): alzarne una stringe le altre in proporzione, perché il totale non è
+una scelta ma 100 per definizione — è il lucchetto dell'editor della dieta senza il
+lucchetto. L'aritmetica è **la stessa** di `clean()` e deve esserlo: il numero che si
+legge mentre si trascina è quello che verrà salvato, e se il server ne restituisse un
+altro i cursori salterebbero da soli appena lasciati. Per la stessa ragione `riparti`
+difende il valore scritto dall'arrotondamento, scaricandolo sulla quota più grande fra
+le altre: vedere il proprio 70 diventare 69 da solo è il modo più rapido di non
+fidarsi più del cursore.
 
 Anche `regenerate_meal` sorteggia, ed è dove la differenza si sente di più: «rigenera»
 premuto tre volte di fila dava tre piatti italiani. Lì si estrae **una** cucina e si

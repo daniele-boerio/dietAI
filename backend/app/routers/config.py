@@ -378,7 +378,7 @@ def get_preferences(
     if not prefs:
         # Default impliciti: la spec dice cucina italiana e stagionalità attive.
         prefs = UserPreferences(
-            user_id=user_id, prefer_seasonal=True, cuisines=["italiana"]
+            user_id=user_id, prefer_seasonal=True, cuisines={"italiana": 100}
         )
         db.add(prefs)
         db.commit()
@@ -396,6 +396,12 @@ def update_preferences(
     sconosciute = cuisines.unknown(body.cuisines)
     if sconosciute:
         raise HTTPException(400, f"Cucine non in elenco: {', '.join(sconosciute)}")
+    if len(body.cuisines) > cuisines.MAX_CUCINE:
+        raise HTTPException(
+            400,
+            f"Al massimo {cuisines.MAX_CUCINE} cucine: oltre, le quote diventano "
+            "così piccole che sorteggiarle su una settimana non vuol dire più niente.",
+        )
 
     prefs = db.query(UserPreferences).filter(UserPreferences.user_id == user_id).first()
     if not prefs:

@@ -155,24 +155,98 @@ def options() -> dict:
     }
 
 
-def unknown(keys: list[str]) -> list[str]:
-    """Le chiavi che il catalogo non conosce — la riga su cui il router risponde 400."""
-    return [k for k in keys if k not in _BY_KEY]
+# Quanto pesa poco una cucina che resta comunque in elenco. Zero non si usa: una
+# voce spuntata che non può mai uscire è una voce che mente, e chi non la vuole più
+# la toglie. Di riflesso il massimo per una sola è 100 meno le altre.
+QUOTA_MINIMA = 1
+
+# Sopra la dozzina "attingi a queste" equivale a non aver chiesto niente, con in più
+# i token per dirlo — e con quote da 8% l'una il sorteggio su sette giorni ne
+# pescherebbe comunque solo una manciata.
+MAX_CUCINE = 12
 
 
-def clean(keys: list[str] | None) -> list[str]:
-    """Toglie i doppioni e rimette l'ordine del catalogo.
+def _as_shares(value: object) -> dict[str, float]:
+    """Le due forme in cui una preferenza può arrivare, ridotte a una.
 
-    L'ordine è quello del catalogo e non quello in cui si è cliccato: la lista finisce
-    in un prompt, e la stessa preferenza scritta in due ordini diversi sarebbe due
-    stringhe diverse — cioè due contesti diversi a parità di scelte.
+    In archivio esistono ancora le righe della prima versione, che erano un elenco
+    senza quote (`["italiana", "greca"]`): valevano "queste, in parti uguali", ed è
+    esattamente quello che diventano qui. Leggerle invece di migrarle è una scelta:
+    una migrazione che riscrive un JSON per dire la stessa cosa è una migrazione che
+    può solo introdurre bug, e la riga si riscrive da sé al primo salvataggio.
     """
-    scelte = set(keys or [])
-    return [k for k in _BY_KEY if k in scelte]
+    if isinstance(value, dict):
+        quote: dict[str, float] = {}
+        for key, peso in value.items():
+            if not isinstance(key, str):
+                continue
+            try:
+                n = float(peso)
+            except (TypeError, ValueError):
+                n = 0.0
+            quote[key] = max(n, 0.0)
+        return quote
+    if isinstance(value, (list, tuple, set)):
+        return {k: 1.0 for k in value if isinstance(k, str)}
+    return {}
 
 
-def labels(keys: list[str] | None) -> list[str]:
-    return [_BY_KEY[k] for k in clean(keys)]
+def unknown(value: object) -> list[str]:
+    """Le chiavi che il catalogo non conosce — la riga su cui il router risponde 400."""
+    return [k for k in _as_shares(value) if k not in _BY_KEY]
+
+
+def clean(value: object) -> dict[str, int]:
+    """Le cucine scelte con la loro quota: interi che sommano a **100**, in ordine di catalogo.
+
+    L'ordine è quello del catalogo e non quello in cui si è cliccato: la preferenza
+    finisce in un prompt, e la stessa scelta scritta in due ordini diversi sarebbe due
+    contesti diversi a parità di cucine.
+
+    Le quote si normalizzano sempre, anche quando arrivano già a 100: è l'unico modo
+    perché la somma sia 100 **davvero** dopo che una voce è stata tolta, o che una
+    riga vecchia senza quote è stata letta come parti uguali. Il resto
+    dell'arrotondamento va sulla quota più grande, dove si nota meno — la stessa
+    aritmetica di `_share_out` e di `lib/macros.js`, applicata qui alle cucine.
+    """
+    quote = {k: v for k, v in _as_shares(value).items() if k in _BY_KEY}
+    ordinate = [k for k in _BY_KEY if k in quote]
+    if not ordinate:
+        return {}
+
+    # **Se c'è, è scelta: il numero dice solo quanto.** Una quota a zero non la si
+    # scarta — la si porta al minimo — perché il numero e la spunta sono due cose
+    # diverse e chi tira un cursore a fondo corsa non sta togliendo la voce, che ha
+    # la sua X apposta. Scartandola, la cucina sparirebbe dall'elenco al salvataggio
+    # e ricomparirebbe solo ri-cercandola.
+    totale = sum(quote[k] for k in ordinate)
+    if totale <= 0:
+        quote = {k: 1.0 for k in ordinate}
+        totale = float(len(ordinate))
+    interi = {k: round(100 * quote[k] / totale) for k in ordinate}
+    # Il minimo va applicato prima del pareggio del resto, o riportarlo su romperebbe
+    # di nuovo la somma.
+    interi = {k: max(v, QUOTA_MINIMA) for k, v in interi.items()}
+
+    scarto = 100 - sum(interi.values())
+    if scarto:
+        # In diminuzione non si scende sotto il minimo: si passa alla successiva.
+        for k in sorted(ordinate, key=lambda k: interi[k], reverse=(scarto > 0)):
+            passo = scarto if scarto > 0 else max(scarto, QUOTA_MINIMA - interi[k])
+            interi[k] += passo
+            scarto -= passo
+            if not scarto:
+                break
+    return interi
+
+
+def keys_of(value: object) -> list[str]:
+    """Solo le chiavi, in ordine di catalogo."""
+    return list(clean(value))
+
+
+def labels(value: object) -> list[str]:
+    return [_BY_KEY[k] for k in clean(value)]
 
 
 # La metà che non si negozia: la cucina la si sceglie per tecniche e condimenti, gli
@@ -190,34 +264,106 @@ INGREDIENTI_LOCALI = (
 )
 
 
+def _quante_volte(quote: dict[str, int], count: int, r: random.Random) -> dict[str, int]:
+    """Quante caselle spettano a ciascuna cucina: il metodo del resto più grande.
+
+    Non si tira un dado per ogni giorno. Con 70/30 su sette giorni un dado dà cinque
+    italiane e due greche *in media*, ma la settimana che si genera adesso è una
+    sola: sette italiane di fila sono un risultato onesto del dado e, per chi guarda
+    il piano, sono il guasto che le percentuali dovevano riparare. Contando prima le
+    caselle, il 70% è 70% **di questa settimana**.
+
+    Il resto va a chi ha la parte frazionaria più alta, coi pareggi sciolti a caso
+    (di qui il mescolìo prima dell'ordinamento, che è stabile): senza, con tre cucine
+    in parti uguali la carta in più sarebbe sempre della prima in ordine di catalogo.
+    """
+    totale = sum(quote.values())
+    esatti = {k: count * v / totale for k, v in quote.items()}
+    volte = {k: int(x) for k, x in esatti.items()}
+
+    ordine = list(quote)
+    r.shuffle(ordine)
+    ordine.sort(key=lambda k: esatti[k] - volte[k], reverse=True)
+    for k in ordine[: count - sum(volte.values())]:
+        volte[k] += 1
+    return volte
+
+
+def _sta_bene(fila: list[str], p: int) -> bool:
+    """La casella `p` non ha la stessa cucina di chi le sta accanto."""
+    return (p == 0 or fila[p] != fila[p - 1]) and (
+        p == len(fila) - 1 or fila[p] != fila[p + 1]
+    )
+
+
+def _distanziate(volte: dict[str, int], r: random.Random) -> list[str]:
+    """Mette in fila le caselle contate, distanziando le ripetizioni.
+
+    Le cinque italiane di una settimana al 70% vanno sparse, non messe in coda. Il
+    modo ovvio — pescare ogni volta la cucina a cui ne restano di più, saltando quella
+    appena uscita — distanzia bene ma è **sempre la stessa fila**: con 5/1/1 esce
+    «italiana, greca, italiana, giapponese, italiana, italiana, italiana» ogni
+    benedetta settimana, e un sorteggio che dà sempre lo stesso risultato è il guasto
+    di partenza servito una riga più in là.
+
+    Quindi si assegna a ogni casella una posizione: la i-esima di una cucina che ne ha
+    `n` cade a caso dentro l'i-esima fetta di settimana larga `1/n`. Le cinque
+    italiane finiscono una per fetta — sparse per costruzione — ma **dove** dentro la
+    fetta lo decide il caso, e la fila cambia a ogni generazione.
+
+    Resta da riparare quello che le fette non garantiscono: due fette confinanti
+    possono consegnare la stessa cucina a cavallo del confine. Chi si trova un gemello
+    accanto cerca uno scambio che sistemi tutt'e due i posti; se non c'è, si ripete —
+    con l'80% su cinque giorni due di fila sono aritmetica, non un difetto, ed è
+    esattamente quello che l'utente ha chiesto.
+    """
+    coppie = [
+        ((i + r.random()) / n, k) for k, n in volte.items() for i in range(n) if n > 0
+    ]
+    # Il caso ha già sciolto ogni pareggio (due chiavi identiche sono impossibili),
+    # quindi si ordina sulla sola posizione: le cucine non vanno confrontate fra loro.
+    coppie.sort(key=lambda c: c[0])
+    fila = [k for _, k in coppie]
+
+    for i in range(1, len(fila)):
+        if fila[i] != fila[i - 1]:
+            continue
+        posizioni = [j for j in range(len(fila)) if j != i]
+        r.shuffle(posizioni)
+        for j in posizioni:
+            fila[i], fila[j] = fila[j], fila[i]
+            if _sta_bene(fila, i) and _sta_bene(fila, j):
+                break
+            fila[i], fila[j] = fila[j], fila[i]
+    return fila
+
+
 def draw(
-    keys: list[str] | None,
+    value: object,
     count: int,
     *,
     avoid: str | None = None,
     rng: random.Random | None = None,
 ) -> list[str]:
-    """Sorteggia `count` cucine fra quelle scelte. Le etichette, pronte per il prompt.
+    """Sorteggia `count` cucine fra quelle scelte, rispettandone le quote.
 
-    Il sorteggio lo fa qui Python e non il modello, ed è il punto: «alternale
-    nell'arco della settimana» scritto in un prompt non funziona — il modello ancora
-    sulla prima voce dell'elenco, o su quella che gli viene più facile, e chi ha
-    spuntato otto cucine si ritrova sette cene italiane. Una cucina assegnata è
-    un'istruzione; una da alternare è un auspicio.
+    Le etichette, pronte per il prompt. Il sorteggio lo fa qui Python e non il
+    modello, ed è il punto: «alternale nell'arco della settimana» scritto in un
+    prompt non funziona — il modello ancora sulla prima voce dell'elenco, o su quella
+    che gli viene più facile, e chi ha spuntato otto cucine si ritrova sette cene
+    italiane. Una cucina assegnata è un'istruzione; una da alternare è un auspicio.
 
-    **A mazzo, non a dadi.** Si mescola l'elenco e si distribuisce una carta per
-    volta, rimescolando quando finisce: con tre cucine su sette giorni ognuna esce
-    due o tre volte e nessuna resta fuori. Tirando un dado indipendente per ogni
-    giorno, invece, cinque giapponesi e due greche sono un risultato onesto — e
-    indistinguibile dal guasto che il sorteggio doveva riparare. Per la stessa
-    ragione, a cavallo di due mazzi la stessa cucina non esce due volte di fila.
+    Due passaggi, e sono due domande diverse: **quante** caselle per ciascuna
+    (`_quante_volte`, che fa valere le percentuali su questa settimana e non sulla
+    media di infinite settimane) e **in che ordine** (`_distanziate`, che tiene le
+    ripetizioni lontane fin dove le quote lo permettono).
 
     `avoid` toglie una cucina dall'estrazione (di solito quella del piatto che si sta
     rifacendo), ma solo finché ne resta almeno un'altra: chi ne ha scelta una sola
     deve poter rigenerare lo stesso.
     """
-    disponibili = labels(keys)
-    if not disponibili or count <= 0:
+    quote = clean(value)
+    if not quote or count <= 0:
         return []
 
     # `avoid` arriva dai tag di una ricetta, cioè da quello che ha scritto il modello:
@@ -225,23 +371,15 @@ def draw(
     # validare — serve solo a togliere una carta dal mazzo — quindi quello che non è
     # una stringa non toglie niente, invece di far fallire una rigenerazione pagata.
     if isinstance(avoid, str) and avoid.strip():
-        senza = [x for x in disponibili if x.casefold() != avoid.strip().casefold()]
-        if senza:
-            disponibili = senza
-    if len(disponibili) == 1:
-        return disponibili * count
+        fuori = avoid.strip().casefold()
+        resto = {k: v for k, v in quote.items() if _BY_KEY[k].casefold() != fuori}
+        if resto:
+            quote = resto
+    if len(quote) == 1:
+        return [_BY_KEY[next(iter(quote))]] * count
 
     r = rng or random.Random()
-    estratte: list[str] = []
-    mazzo: list[str] = []
-    while len(estratte) < count:
-        if not mazzo:
-            mazzo = disponibili[:]
-            r.shuffle(mazzo)
-            if estratte and mazzo[0] == estratte[-1]:
-                mazzo[0], mazzo[1] = mazzo[1], mazzo[0]
-        estratte.append(mazzo.pop(0))
-    return estratte
+    return [_BY_KEY[k] for k in _distanziate(_quante_volte(quote, count, r), r)]
 
 
 # La riga del contesto quando il sorteggio è già stato fatto e sta scritto accanto a
@@ -264,27 +402,31 @@ def prompt_line_one(label: str) -> str:
     )
 
 
-def prompt_line(keys: list[str] | None) -> str:
-    """La riga «Cucina preferita» del contesto.
+def prompt_line(value: object) -> str:
+    """La riga «CUCINE da cui attingere» del contesto, per chi non ha sorteggiato.
 
     Tre casi, non uno: nessuna scelta lascia mano libera al modello (che è quello che
     si aspetta chi quella schermata non l'ha aperta), la sola cucina italiana è il
     default storico e del discorso sugli ingredienti non ha bisogno — ce li ha già
-    tutti —, e più cucine insieme vanno **alternate** nell'arco della settimana, o il
-    modello prende la prima dell'elenco e ci resta.
+    tutti —, e più cucine insieme si dicono **con le loro quote**.
+
+    Le percentuali ci sono anche qui, dove nessuno sorteggia, perché questa riga la
+    leggono le chat: chiedendo un'alternativa a un piatto, la proporzione dice da che
+    parte guardare — con 70% italiana e 30% greca il sostituto giusto è quasi sempre
+    italiano, e senza quel numero le due cucine peserebbero uguale.
     """
-    scelte = labels(keys)
-    if not scelte:
+    quote = clean(value)
+    if not quote:
         return (
             "nessuna preferenza, scegli tu — resta su piatti che si cucinano davvero "
             "in casa con ingredienti da supermercato italiano."
         )
-    if scelte == ["Italiana"]:
+    if list(quote) == ["italiana"]:
         return "italiana: piatti di casa, con ingredienti di un supermercato italiano."
-    if len(scelte) == 1:
-        return f"{scelte[0].lower()}. {INGREDIENTI_LOCALI}"
-    elenco = ", ".join(s.lower() for s in scelte)
+    if len(quote) == 1:
+        return f"{_BY_KEY[next(iter(quote))].lower()}. {INGREDIENTI_LOCALI}"
+    elenco = ", ".join(f"{_BY_KEY[k].lower()} {v}%" for k, v in quote.items())
     return (
-        "attingi a queste cucine, alternandole nell'arco della settimana invece di "
-        f"restare sulla prima: {elenco}. {INGREDIENTI_LOCALI}"
+        "attingi a queste cucine, in queste proporzioni sul totale dei piatti: "
+        f"{elenco}. {INGREDIENTI_LOCALI}"
     )

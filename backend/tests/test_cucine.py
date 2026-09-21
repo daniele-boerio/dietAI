@@ -45,20 +45,27 @@ def test_ogni_voce_si_cerca_anche_per_paese():
 
 
 def test_l_ordine_non_dipende_da_come_si_e_cliccato():
-    """La lista finisce in un prompt: le stesse scelte devono dare la stessa stringa."""
-    assert cuisines.clean(["messicana", "giapponese"]) == cuisines.clean(
-        ["giapponese", "messicana"]
+    """La preferenza finisce in un prompt: le stesse scelte, la stessa stringa.
+
+    Il confronto è su `list(...)`, cioè sulle chiavi in fila: due dizionari con le
+    stesse coppie sono uguali anche scritti in ordine diverso, quindi `==` da solo
+    non proverebbe niente di quello che qui interessa.
+    """
+    assert list(cuisines.clean(["messicana", "giapponese"])) == list(
+        cuisines.clean(["giapponese", "messicana"])
     )
     # E i doppioni spariscono, o il modello leggerebbe due volte la stessa cucina.
-    assert cuisines.clean(["greca", "greca"]) == ["greca"]
+    assert cuisines.clean(["greca", "greca"]) == {"greca": 100}
 
 
 def test_una_chiave_fuori_catalogo_si_riconosce():
     assert cuisines.unknown(["giapponese"]) == []
     assert cuisines.unknown(["giapponese", "marziana"]) == ["marziana"]
+    assert cuisines.unknown({"giapponese": 70, "marziana": 30}) == ["marziana"]
     # In lettura si scarta in silenzio: una voce tolta dal catalogo resterebbe
     # spuntata in un selettore che non ce l'ha più, cioè impossibile da togliere.
-    assert cuisines.clean(["giapponese", "marziana"]) == ["giapponese"]
+    # E la quota che lasciava libera torna a chi resta, o la somma non farebbe 100.
+    assert cuisines.clean({"giapponese": 70, "marziana": 30}) == {"giapponese": 100}
 
 
 # ── La riga che legge il modello ───────────────────────────────────────────────
@@ -99,12 +106,17 @@ def test_una_cucina_straniera_porta_sempre_il_vincolo_degli_ingredienti(scelte):
     assert "mirin" in riga  # l'esempio di cosa NON si trova
 
 
-def test_piu_cucine_vanno_alternate_e_sono_tutte_nominate():
-    riga = cuisines.prompt_line(["greca", "messicana", "giapponese"])
+def test_piu_cucine_si_dicono_con_le_loro_quote():
+    """Le percentuali stanno anche qui, dove nessuno sorteggia, perché questa riga la
 
-    assert "alternandole" in riga
-    for nome in ("greca", "messicana", "giapponese"):
-        assert nome in riga
+    leggono le chat: chiedendo un'alternativa a un piatto, la proporzione dice da che
+    parte guardare — con 70% italiana il sostituto giusto è quasi sempre italiano.
+    """
+    riga = cuisines.prompt_line({"italiana": 70, "greca": 20, "giapponese": 10})
+
+    assert "italiana 70%" in riga
+    assert "greca 20%" in riga
+    assert "giapponese 10%" in riga
 
 
 def test_le_cucine_arrivano_nel_contesto_di_ogni_generazione(client, diet, db):
@@ -134,14 +146,15 @@ def test_il_catalogo_si_scarica_e_le_preferenze_lo_ricordano(client):
 
     salvate = client.put(
         "/api/config/preferences",
-        json={"prefer_seasonal": True, "cuisines": ["thailandese", "italiana"]},
+        json={"prefer_seasonal": True, "cuisines": {"thailandese": 30, "italiana": 70}},
     ).json()
 
-    assert salvate["cuisines"] == ["italiana", "thailandese"]  # ordine del catalogo
-    assert client.get("/api/config/preferences").json()["cuisines"] == [
-        "italiana",
-        "thailandese",
-    ]
+    assert salvate["cuisines"] == {"italiana": 70, "thailandese": 30}
+    assert list(salvate["cuisines"]) == ["italiana", "thailandese"]  # ordine catalogo
+    assert client.get("/api/config/preferences").json()["cuisines"] == {
+        "italiana": 70,
+        "thailandese": 30,
+    }
 
 
 def test_una_cucina_inventata_viene_rifiutata_dicendo_quale(client):
@@ -164,9 +177,12 @@ def test_il_corpo_senza_cucine_le_svuota(client):
         "/api/config/preferences", json={"prefer_seasonal": True, "cuisines": ["greca"]}
     )
 
-    assert client.put(
-        "/api/config/preferences", json={"prefer_seasonal": True}
-    ).json()["cuisines"] == []
+    assert (
+        client.put("/api/config/preferences", json={"prefer_seasonal": True}).json()[
+            "cuisines"
+        ]
+        == {}
+    )
 
 
 # ── Il sorteggio ───────────────────────────────────────────────────────────────
@@ -410,3 +426,153 @@ def test_un_tag_malscritto_non_fa_saltare_la_rigenerazione(sporco):
 
     assert len(estratte) == 3
     assert set(estratte) <= set(cuisines.labels(SCELTE))
+
+
+# -- Le quote ------------------------------------------------------------------
+
+
+def test_le_quote_sommano_sempre_a_cento():
+    """Anche quando non ci arrivano da sole: il numero che si legge a schermo e'
+
+    una percentuale, e tre voci che dicono 33% l'una sono una percentuale rotta.
+    """
+    for scritte in (
+        {"italiana": 70, "greca": 30},
+        {"italiana": 1, "greca": 1, "giapponese": 1},
+        {"italiana": 5, "greca": 3},
+        {"italiana": 999},
+        ["italiana", "greca", "giapponese", "messicana", "turca", "indiana", "cinese"],
+    ):
+        assert sum(cuisines.clean(scritte).values()) == 100, scritte
+
+
+def test_un_elenco_senza_quote_vale_parti_uguali():
+    """E' la forma della prima versione, che in archivio c'e' ancora: leggerla
+
+    invece di migrarla e' una scelta — una migrazione che riscrive un JSON per dire
+    la stessa cosa puo' solo introdurre bug, e la riga si risalva da se'.
+    """
+    assert cuisines.clean(["italiana", "greca"]) == {"italiana": 50, "greca": 50}
+    assert cuisines.clean(["italiana"]) == {"italiana": 100}
+
+
+def test_una_cucina_in_elenco_non_scende_mai_a_zero():
+    """Una voce spuntata che non puo' mai uscire e' una voce che mente: chi non la
+
+    vuole piu' la toglie, e finche' c'e' deve poter capitare.
+    """
+    quote = cuisines.clean({"italiana": 1000, "greca": 1})
+
+    assert quote["greca"] >= cuisines.QUOTA_MINIMA
+    assert sum(quote.values()) == 100
+
+
+def test_il_sorteggio_rispetta_la_percentuale_su_questa_settimana():
+    """Non "in media": la settimana che si genera adesso e' una sola.
+
+    Con 70/30 su sette giorni un dado da' cinque italiane in media, ma sette italiane
+    di fila sono un risultato onesto del dado — e per chi guarda il piano sono il
+    guasto che le percentuali dovevano riparare.
+    """
+    for seme in range(30):
+        estratte = cuisines.draw(
+            {"italiana": 70, "greca": 30}, 7, rng=random.Random(seme)
+        )
+
+        assert estratte.count("Italiana") == 5
+        assert estratte.count("Greca") == 2
+
+
+def test_alzare_una_quota_alza_le_sue_caselle():
+    poca = cuisines.draw({"italiana": 30, "greca": 70}, 10, rng=random.Random(0))
+    tanta = cuisines.draw({"italiana": 80, "greca": 20}, 10, rng=random.Random(0))
+
+    assert poca.count("Italiana") == 3
+    assert tanta.count("Italiana") == 8
+
+
+def test_le_ripetizioni_stanno_lontane_fin_dove_le_quote_lo_permettono():
+    """Con l'80% su cinque giorni due di fila sono aritmetica, non un difetto: quello
+
+    che si pretende e' che le poche non finiscano tutte attaccate in fondo.
+    """
+    for seme in range(30):
+        estratte = cuisines.draw(
+            {"italiana": 80, "greca": 20}, 10, rng=random.Random(seme)
+        )
+        greche = [i for i, c in enumerate(estratte) if c == "Greca"]
+
+        assert len(greche) == 2
+        # Due su dieci ben distanziate non possono essere adiacenti.
+        assert greche[1] - greche[0] > 1, estratte
+
+
+def test_le_quote_arrivano_nel_contesto_delle_chat(client, diet, db):
+    client.put(
+        "/api/config/preferences",
+        json={"prefer_seasonal": True, "cuisines": {"italiana": 70, "greca": 30}},
+    )
+
+    contesto = build_context(db, 1)
+
+    assert "italiana 70%" in contesto
+    assert "greca 30%" in contesto
+
+
+def test_la_settimana_generata_rispetta_le_quote(client, diet, spia):
+    """Dalla percentuale scritta nelle preferenze fino al prompt davvero spedito."""
+    _scegli(client, {"italiana": 70, "greca": 30})
+    week = client.get("/api/planning/weeks/current").json()
+
+    client.post(f"/api/planning/weeks/{week['id']}/generate", json={})
+
+    righe = _righe_dei_giorni(spia.ultimo)
+    assert sum("CUCINA: Italiana" in r for r in righe) == 5
+    assert sum("CUCINA: Greca" in r for r in righe) == 2
+
+
+def test_troppe_cucine_vengono_rifiutate_spiegando_perche(client):
+    troppe = [c["key"] for g in cuisines.options()["groups"] for c in g["cuisines"]]
+    r = client.put(
+        "/api/config/preferences",
+        json={"prefer_seasonal": True, "cuisines": troppe[: cuisines.MAX_CUCINE + 1]},
+    )
+
+    assert r.status_code == 400
+    assert str(cuisines.MAX_CUCINE) in r.json()["detail"]
+
+
+def test_con_una_quota_alta_la_fila_cambia_comunque_ogni_settimana():
+    """La trappola del sorteggio "ovvio", scoperta guardando tre semi di fila.
+
+    Pescando ogni volta la cucina a cui ne restano di piu' (saltando quella appena
+    uscita) la fila e' ben distanziata ma **sempre la stessa**: con 5/1/1 usciva
+    "italiana, greca, italiana, giapponese, italiana, italiana, italiana" a ogni
+    generazione. Un sorteggio che da' sempre lo stesso risultato e' il guasto di
+    partenza servito una riga piu' in la'.
+    """
+    quote = {"italiana": 70, "giapponese": 20, "greca": 10}
+    file = {
+        tuple(cuisines.draw(quote, 7, rng=random.Random(s))) for s in range(20)
+    }
+
+    assert len(file) > 10, "la fila e' troppo prevedibile"
+
+
+def test_le_poche_capitano_in_tutti_i_giorni_della_settimana():
+    """Distanziare vuol dire anche non ammassare le tante sempre nello stesso posto.
+
+    Su una singola settimana le due minori possono benissimo cadere vicine — e' il
+    caso, non un difetto: pretendere il contrario vorrebbe dire togliere proprio la
+    casualita' che si e' appena messa. Quello che si pretende e' che su molte
+    settimane **ogni giorno** capiti prima o poi a una cucina minore: se la coda
+    fosse sempre un blocco di italiane, gli ultimi giorni non comparirebbero mai.
+    """
+    visti = set()
+    for seme in range(100):
+        estratte = cuisines.draw(
+            {"italiana": 70, "giapponese": 20, "greca": 10}, 7, rng=random.Random(seme)
+        )
+        visti |= {i for i, c in enumerate(estratte) if c != "Italiana"}
+
+    assert visti == set(range(7)), sorted(visti)

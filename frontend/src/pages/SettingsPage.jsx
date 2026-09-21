@@ -357,9 +357,10 @@ function PreferencesTab() {
       <div className="field">
         <label className="field-label">Cucine da cui attingere</label>
         <p className="field-hint" style={{ marginBottom: 14 }}>
-          Scegline quante vuoi: da due in su ne sorteggio una per ogni giorno, così
-          la settimana gira su tutte invece di fermarsi sulla prima. La spesa resta
-          italiana comunque — di una cucina straniera prendo tecniche e condimenti,
+          Scegline quante vuoi e dai a ognuna la sua fetta di piatti: da due in su ne
+          sorteggio una per ogni giorno rispettando le percentuali, così la settimana
+          gira su tutte invece di fermarsi sulla prima. La spesa resta italiana
+          comunque — di una cucina straniera prendo tecniche e condimenti,
           non gli ingredienti che qui non si trovano: dove il piatto tipico
           chiederebbe qualcosa da negozio specializzato metto il sostituto più vicino
           e te lo scrivo nella ricetta.

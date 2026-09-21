@@ -506,9 +506,9 @@ function IngredientsStep({ onNext, addToast }) {
 function PreferencesStep({ onDone, addToast }) {
   const [prefs, setPrefs] = useState({
     prefer_seasonal: true,
-    // Il default è la cucina di casa: è quella che si aspetta chi non tocca niente,
-    // ed è quello che faceva il vecchio interruttore acceso.
-    cuisines: ['italiana'],
+    // Il default è la cucina di casa, tutta: è quella che si aspetta chi non tocca
+    // niente, ed è quello che faceva il vecchio interruttore acceso.
+    cuisines: { italiana: 100 },
     max_prep_time_min: 45,
     budget_level: 'medio',
   });
@@ -552,9 +552,10 @@ function PreferencesStep({ onDone, addToast }) {
         <div className="field" style={{ marginTop: 16 }}>
           <label className="field-label">Cucine da cui attingere</label>
           <p className="field-hint" style={{ marginBottom: 12 }}>
-            Quante ne vuoi: da due in su ne sorteggio una per ogni giorno. Gli
-            ingredienti restano quelli del supermercato sotto casa anche quando la
-            cucina è dall'altra parte del mondo.
+            Quante ne vuoi, ognuna con la sua fetta di piatti: da due in su ne
+            sorteggio una per ogni giorno, rispettando le percentuali. Gli ingredienti
+            restano quelli del supermercato sotto casa anche quando la cucina è
+            dall'altra parte del mondo.
           </p>
           <CuisinePicker
             value={prefs.cuisines}

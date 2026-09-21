@@ -51,7 +51,7 @@ def create_user(
     db.flush()
 
     db.add(
-        UserPreferences(user_id=user.id, prefer_seasonal=True, cuisines=["italiana"])
+        UserPreferences(user_id=user.id, prefer_seasonal=True, cuisines={"italiana": 100})
     )
 
     for name in DEFAULT_BASE_INGREDIENTS:

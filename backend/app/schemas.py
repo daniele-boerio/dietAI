@@ -137,11 +137,14 @@ class PantryUpdate(BaseModel):
 
 class PreferencesUpdate(BaseModel):
     prefer_seasonal: bool
-    # Chiavi del catalogo delle cucine (`utils/cuisines.py`). Lista vuota = nessuna
-    # preferenza, sceglie il modello. Il tetto non è una regola di gusto: le cucine
-    # scelte vengono elencate nel prompt, e sopra la dozzina "attingi a queste"
-    # equivale a non aver chiesto niente, con in più i token per dirlo.
-    cuisines: list[str] = Field(default_factory=list, max_length=12)
+    # Le cucine scelte con la loro quota: {"italiana": 70, "giapponese": 30}, chiavi
+    # del catalogo (`utils/cuisines.py`). Vuoto = nessuna preferenza, sceglie il
+    # modello. Si accetta ancora il semplice elenco della prima versione
+    # (`["italiana", "greca"]`), che vale "in parti uguali": è la forma che hanno in
+    # archivio le righe mai risalvate, e rifiutarla qui vorrebbe dire non poter più
+    # salvare le preferenze senza prima toccare le cucine. Le quote le normalizza
+    # `cuisines.clean()`, che le riporta a somma 100.
+    cuisines: dict[str, float] | list[str] = Field(default_factory=dict)
     max_prep_time_min: int | None = Field(default=None, ge=5, le=480)
     budget_level: str | None = None
     # Regole libere ("niente insaccati", "carne max 2 volte a settimana"). Il tetto

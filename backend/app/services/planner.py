@@ -882,8 +882,8 @@ def _fmt_list(values: list[str], empty: str = "nessuno") -> str:
     return ", ".join(sorted(set(values))) if values else empty
 
 
-def cuisine_keys(db: Session, user_id: int) -> list[str]:
-    """Le cucine scelte dall'utente, ripulite. Serve a chi deve sorteggiarle."""
+def cuisine_shares(db: Session, user_id: int) -> dict[str, int]:
+    """Le cucine scelte dall'utente con la loro quota. Serve a chi deve sorteggiarle."""
     prefs = db.query(UserPreferences).filter(UserPreferences.user_id == user_id).first()
     return cuisines.clean(prefs.cuisines if prefs else None)
 
@@ -1192,7 +1192,7 @@ def generate_week(
     # non in fondo a un blocco di contesto lungo venti righe. Sotto le due cucine non
     # c'è niente da sorteggiare e il contesto resta quello di sempre: lo strato non
     # esiste finché non lo si usa.
-    scelte = cuisine_keys(db, user.id)
+    scelte = cuisine_shares(db, user.id)
     sorteggio = (
         dict(zip(giorni, cuisines.draw(scelte, len(giorni)))) if len(scelte) > 1 else {}
     )
@@ -1399,7 +1399,7 @@ def regenerate_meal(
     # prompt, e lo dice anche il buon senso: «fammi una carbonara» più «oggi è
     # coreano» sono due ordini contrari, e a scegliere quale seguire sarebbe il
     # modello. Se una cucina la vuole, l'utente la scrive nella richiesta.
-    scelte = cuisine_keys(db, user.id)
+    scelte = cuisine_shares(db, user.id)
     tags = previous.tags if previous and isinstance(previous.tags, dict) else {}
     estratta = (
         cuisines.draw(scelte, 1, avoid=tags.get("cuisine"))

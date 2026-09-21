@@ -4233,10 +4233,62 @@ textarea:focus {
 
 .cuisine-chosen {
   display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-  align-items: center;
+  flex-direction: column;
+  gap: 2px;
   min-height: 32px;
+}
+
+/* Nome, cursore, percentuale e la X: una griglia e non un flex, perché le quattro
+   colonne devono incolonnarsi da una riga all'altra. Il nome ha una larghezza fissa
+   per lo stesso motivo — a larghezza automatica i cursori partirebbero da un punto
+   diverso per ogni cucina, e sono la cosa che si confronta con l'occhio. */
+.cuisine-row {
+  display: grid;
+  grid-template-columns: 8.5rem 1fr 3rem 28px;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0;
+}
+
+.cuisine-row-name {
+  font-size: 0.88rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* In monospaziato e allineata a destra: sono numeri che cambiano mentre si trascina,
+   e con un carattere proporzionale il "100%" sposterebbe la X di qualche pixel. */
+.cuisine-row-share {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  text-align: right;
+  color: var(--text-secondary);
+}
+
+.cuisine-row input[type="range"] {
+  margin: 0;
+}
+
+.cuisine-row-x {
+  display: flex;
+  justify-content: center;
+  padding: 5px;
+  border-radius: 50%;
+  color: var(--text-muted);
+}
+
+.cuisine-row-x:hover {
+  color: var(--danger);
+  background: var(--bg-card-hover);
+}
+
+.cuisine-hint {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin: -4px 0 2px;
 }
 
 /* Nessuna scelta è una scelta legittima, e va detta: un riquadro vuoto sopra un
@@ -6484,6 +6536,16 @@ input[type="range"]:disabled {
 
   .cuisine-catalog {
     max-height: 340px;
+  }
+
+  /* Il cursore e la X sono i due bersagli di una riga fitta: al dito il nome può
+     stringersi, loro no. */
+  .cuisine-row {
+    grid-template-columns: 5.5rem 1fr 2.8rem 34px;
+  }
+
+  .cuisine-row-x {
+    padding: 9px;
   }
 
   .chat-suggestion {

@@ -50,7 +50,9 @@ def create_user(
     db.add(user)
     db.flush()
 
-    db.add(UserPreferences(user_id=user.id, prefer_seasonal=True, prefer_italian=True))
+    db.add(
+        UserPreferences(user_id=user.id, prefer_seasonal=True, cuisines=["italiana"])
+    )
 
     for name in DEFAULT_BASE_INGREDIENTS:
         ingredient = db.query(Ingredient).filter(Ingredient.name == name).first()

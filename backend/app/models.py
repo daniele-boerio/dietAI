@@ -525,7 +525,13 @@ class UserPreferences(Base):
         nullable=False,
     )
     prefer_seasonal = Column(Boolean, nullable=False, default=True, server_default="true")
-    prefer_italian = Column(Boolean, nullable=False, default=True, server_default="true")
+    # Le cucine da cui attingere, per chiave del catalogo (`utils/cuisines.py`):
+    # ["giapponese", "messicana"]. Ha preso il posto del vecchio interruttore
+    # "cucina italiana", che era la stessa domanda con una risposta sola — e i due
+    # comandi insieme si sarebbero contraddetti al primo utente che spegneva
+    # l'interruttore lasciando "Italiana" spuntata nell'elenco.
+    # NULL o [] = nessuna preferenza, sceglie il modello.
+    cuisines = Column(JSONType)
     max_prep_time_min = Column(Integer)
     budget_level = Column(String)  # "economico", "medio", "premium"
     # Regole in linguaggio naturale che non stanno in una lista: "niente insaccati",

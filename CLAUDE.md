@@ -727,6 +727,50 @@ generazione pagata per un log.
 metà giovedì) funziona solo se il modello vede tutti i pasti insieme. Sopra gli 8.000
 token di output `ai_client` passa in streaming da solo.
 
+**La cucina viaggia, gli ingredienti no.** `UserPreferences.cuisines` tiene le
+cucine da cui attingere — chiavi del catalogo in `utils/cuisines.py`, una sessantina
+in sei aree — e ha preso il posto dell'interruttore `prefer_italian`, che era la
+stessa domanda con una risposta sola: acceso voleva dire "italiana", spento voleva
+dire *niente*, cioè la stessa mano libera di chi non aveva mai aperto quella
+schermata. I due comandi insieme non si potevano tenere, perché si sarebbero
+contraddetti al primo utente che spegneva l'interruttore lasciando "Italiana" spuntata
+nell'elenco. La migrazione `0020` converte quello che il flag diceva davvero: acceso →
+`["italiana"]`, spento → `[]`.
+
+Il vincolo che rende utile la funzione sta in `prompt_line()`, ed è la seconda metà
+della richiesta: **scegliere la cucina giapponese chiede quelle tecniche con quello
+che si compra sotto casa.** Una ricetta che vuole dashi e mirin non è una ricetta
+difficile, è una ricetta che non si cucina — e peggio, quella roba finisce in lista
+della spesa come se bastasse passare al supermercato. Perciò la riga porta due elenchi
+corti di esempi, da una parte e dall'altra (salsa di soia, curry, latte di cocco,
+tortillas e tahina ci sono; mirin, galanga, gochujang no): "reperibile in Italia" da
+solo è un giudizio che il modello dà a sentimento, con due elenchi il confine si vede.
+Dove il piatto tipico chiederebbe l'introvabile, il modello mette il sostituto più
+vicino e **lo scrive nella descrizione**, invece di cambiarlo in silenzio.
+
+Tre casi e non uno: nessuna scelta lascia mano libera (è quello che si aspetta chi
+quella schermata non l'ha aperta), la sola italiana non si porta dietro il discorso
+sugli ingredienti — ce li ha già tutti, ed è la riga che si genera più spesso —, e più
+cucine insieme vanno dette **alternandole nell'arco della settimana**, o il modello
+prende la prima dell'elenco e ci resta. `clean()` rimette l'ordine del catalogo invece
+di quello dei clic: la lista finisce in un prompt, e le stesse scelte spuntate in
+ordine diverso sarebbero due contesti diversi. Il catalogo è un elenco chiuso e non
+testo libero perché la chiave finisce nel prompt **e** nei tag della ricetta:
+"giapponese", "Giappone" e "cucina nipponica" scritti a mano sarebbero tre preferenze
+per la stessa cosa. Per tutto il resto ci sono le regole libere, qui sotto.
+
+Il selettore (`components/CuisinePicker.jsx`, in Impostazioni → Preferenze e
+nell'onboarding) scarica il catalogo da `GET /api/config/cuisines` invece di tenerne
+una copia, come il questionario con `/questionnaire/options`: due elenchi che si
+allontanano sono un 400 in faccia all'utente per una voce aggiunta da una parte sola.
+Si cerca per **paese, piatto o area** («Giappone», «sushi», «Asia») e non solo per
+l'aggettivo con cui la voce è scritta, che è l'unica delle quattro cose che non viene
+in mente per prima — gli alias stanno nel catalogo, accanto alla voce. Le scelte si
+vedono due volte, in pastiglia sopra e accese nell'elenco, perché l'elenco scorre e
+quello che hai spuntato tre righe fa è già fuori campo. E il salvataggio è l'unico
+della pagina che aspetta (`saveTraPoco`, 700ms): le cucine si spuntano a raffica, e
+tre clic sarebbero tre PUT e tre «Preferenze salvate ✓».
+
 **Le regole dell'utente sono testo libero, di proposito.** `UserPreferences.notes`
 finisce in `CONTEXT_TEMPLATE` così com'è: il destinatario è un modello linguistico,
 quindi trasformare "carne rossa al massimo due volte a settimana" in caselle

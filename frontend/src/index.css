@@ -4218,6 +4218,104 @@ textarea:focus {
   transform: translateX(18px);
 }
 
+/* ── Il selettore delle cucine ──────────────────────────────────── */
+
+/* Le voci sono una sessantina in sei gruppi: troppe per stare tutte a schermo, e
+   troppo poche perché valga la pena di un menu a tendina — che nasconderebbe proprio
+   quello che si vuol vedere, cioè quante cucine si stanno chiedendo insieme. Quindi
+   un riquadro che scorre, con la ricerca ferma sopra e le scelte ferme sopra ancora:
+   le due cose che si guardano mentre si scorre l'elenco. */
+.cuisine-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cuisine-chosen {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: center;
+  min-height: 32px;
+}
+
+/* Nessuna scelta è una scelta legittima, e va detta: un riquadro vuoto sopra un
+   elenco di pastiglie spente sembra qualcosa che non si è caricato. */
+.cuisine-none {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.cuisine-search {
+  max-width: none;
+  min-width: 0;
+}
+
+/* La X vive dentro il campo, a destra: cancellare la ricerca è l'unica cosa che si
+   fa dopo aver cercato, e mandarla fuori allungherebbe la riga di un pulsante. */
+.cuisine-clear {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  padding: 4px;
+  border-radius: 50%;
+  color: var(--text-muted);
+}
+
+.cuisine-clear:hover {
+  color: var(--text-primary);
+  background: var(--bg-card-hover);
+}
+
+.cuisine-catalog {
+  max-height: 290px;
+  overflow-y: auto;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg-surface);
+  /* Lo scorrimento non deve scappare alla pagina quando si arriva in fondo
+     all'elenco: al dito è il gesto più facile da sbagliare. */
+  overscroll-behavior: contain;
+}
+
+.cuisine-group + .cuisine-group {
+  margin-top: 18px;
+}
+
+/* Stile dell'occhiello: il gruppo dice *dove sei* nell'elenco, e si legge prima
+   delle voci che contiene — la stessa ragione per cui il sottotitolo di pagina sta
+   sopra il titolo. */
+.cuisine-group-label {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 9px;
+}
+
+.cuisine-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.cuisine-options .chip {
+  padding: 7px 13px;
+}
+
+.cuisine-picker .chip:disabled {
+  opacity: 0.55;
+}
+
 /* ── Liste di chip (ingredienti) ───────────────────────────────── */
 
 .tag-list {
@@ -6370,6 +6468,22 @@ input[type="range"]:disabled {
   .chat-send {
     width: 44px;
     height: 44px;
+  }
+
+  /* Sessanta pastiglie in un riquadro che scorre: se sono strette si spunta la
+     cucina sbagliata, e ci si accorge dell'errore una settimana dopo leggendo il
+     piano. La X che toglie una scelta è lo stesso problema in piccolo. */
+  .cuisine-options .chip {
+    min-height: 40px;
+    padding: 9px 15px;
+  }
+
+  .cuisine-chosen .tag button {
+    padding: 6px;
+  }
+
+  .cuisine-catalog {
+    max-height: 340px;
   }
 
   .chat-suggestion {

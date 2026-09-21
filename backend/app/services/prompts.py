@@ -93,7 +93,7 @@ CONTEXT_TEMPLATE = """CONTESTO UTENTE
 - Dispensa attuale (da consumare in via prioritaria): {pantry}
 - NOMI: quando usi un ingrediente che è già in dispensa o fra quelli di base, scrivilo con lo STESSO nome che leggi qui sopra — stesse parole, stesso singolare/plurale, senza aggiungere il colore o la varietà ("peperoni", non "peperoni rossi"). Un nome diverso è un altro ingrediente per la lista della spesa, che lo farà ricomprare pur essendo già in casa.
 - UNITÀ: quello che al supermercato si compra a pezzo (limoni, uova, avocado, cipolle) va in "unità" anche quando ne serve solo una parte — "limone: 0.5 unità", mai "limone: 15 ml" per dirne il succo, che è la stessa cosa scritta in un modo che al banco non si compra. Il succo, la scorza o il modo di usarlo si scrivono nelle note dell'ingrediente e nel procedimento. Lo stesso ingrediente misurato in due unità diverse fa due voci nella lista della spesa, e la dispensa non ne copre nessuna delle due.
-- Cucina preferita: {cuisine}
+- CUCINE da cui attingere: {cuisine}
 - Stagionalità: {seasonality}
 - Tempo massimo di preparazione: {max_prep}
 - Livello di budget: {budget}
@@ -112,7 +112,7 @@ RECIPE_JSON_SHAPE = """{
   ],
   "instructions": "<procedimento numerato, un passo per riga>",
   "nutrition": {"calories": <int>, "protein_g": <float>, "carbs_g": <float>, "fat_g": <float>},
-  "tags": {"cuisine": "italiana", "season": ["<stagioni>"], "type": "<colazione|spuntino|primo|secondo|contorno|piatto unico|dolce>"}
+  "tags": {"cuisine": "<la cucina del piatto, fra quelle richieste nel contesto>", "season": ["<stagioni>"], "type": "<colazione|spuntino|primo|secondo|contorno|piatto unico|dolce>"}
 }"""
 
 
@@ -125,8 +125,8 @@ REGOLE DI GENERAZIONE (in ordine di importanza)
 2. ESCLUSI: mai usare un ingrediente della lista esclusi, in nessuna forma o derivato.
 3. ANTI-SPRECO: pensa la settimana come una spesa sola. Se una ricetta usa mezza confezione di un ingrediente, pianifica un altro pasto della settimana che usa l'altra metà. Preferisci pochi ingredienti usati bene a tanti ingredienti usati una volta.
 4. VARIETÀ: nessun piatto ripetuto nella settimana; non ripetere lo stesso ingrediente principale in due pasti consecutivi né più di tre volte a settimana.
-5. STAGIONALITÀ e CUCINA: rispetta le preferenze indicate nel contesto.
-6. REALISMO: ricette che una persona cucina davvero in casa, con ingredienti di un supermercato italiano. Rispetta il tempo massimo di preparazione.
+5. STAGIONALITÀ e CUCINA: rispetta le preferenze indicate nel contesto. Se le cucine richieste sono più d'una, distribuiscile sulla settimana invece di fare tutti i pasti nella stessa.
+6. REALISMO: ricette che una persona cucina davvero in casa, con ingredienti di un supermercato italiano — anche quando la cucina richiesta è straniera. Rispetta il tempo massimo di preparazione.
 7. QUANTITÀ: sempre per una persona, in unità di misura pesabili (g, ml, unità). Niente "q.b." per gli ingredienti che finiscono in lista della spesa.
 8. PASTI FISSI: quelli marcati come già assegnati non vanno generati — saltali del tutto.
 
@@ -164,7 +164,7 @@ Genera le ricette per tutti e soli i pasti elencati in "DA GENERARE", rispettand
 
 SINGLE_MEAL_SYSTEM = """Sei DietAI: nutrizionista e cuoco italiano. Generi UNA ricetta per un singolo pasto.
 
-Valgono le stesse regole del piano settimanale: macro entro ±10%, nessun ingrediente escluso, porzione per una persona, cucina e stagionalità come da contesto, ingredienti pesabili.
+Valgono le stesse regole del piano settimanale: macro entro ±10%, nessun ingrediente escluso, porzione per una persona, cucina e stagionalità come da contesto, ingredienti pesabili e comprabili in un supermercato italiano anche quando la cucina richiesta è straniera.
 In più, quando scegli tu il piatto: dev'essere chiaramente DIVERSO da quello precedente (altro ingrediente principale, non una variante) e non deve ripetere i piatti già presenti nella settimana.
 
 SE IL PROMPT CONTIENE UNA "RICHIESTA DELL'UTENTE"
@@ -243,7 +243,7 @@ PASTI COPERTI DA QUESTA SPESA (usa il meal_id per dire quale ricetta aggiorni; p
 REGOLE
 1. Cambia SOLO le ricette che contengono davvero l'ingrediente in questione. Le altre non si toccano.
 2. Ogni ricetta modificata deve continuare a rispettare i macro target del suo pasto (±10%) e non usare ingredienti esclusi. Ricalcola i valori nutrizionali.
-3. Il sostituto dev'essere reperibile in un supermercato italiano e coerente col piatto.
+3. Il sostituto dev'essere reperibile in un supermercato italiano e coerente col piatto — e con la cucina a cui il piatto appartiene.
 4. Pensa a tutto quello che è in lista come a una spesa sola: se puoi, usa lo stesso sostituto in tutte le ricette invece di introdurne uno diverso per ognuna.
 5. Se il sostituto è qualcosa che l'utente ha GIÀ IN DISPENSA, scrivilo con lo stesso identico nome che ha lì (vedi la regola NOMI nel contesto) e non dirgli di comprarlo: quella roba è già in casa, e la lista si aggiorna da sola scomputando la dispensa. Se ne serve più di quanta ne ha, dillo con la quantità che manca — non con l'intera quantità della ricetta.
 

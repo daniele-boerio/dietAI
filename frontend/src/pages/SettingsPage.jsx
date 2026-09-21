@@ -1,10 +1,11 @@
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Navigate, useParams } from 'react-router-dom';
 import { KeyRound, ShieldOff, Sparkles, Trash2, UserPlus, X } from 'lucide-react';
 import { api, formatDate } from '../api';
 import { useApp } from '../App';
 import { useAuth } from '../AuthContext';
 import ConfirmDialog from '../components/ConfirmDialog';
+import CuisinePicker from '../components/CuisinePicker';
 import IngredientInput from '../components/IngredientInput';
 import ModelPicker from '../components/ModelPicker';
 import NormalizationSettings from '../components/NormalizationSettings';
@@ -227,15 +228,26 @@ function PreferencesTab() {
   const { addToast } = useApp();
   const [prefs, setPrefs] = useState(null);
   const [busy, setBusy] = useState(false);
+  const attesa = useRef(null); // il timer del salvataggio differito
+  const inSospeso = useRef(null); // quello che deve ancora arrivare al server
 
   useEffect(() => {
     api.getPreferences().then(setPrefs).catch(() => {});
+    // Cambiare scheda entro i 700ms non deve far sparire la scelta: si scrive
+    // subito invece di annullare il timer e basta. Una preferenza che si disfa da
+    // sé a seconda di quanto in fretta si è cliccato altrove è il tipo di guasto
+    // che non si riesce nemmeno a raccontare.
+    return () => {
+      clearTimeout(attesa.current);
+      if (inSospeso.current) api.updatePreferences(inSospeso.current).catch(() => {});
+    };
   }, []);
 
   if (!prefs) return <div className="spinner" />;
 
-  const save = async (next) => {
-    setPrefs(next);
+  const scrivi = async (next) => {
+    clearTimeout(attesa.current);
+    inSospeso.current = null;
     setBusy(true);
     try {
       await api.updatePreferences(next);
@@ -245,6 +257,22 @@ function PreferencesTab() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const save = (next) => {
+    setPrefs(next);
+    scrivi(next);
+  };
+
+  // Le cucine si spuntano a raffica — tre clic per dire "giapponese, thai, coreana" —
+  // e ogni clic sarebbe una PUT e un «Preferenze salvate ✓». La schermata resta
+  // com'è (lo stato cambia subito, `busy` non si accende e non spegne le pastiglie
+  // sotto il dito), ma al server ci si va una volta sola quando si smette.
+  const saveTraPoco = (next) => {
+    setPrefs(next);
+    clearTimeout(attesa.current);
+    inSospeso.current = next;
+    attesa.current = setTimeout(() => scrivi(next), 700);
   };
 
   // Il cursore lavora su un numero, la preferenza ammette anche «nessun limite».
@@ -305,8 +333,8 @@ function PreferencesTab() {
         </div>
       </div>
 
-      {/* Gli interruttori stanno ognuno nel suo riquadro, con la levetta a sinistra:
-          sono due frasi che si accendono, non due voci di un elenco. */}
+      {/* L'interruttore sta nel suo riquadro, con la levetta a sinistra: è una frase
+          che si accende, non una voce di un elenco. */}
       <div className="field">
         <label className="field-label">Come devono essere le ricette</label>
         <div className="switch-row">
@@ -322,19 +350,24 @@ function PreferencesTab() {
             <span>Costano meno, sanno di più, e la spesa cambia coi mesi</span>
           </div>
         </div>
-        <div className="switch-row">
-          <button
-            className={`toggle ${prefs.prefer_italian ? 'on' : ''}`}
-            disabled={busy}
-            onClick={() => save({ ...prefs, prefer_italian: !prefs.prefer_italian })}
-          >
-            <i />
-          </button>
-          <div className="toggle-text">
-            <strong>Cucina italiana</strong>
-            <span>Piatti di casa, con ingredienti da supermercato italiano</span>
-          </div>
-        </div>
+      </div>
+
+      {/* Dove prima c'era l'interruttore «cucina italiana», che era questa stessa
+          domanda con una risposta sola — e un «no» che al modello non diceva niente. */}
+      <div className="field">
+        <label className="field-label">Cucine da cui attingere</label>
+        <p className="field-hint" style={{ marginBottom: 14 }}>
+          Scegline quante vuoi: se sono più d'una vengono alternate nell'arco della
+          settimana. La spesa resta italiana comunque — di una cucina straniera prendo
+          tecniche e condimenti, non gli ingredienti che qui non si trovano: dove il
+          piatto tipico chiederebbe qualcosa da negozio specializzato metto il
+          sostituto più vicino e te lo scrivo nella ricetta.
+        </p>
+        <CuisinePicker
+          value={prefs.cuisines}
+          disabled={busy}
+          onChange={(cuisines) => saveTraPoco({ ...prefs, cuisines })}
+        />
       </div>
     </div>
   );

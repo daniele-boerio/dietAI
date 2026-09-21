@@ -49,6 +49,7 @@ from ..services.ingredients import (
     preview_rule,
 )
 from ..services.shopping import CATEGORY_LABELS
+from ..utils import cuisines
 from ..utils.pricing import DEFAULT_BASE_INGREDIENTS
 from ..utils.units import format_quantity, normalize_unit
 
@@ -353,11 +354,20 @@ def remove_pantry(
 def _serialize_prefs(prefs: UserPreferences) -> dict:
     return {
         "prefer_seasonal": prefs.prefer_seasonal,
-        "prefer_italian": prefs.prefer_italian,
+        # Ripulite anche in lettura: una chiave uscita dal catalogo (una voce tolta
+        # da una versione all'altra) resterebbe spuntata in un selettore che non ce
+        # l'ha più, cioè un'impossibile da togliere.
+        "cuisines": cuisines.clean(prefs.cuisines),
         "max_prep_time_min": prefs.max_prep_time_min,
         "budget_level": prefs.budget_level,
         "notes": prefs.notes,
     }
+
+
+@router.get("/cuisines")
+def list_cuisines(_user: User = Depends(get_current_user)):
+    """Il catalogo delle cucine, raggruppato, per il selettore delle preferenze."""
+    return cuisines.options()
 
 
 @router.get("/preferences")
@@ -367,7 +377,9 @@ def get_preferences(
     prefs = db.query(UserPreferences).filter(UserPreferences.user_id == user_id).first()
     if not prefs:
         # Default impliciti: la spec dice cucina italiana e stagionalità attive.
-        prefs = UserPreferences(user_id=user_id, prefer_seasonal=True, prefer_italian=True)
+        prefs = UserPreferences(
+            user_id=user_id, prefer_seasonal=True, cuisines=["italiana"]
+        )
         db.add(prefs)
         db.commit()
     return _serialize_prefs(prefs)
@@ -381,6 +393,9 @@ def update_preferences(
 ):
     if body.budget_level and body.budget_level not in BUDGET_LEVELS:
         raise HTTPException(400, "Livello di budget non valido")
+    sconosciute = cuisines.unknown(body.cuisines)
+    if sconosciute:
+        raise HTTPException(400, f"Cucine non in elenco: {', '.join(sconosciute)}")
 
     prefs = db.query(UserPreferences).filter(UserPreferences.user_id == user_id).first()
     if not prefs:
@@ -388,7 +403,7 @@ def update_preferences(
         db.add(prefs)
 
     prefs.prefer_seasonal = body.prefer_seasonal
-    prefs.prefer_italian = body.prefer_italian
+    prefs.cuisines = cuisines.clean(body.cuisines)
     prefs.max_prep_time_min = body.max_prep_time_min
     prefs.budget_level = body.budget_level
     prefs.notes = (body.notes or "").strip() or None

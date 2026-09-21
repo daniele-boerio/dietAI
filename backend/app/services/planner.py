@@ -30,6 +30,7 @@ from ..models import (
     UserPreferences,
     WeekPlan,
 )
+from ..utils import cuisines
 from ..utils.seasonality import current_month, current_month_name, in_season
 from ..utils.units import format_quantity
 from . import prompts
@@ -898,7 +899,6 @@ def build_context(db: Session, user_id: int) -> str:
     )
 
     prefer_seasonal = prefs.prefer_seasonal if prefs else True
-    prefer_italian = prefs.prefer_italian if prefs else True
 
     if prefer_seasonal:
         seasonal = ", ".join(in_season(current_month())[:25])
@@ -920,11 +920,10 @@ def build_context(db: Session, user_id: int) -> str:
         extra_rules=((prefs.notes or "").strip() if prefs else "") or "nessuna",
         base=_fmt_list(_base_names(db, user_id)),
         pantry=_fmt_list(_pantry_descriptions(db, user_id), "vuota"),
-        cuisine=(
-            "italiana o mediterranea, piatti che si cucinano davvero in casa"
-            if prefer_italian
-            else "nessuna preferenza particolare"
-        ),
+        # La riga la compone il catalogo: è lì che sta il vincolo che la rende utile
+        # — la cucina viaggia, gli ingredienti restano quelli del supermercato sotto
+        # casa (vedi `utils/cuisines.prompt_line`).
+        cuisine=cuisines.prompt_line(prefs.cuisines if prefs else None),
         seasonality=seasonality,
         max_prep=(
             f"{prefs.max_prep_time_min} minuti"

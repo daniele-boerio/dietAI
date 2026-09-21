@@ -161,6 +161,11 @@ export const api = {
 
   getPreferences: () => request('/config/preferences'),
 
+  // Il catalogo delle cucine lo serve il backend: è lì che le chiavi vengono
+  // validate e messe nel prompt, e due elenchi che si allontanano sono un 400
+  // in faccia all'utente per una voce aggiunta da una parte sola.
+  getCuisines: () => request('/config/cuisines'),
+
   updatePreferences: (payload) =>
     request('/config/preferences', { method: 'PUT', body: JSON.stringify(payload) }),
 

@@ -3,6 +3,7 @@ import { ArrowRight, Calculator, Check, FileUp, KeyRound, Sprout, X } from 'luci
 import { api } from '../api';
 import { useApp } from '../App';
 import { useAuth } from '../AuthContext';
+import CuisinePicker from '../components/CuisinePicker';
 import IngredientInput from '../components/IngredientInput';
 import Questionnaire from '../components/Questionnaire';
 
@@ -505,7 +506,9 @@ function IngredientsStep({ onNext, addToast }) {
 function PreferencesStep({ onDone, addToast }) {
   const [prefs, setPrefs] = useState({
     prefer_seasonal: true,
-    prefer_italian: true,
+    // Il default è la cucina di casa: è quella che si aspetta chi non tocca niente,
+    // ed è quello che faceva il vecchio interruttore acceso.
+    cuisines: ['italiana'],
     max_prep_time_min: 45,
     budget_level: 'medio',
   });
@@ -546,17 +549,17 @@ function PreferencesStep({ onDone, addToast }) {
           </button>
         </div>
 
-        <div className="toggle-row">
-          <div className="toggle-text">
-            <strong>Cucina italiana</strong>
-            <span>Piatti di casa, ingredienti da supermercato</span>
-          </div>
-          <button
-            className={`toggle ${prefs.prefer_italian ? 'on' : ''}`}
-            onClick={() => toggle('prefer_italian')}
-          >
-            <i />
-          </button>
+        <div className="field" style={{ marginTop: 16 }}>
+          <label className="field-label">Cucine da cui attingere</label>
+          <p className="field-hint" style={{ marginBottom: 12 }}>
+            Quante ne vuoi: se sono più d'una le alterno durante la settimana. Gli
+            ingredienti restano quelli del supermercato sotto casa anche quando la
+            cucina è dall'altra parte del mondo.
+          </p>
+          <CuisinePicker
+            value={prefs.cuisines}
+            onChange={(cuisines) => setPrefs((p) => ({ ...p, cuisines }))}
+          />
         </div>
 
         <div className="field" style={{ marginTop: 16 }}>

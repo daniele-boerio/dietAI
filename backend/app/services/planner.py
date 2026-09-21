@@ -882,8 +882,22 @@ def _fmt_list(values: list[str], empty: str = "nessuno") -> str:
     return ", ".join(sorted(set(values))) if values else empty
 
 
-def build_context(db: Session, user_id: int) -> str:
-    """Il blocco di contesto comune a tutti i prompt di generazione."""
+def cuisine_keys(db: Session, user_id: int) -> list[str]:
+    """Le cucine scelte dall'utente, ripulite. Serve a chi deve sorteggiarle."""
+    prefs = db.query(UserPreferences).filter(UserPreferences.user_id == user_id).first()
+    return cuisines.clean(prefs.cuisines if prefs else None)
+
+
+def build_context(db: Session, user_id: int, *, cuisine: str | None = None) -> str:
+    """Il blocco di contesto comune a tutti i prompt di generazione.
+
+    `cuisine` sostituisce la riga delle cucine con una già pronta, e la passa chi ha
+    **già sorteggiato**: la generazione della settimana (una cucina per giorno) e la
+    rigenerazione di un pasto (una sola). Chi non la passa — le due chat, la
+    sostituzione di un ingrediente — se le vede elencate e basta, ed è giusto così:
+    lì si parte da una ricetta che una sua cucina ce l'ha già, e sorteggiarne un'altra
+    vorrebbe dire riscrivere il piatto invece di correggerlo.
+    """
     diet = require_active_diet(db, user_id)
     slots = meal_slots_of(db, diet.id)
     prefs = db.query(UserPreferences).filter(UserPreferences.user_id == user_id).first()
@@ -923,7 +937,7 @@ def build_context(db: Session, user_id: int) -> str:
         # La riga la compone il catalogo: è lì che sta il vincolo che la rende utile
         # — la cucina viaggia, gli ingredienti restano quelli del supermercato sotto
         # casa (vedi `utils/cuisines.prompt_line`).
-        cuisine=cuisines.prompt_line(prefs.cuisines if prefs else None),
+        cuisine=cuisine or cuisines.prompt_line(prefs.cuisines if prefs else None),
         seasonality=seasonality,
         max_prep=(
             f"{prefs.max_prep_time_min} minuti"
@@ -1171,10 +1185,24 @@ def generate_week(
     by_day: dict[int, list[str]] = {}
     for day, _meal, slot in to_fill:
         by_day.setdefault(day.day_of_week, []).append(_slot_line(slot))
+    giorni = sorted(by_day)
+
+    # Il sorteggio: una cucina per giorno, estratta qui e scritta **accanto al
+    # giorno**, che è il posto dove il modello la legge mentre compone quel giorno —
+    # non in fondo a un blocco di contesto lungo venti righe. Sotto le due cucine non
+    # c'è niente da sorteggiare e il contesto resta quello di sempre: lo strato non
+    # esiste finché non lo si usa.
+    scelte = cuisine_keys(db, user.id)
+    sorteggio = (
+        dict(zip(giorni, cuisines.draw(scelte, len(giorni)))) if len(scelte) > 1 else {}
+    )
+
     slots_to_fill = "\n".join(
-        f"{DAY_NAMES[dow]} (day_of_week {dow}):\n"
-        + "\n".join(f"  · {line}" for line in lines)
-        for dow, lines in sorted(by_day.items())
+        f"{DAY_NAMES[dow]} (day_of_week {dow})"
+        + (f" — CUCINA: {sorteggio[dow]}" if dow in sorteggio else "")
+        + ":\n"
+        + "\n".join(f"  · {line}" for line in by_day[dow])
+        for dow in giorni
     )
 
     if fixed:
@@ -1188,7 +1216,9 @@ def generate_week(
 
     prompt = prompts.render(
         prompts.WEEK_PLAN_PROMPT,
-        context=build_context(db, user.id),
+        context=build_context(
+            db, user.id, cuisine=cuisines.PER_GIORNO if sorteggio else None
+        ),
         slots_to_fill=slots_to_fill,
         already_assigned=already,
     )
@@ -1359,9 +1389,31 @@ def regenerate_meal(
         .all()
     ]
 
+    # Una cucina sorteggiata anche qui, ed è il caso in cui la differenza si sente di
+    # più: «rigenera» premuto tre volte di fila dava tre piatti italiani, perché a
+    # parità di macro è la cucina di cui il modello conosce più ricette. Si esclude
+    # quella del piatto che si sta buttando (`avoid`), che è la stessa ragione per cui
+    # gli si dice di non riproporlo: chi rigenera vuole un'altra cosa.
+    #
+    # Con una richiesta dell'utente non si sorteggia niente. Lì comanda lei — dice il
+    # prompt, e lo dice anche il buon senso: «fammi una carbonara» più «oggi è
+    # coreano» sono due ordini contrari, e a scegliere quale seguire sarebbe il
+    # modello. Se una cucina la vuole, l'utente la scrive nella richiesta.
+    scelte = cuisine_keys(db, user.id)
+    tags = previous.tags if previous and isinstance(previous.tags, dict) else {}
+    estratta = (
+        cuisines.draw(scelte, 1, avoid=tags.get("cuisine"))
+        if len(scelte) > 1 and not user_request
+        else []
+    )
+
     prompt = prompts.render(
         prompts.SINGLE_MEAL_PROMPT,
-        context=build_context(db, user.id),
+        context=build_context(
+            db,
+            user.id,
+            cuisine=cuisines.prompt_line_one(estratta[0]) if estratta else None,
+        ),
         slot_name=slot.name,
         day_name=DAY_NAMES[day.day_of_week],
         target_calories=slot.target_calories,

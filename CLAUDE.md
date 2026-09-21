@@ -751,13 +751,48 @@ vicino e **lo scrive nella descrizione**, invece di cambiarlo in silenzio.
 Tre casi e non uno: nessuna scelta lascia mano libera (è quello che si aspetta chi
 quella schermata non l'ha aperta), la sola italiana non si porta dietro il discorso
 sugli ingredienti — ce li ha già tutti, ed è la riga che si genera più spesso —, e più
-cucine insieme vanno dette **alternandole nell'arco della settimana**, o il modello
-prende la prima dell'elenco e ci resta. `clean()` rimette l'ordine del catalogo invece
-di quello dei clic: la lista finisce in un prompt, e le stesse scelte spuntate in
-ordine diverso sarebbero due contesti diversi. Il catalogo è un elenco chiuso e non
-testo libero perché la chiave finisce nel prompt **e** nei tag della ricetta:
-"giapponese", "Giappone" e "cucina nipponica" scritti a mano sarebbero tre preferenze
-per la stessa cosa. Per tutto il resto ci sono le regole libere, qui sotto.
+cucine insieme si **sorteggiano** (vedi qui sotto). `clean()` rimette l'ordine del
+catalogo invece di quello dei clic: la lista finisce in un prompt, e le stesse scelte
+spuntate in ordine diverso sarebbero due contesti diversi. Il catalogo è un elenco
+chiuso e non testo libero perché la chiave finisce nel prompt **e** nei tag della
+ricetta: "giapponese", "Giappone" e "cucina nipponica" scritti a mano sarebbero tre
+preferenze per la stessa cosa. Per tutto il resto ci sono le regole libere, qui sotto.
+
+**E il sorteggio lo fa Python, non il modello.** «Attingi a queste cucine,
+alternandole nell'arco della settimana» è un auspicio: il modello ancora sulla prima
+voce dell'elenco, o su quella che gli viene più facile — a parità di macro l'italiana
+è quella di cui conosce più piatti —, e chi ne ha spuntate otto si ritrova sette cene
+italiane. Una cucina **assegnata** è un'istruzione; una da alternare è una speranza.
+Perciò `cuisines.draw()` estrae in `generate_week` **una cucina per giorno**, e la
+scrive accanto al giorno in `DA GENERARE` (`Lunedì (day_of_week 0) — CUCINA: Greca`):
+è il posto dove il modello la legge mentre compone quel giorno, invece che in fondo a
+venti righe di contesto. Per giorno e non per pasto perché una giornata coerente è
+anche una spesa coerente — è la stessa ragione dell'anti-spreco. Il contesto allora
+smette di elencare le cucine e dice soltanto che il sorteggio è **già fatto**
+(`PER_GIORNO`), col divieto esplicito di ripiegare sull'italiana: senza quella riga
+«CUCINA: Greca» si legge come un suggerimento.
+
+**A mazzo, non a dadi.** Si mescola l'elenco e si distribuisce una carta per volta,
+rimescolando quando finisce: con tre cucine su sette giorni ognuna esce due o tre
+volte e nessuna resta fuori. Tirando un dado indipendente per ogni giorno, cinque
+giapponesi e due greche sono un risultato onesto — e indistinguibile dal guasto che il
+sorteggio doveva riparare. Per la stessa ragione, a cavallo di due mazzi la stessa
+cucina non esce due volte di fila.
+
+Anche `regenerate_meal` sorteggia, ed è dove la differenza si sente di più: «rigenera»
+premuto tre volte di fila dava tre piatti italiani. Lì si estrae **una** cucina e si
+esclude quella del piatto che si sta buttando (`avoid`), che è la stessa ragione per
+cui gli si dice di non riproporlo — chi rigenera vuole un'altra cosa; `avoid` però non
+svuota mai il mazzo, o chi ha scelto una cucina sola non potrebbe più rigenerare. Con
+una **richiesta dell'utente** non si sorteggia niente: «fammi una carbonara» più «oggi
+è coreano» sono due ordini contrari, e a scegliere quale seguire sarebbe il modello.
+
+Quello che **non** sorteggia è tutto il resto — le due chat e la sostituzione di un
+ingrediente —, e per questo `build_context` prende un `cuisine` già pronto invece di
+comporlo sempre da sé: lì si parte da una ricetta che una sua cucina ce l'ha già, e
+tirarne un'altra vorrebbe dire riscrivere il piatto invece di correggerlo. Sotto le
+due cucine scelte non si sorteggia comunque: non c'è niente da estrarre, e il prompt
+resta identico a prima. Guardie in `tests/test_cucine.py`.
 
 Il selettore (`components/CuisinePicker.jsx`, in Impostazioni → Preferenze e
 nell'onboarding) scarica il catalogo da `GET /api/config/cuisines` invece di tenerne

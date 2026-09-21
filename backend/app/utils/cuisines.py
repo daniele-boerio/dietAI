@@ -13,6 +13,8 @@ si compra sotto casa, non mandare l'utente a cercare il mirin — una ricetta ch
 richiede un negozio specializzato è una ricetta che non si cucina.
 """
 
+import random
+
 # Ogni voce: chiave (che è anche il nome che il modello legge e scrive nei tag),
 # etichetta per l'interfaccia, e i termini con cui la si cerca. Gli alias servono
 # perché si cerca per paese ("Giappone") o per piatto ("sushi", "curry"), non per
@@ -186,6 +188,80 @@ INGREDIENTI_LOCALI = (
     "chiederebbe un ingrediente da negozio specializzato, mettici il sostituto più "
     "vicino e scrivilo in una riga nella descrizione."
 )
+
+
+def draw(
+    keys: list[str] | None,
+    count: int,
+    *,
+    avoid: str | None = None,
+    rng: random.Random | None = None,
+) -> list[str]:
+    """Sorteggia `count` cucine fra quelle scelte. Le etichette, pronte per il prompt.
+
+    Il sorteggio lo fa qui Python e non il modello, ed è il punto: «alternale
+    nell'arco della settimana» scritto in un prompt non funziona — il modello ancora
+    sulla prima voce dell'elenco, o su quella che gli viene più facile, e chi ha
+    spuntato otto cucine si ritrova sette cene italiane. Una cucina assegnata è
+    un'istruzione; una da alternare è un auspicio.
+
+    **A mazzo, non a dadi.** Si mescola l'elenco e si distribuisce una carta per
+    volta, rimescolando quando finisce: con tre cucine su sette giorni ognuna esce
+    due o tre volte e nessuna resta fuori. Tirando un dado indipendente per ogni
+    giorno, invece, cinque giapponesi e due greche sono un risultato onesto — e
+    indistinguibile dal guasto che il sorteggio doveva riparare. Per la stessa
+    ragione, a cavallo di due mazzi la stessa cucina non esce due volte di fila.
+
+    `avoid` toglie una cucina dall'estrazione (di solito quella del piatto che si sta
+    rifacendo), ma solo finché ne resta almeno un'altra: chi ne ha scelta una sola
+    deve poter rigenerare lo stesso.
+    """
+    disponibili = labels(keys)
+    if not disponibili or count <= 0:
+        return []
+
+    # `avoid` arriva dai tag di una ricetta, cioè da quello che ha scritto il modello:
+    # può essere qualunque cosa, compreso un numero o una lista. Qui non è un dato da
+    # validare — serve solo a togliere una carta dal mazzo — quindi quello che non è
+    # una stringa non toglie niente, invece di far fallire una rigenerazione pagata.
+    if isinstance(avoid, str) and avoid.strip():
+        senza = [x for x in disponibili if x.casefold() != avoid.strip().casefold()]
+        if senza:
+            disponibili = senza
+    if len(disponibili) == 1:
+        return disponibili * count
+
+    r = rng or random.Random()
+    estratte: list[str] = []
+    mazzo: list[str] = []
+    while len(estratte) < count:
+        if not mazzo:
+            mazzo = disponibili[:]
+            r.shuffle(mazzo)
+            if estratte and mazzo[0] == estratte[-1]:
+                mazzo[0], mazzo[1] = mazzo[1], mazzo[0]
+        estratte.append(mazzo.pop(0))
+    return estratte
+
+
+# La riga del contesto quando il sorteggio è già stato fatto e sta scritto accanto a
+# ogni giorno: qui si dice solo che è un'assegnazione e non un suggerimento. Il
+# divieto di ripiegare sull'italiana è esplicito perché è il ripiego che il modello
+# fa da solo — è la cucina di cui conosce più piatti che stanno nei macro.
+PER_GIORNO = (
+    "una per giorno, SORTEGGIATA fra quelle scelte dall'utente: la trovi scritta "
+    "accanto a ogni giorno in «DA GENERARE», e per quel giorno si cucina quella. Non "
+    "sceglierne un'altra, non ripiegare sull'italiana perché è più comoda, non fare "
+    "sette volte la stessa. " + INGREDIENTI_LOCALI
+)
+
+
+def prompt_line_one(label: str) -> str:
+    """La riga del contesto per un pasto solo, con la cucina già sorteggiata."""
+    return (
+        f"{label.lower()}, sorteggiata fra quelle scelte dall'utente: il piatto è di "
+        f"questa cucina, non di un'altra. " + INGREDIENTI_LOCALI
+    )
 
 
 def prompt_line(keys: list[str] | None) -> str:

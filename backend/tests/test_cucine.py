@@ -7,6 +7,8 @@ punto della funzione — scegliere la cucina giapponese deve chiedere quelle tec
 **senza** mandare l'utente a cercare il mirin.
 """
 
+import random
+
 import pytest
 
 from app.services.planner import build_context
@@ -165,3 +167,246 @@ def test_il_corpo_senza_cucine_le_svuota(client):
     assert client.put(
         "/api/config/preferences", json={"prefer_seasonal": True}
     ).json()["cuisines"] == []
+
+
+# ── Il sorteggio ───────────────────────────────────────────────────────────────
+
+# Il sorteggio sta in Python e non nel prompt perche' "alternale nell'arco della
+# settimana" e' un auspicio: il modello ancora sulla prima voce dell'elenco, o su
+# quella che gli viene piu' facile, e chi ha spuntato otto cucine si ritrova sette
+# cene italiane. Qui si difende la proprieta' che il prompt non puo' garantire.
+
+SCELTE = ["giapponese", "greca", "messicana"]
+
+
+def test_il_sorteggio_pesca_solo_fra_le_scelte():
+    estratte = cuisines.draw(SCELTE, 7, rng=random.Random(1))
+
+    assert len(estratte) == 7
+    assert set(estratte) <= set(cuisines.labels(SCELTE))
+
+
+def test_nessuna_cucina_resta_fuori_e_nessuna_prende_tutto():
+    """E' la proprieta' del mazzo, quella che un dado non da'.
+
+    Con tre cucine su sette giorni, tirando un dado indipendente per ogni giorno
+    cinque giapponesi e due greche sono un risultato onesto — e indistinguibile dal
+    guasto che il sorteggio doveva riparare. Distribuendo un mazzo mescolato, ognuna
+    esce due o tre volte, con qualunque seme.
+    """
+    for seme in range(50):
+        estratte = cuisines.draw(SCELTE, 7, rng=random.Random(seme))
+        conta = {c: estratte.count(c) for c in cuisines.labels(SCELTE)}
+
+        assert min(conta.values()) >= 2
+        assert max(conta.values()) <= 3
+
+
+def test_la_stessa_cucina_non_esce_due_giorni_di_fila():
+    """A cavallo di due mazzi e' il punto in cui puo' succedere, ed e' proprio
+
+    quello che sembra il guasto: due cene greche di seguito su una settimana
+    sorteggiata si leggono come "non ha sorteggiato niente".
+    """
+    for seme in range(50):
+        estratte = cuisines.draw(SCELTE, 9, rng=random.Random(seme))
+
+        assert all(a != b for a, b in zip(estratte, estratte[1:])), estratte
+
+
+def test_due_sorteggi_non_danno_lo_stesso_ordine():
+    """Se l'ordine fosse sempre quello, il lunedi' sarebbe giapponese per sempre."""
+    ordini = {tuple(cuisines.draw(SCELTE, 7, rng=random.Random(s))) for s in range(30)}
+
+    assert len(ordini) > 1
+
+
+def test_si_puo_escludere_la_cucina_del_piatto_che_si_sta_rifacendo():
+    for seme in range(20):
+        estratte = cuisines.draw(SCELTE, 1, avoid="Greca", rng=random.Random(seme))
+
+        assert estratte[0] != "Greca"
+
+
+def test_ma_chi_ne_ha_scelta_una_sola_deve_poter_rigenerare_lo_stesso():
+    """`avoid` non puo' svuotare il mazzo: senza estrazione non si genera niente."""
+    assert cuisines.draw(["greca"], 1, avoid="Greca") == ["Greca"]
+
+
+def test_senza_scelte_non_si_sorteggia_niente():
+    """Lista vuota e non un ripiego: e' il segno che il contesto resta quello di prima."""
+    assert cuisines.draw([], 7) == []
+    assert cuisines.draw(None, 7) == []
+    assert cuisines.draw(SCELTE, 0) == []
+
+
+# ── Dal sorteggio al prompt ────────────────────────────────────────────────────
+
+# Sorteggiare e non dirlo al modello non cambia niente: queste provano il pezzo di
+# strada che sta fra le due cose.
+
+
+def _ricetta(titolo):
+    return {
+        "title": titolo,
+        "description": "Ricetta di prova",
+        "prep_time_min": 10,
+        "cook_time_min": 10,
+        "difficulty": "easy",
+        "ingredients": [{"name": "zucchine", "quantity": 100, "unit": "g"}],
+        "instructions": "1. Fai tutto.",
+        "nutrition": {
+            "calories": 500,
+            "protein_g": 30.0,
+            "carbs_g": 40.0,
+            "fat_g": 15.0,
+        },
+        "tags": {"cuisine": "greca", "type": "piatto unico"},
+    }
+
+
+class ModelloSpia:
+    """Non genera niente di interessante: serve solo a tenersi il prompt ricevuto."""
+
+    ultimo = ""
+
+    def __init__(self):
+        self.model = "finto/modello-di-test"
+        self.supports_native_pdf = False
+
+    def generate_json(self, system, prompt, **kwargs):
+        ModelloSpia.ultimo = prompt
+        # Sull'intestazione intera: anche il prompt del singolo pasto dice "PASTO DA
+        # GENERARE", e riconoscendolo per settimana si rispondeva con sette giorni a
+        # chi ne aveva chiesto uno.
+        if "DA GENERARE (giorno" in prompt:
+            return {
+                "days": [
+                    {
+                        "day_of_week": dow,
+                        "meals": [
+                            {"slot_name": n, "recipe": _ricetta(f"{n} {dow}")}
+                            for n in ("Colazione", "Pranzo", "Cena")
+                        ],
+                    }
+                    for dow in range(7)
+                ]
+            }
+        return _ricetta("Piatto rigenerato")
+
+
+@pytest.fixture()
+def spia(monkeypatch, client):
+    from app.services import planner as mod
+
+    monkeypatch.setattr(mod, "get_client", lambda db, user, role: ModelloSpia())
+    client.put("/api/auth/api-key", json={"api_key": "sk-or-chiave-finta-per-i-test"})
+    return ModelloSpia
+
+
+def _scegli(client, chiavi):
+    res = client.put(
+        "/api/config/preferences", json={"prefer_seasonal": True, "cuisines": chiavi}
+    )
+    assert res.status_code == 200, res.text
+
+
+def _righe_dei_giorni(prompt):
+    """Le intestazioni dei giorni nel blocco «DA GENERARE».
+
+    Si taglia sull'intestazione intera e non sulle due parole: il contesto adesso
+    rimanda a quel blocco («la trovi scritta accanto a ogni giorno in «DA GENERARE»»)
+    e tagliare lì dividerebbe il prompt nel punto sbagliato.
+    """
+    blocco = prompt.split("DA GENERARE (giorno")[1].split("PASTI GIÀ ASSEGNATI")[0]
+    return [r for r in blocco.splitlines() if "day_of_week" in r]
+
+
+def test_ogni_giorno_della_settimana_arriva_col_suo_sorteggio(client, diet, spia):
+    _scegli(client, SCELTE)
+    week = client.get("/api/planning/weeks/current").json()
+
+    res = client.post(f"/api/planning/weeks/{week['id']}/generate", json={})
+    assert res.status_code == 200, res.text
+
+    righe = _righe_dei_giorni(spia.ultimo)
+    assert len(righe) == 7
+    assert all("CUCINA:" in r for r in righe), righe
+    # E tutte e tre escono: una settimana con una cucina sola sarebbe il guasto di
+    # prima, scritto da un sorteggio invece che dal modello.
+    for nome in cuisines.labels(SCELTE):
+        assert any(nome in r for r in righe), (nome, righe)
+
+
+def test_il_contesto_dice_che_il_sorteggio_e_gia_fatto(client, diet, spia):
+    """Senza questa riga il modello legge «CUCINA: Greca» come un suggerimento."""
+    _scegli(client, SCELTE)
+    week = client.get("/api/planning/weeks/current").json()
+
+    client.post(f"/api/planning/weeks/{week['id']}/generate", json={})
+
+    assert "SORTEGGIATA" in spia.ultimo
+    assert "non ripiegare sull'italiana" in spia.ultimo
+
+
+def test_con_una_cucina_sola_non_si_sorteggia_e_il_prompt_resta_quello_di_prima(
+    client, diet, spia
+):
+    """Lo strato non esiste finché non lo si usa: con una scelta sola non c'è niente
+
+    da estrarre, e il contesto torna a essere la riga corta di sempre.
+    """
+    _scegli(client, ["italiana"])
+    week = client.get("/api/planning/weeks/current").json()
+
+    client.post(f"/api/planning/weeks/{week['id']}/generate", json={})
+
+    assert all("CUCINA:" not in r for r in _righe_dei_giorni(spia.ultimo))
+    assert "SORTEGGIATA" not in spia.ultimo
+
+
+def test_rigenerare_un_pasto_ne_sorteggia_una_sola(client, diet, spia):
+    _scegli(client, SCELTE)
+    week = client.get("/api/planning/weeks/current").json()
+    client.post(f"/api/planning/weeks/{week['id']}/generate", json={})
+    meal = client.get("/api/planning/weeks/current").json()["days"][0]["meals"][0]
+
+    res = client.post(f"/api/planning/meals/{meal['id']}/regenerate", json={})
+    assert res.status_code == 200, res.text
+
+    nominate = [n for n in cuisines.labels(SCELTE) if n.lower() in spia.ultimo.lower()]
+    assert len(nominate) == 1, nominate
+    # Il piatto buttato era greco (vedi `_ricetta`): rigenerare deve portare altrove.
+    assert "Greca" not in nominate
+
+
+def test_una_richiesta_dell_utente_manda_in_pensione_il_sorteggio(client, diet, spia):
+    """«fammi una carbonara» più «oggi è coreano» sono due ordini contrari, e a
+
+    scegliere quale seguire sarebbe il modello.
+    """
+    _scegli(client, SCELTE)
+    week = client.get("/api/planning/weeks/current").json()
+    meal = client.get("/api/planning/weeks/current").json()["days"][0]["meals"][0]
+
+    client.post(
+        f"/api/planning/meals/{meal['id']}/regenerate",
+        json={"user_request": "una carbonara"},
+    )
+
+    assert "sorteggiata" not in spia.ultimo.lower()
+    assert "carbonara" in spia.ultimo
+
+
+@pytest.mark.parametrize("sporco", [None, 42, ["greca"], "", "   "])
+def test_un_tag_malscritto_non_fa_saltare_la_rigenerazione(sporco):
+    """`avoid` arriva dai tag della ricetta, cioe' da quello che ha scritto il
+
+    modello: puo' essere qualunque cosa. Non e' un dato da validare — serve solo a
+    togliere una carta dal mazzo — e far fallire per questo una rigenerazione gia'
+    pagata sarebbe il modo peggiore di scoprirlo.
+    """
+    estratte = cuisines.draw(SCELTE, 3, avoid=sporco, rng=random.Random(0))
+
+    assert len(estratte) == 3
+    assert set(estratte) <= set(cuisines.labels(SCELTE))

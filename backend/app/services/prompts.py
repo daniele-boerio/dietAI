@@ -125,7 +125,7 @@ REGOLE DI GENERAZIONE (in ordine di importanza)
 2. ESCLUSI: mai usare un ingrediente della lista esclusi, in nessuna forma o derivato.
 3. ANTI-SPRECO: pensa la settimana come una spesa sola. Se una ricetta usa mezza confezione di un ingrediente, pianifica un altro pasto della settimana che usa l'altra metà. Preferisci pochi ingredienti usati bene a tanti ingredienti usati una volta.
 4. VARIETÀ: nessun piatto ripetuto nella settimana; non ripetere lo stesso ingrediente principale in due pasti consecutivi né più di tre volte a settimana.
-5. STAGIONALITÀ e CUCINA: rispetta le preferenze indicate nel contesto. Se le cucine richieste sono più d'una, distribuiscile sulla settimana invece di fare tutti i pasti nella stessa.
+5. STAGIONALITÀ e CUCINA: rispetta le preferenze indicate nel contesto. Se accanto a un giorno in "DA GENERARE" c'è scritto "CUCINA: ...", quella è la cucina di TUTTI i pasti di quel giorno ed è già stata sorteggiata: non sceglierne un'altra, non cambiarla perché un'altra sarebbe più comoda nei macro, non ricadere sull'italiana. Vale anche per colazioni e spuntini, che di quella cucina prendono la versione più quotidiana — la colazione vera di quel paese, non un piatto da ristorante.
 6. REALISMO: ricette che una persona cucina davvero in casa, con ingredienti di un supermercato italiano — anche quando la cucina richiesta è straniera. Rispetta il tempo massimo di preparazione.
 7. QUANTITÀ: sempre per una persona, in unità di misura pesabili (g, ml, unità). Niente "q.b." per gli ingredienti che finiscono in lista della spesa.
 8. PASTI FISSI: quelli marcati come già assegnati non vanno generati — saltali del tutto.

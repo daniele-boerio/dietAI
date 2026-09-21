@@ -552,7 +552,7 @@ function PreferencesStep({ onDone, addToast }) {
         <div className="field" style={{ marginTop: 16 }}>
           <label className="field-label">Cucine da cui attingere</label>
           <p className="field-hint" style={{ marginBottom: 12 }}>
-            Quante ne vuoi: se sono più d'una le alterno durante la settimana. Gli
+            Quante ne vuoi: da due in su ne sorteggio una per ogni giorno. Gli
             ingredienti restano quelli del supermercato sotto casa anche quando la
             cucina è dall'altra parte del mondo.
           </p>

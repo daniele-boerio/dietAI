@@ -357,11 +357,12 @@ function PreferencesTab() {
       <div className="field">
         <label className="field-label">Cucine da cui attingere</label>
         <p className="field-hint" style={{ marginBottom: 14 }}>
-          Scegline quante vuoi: se sono più d'una vengono alternate nell'arco della
-          settimana. La spesa resta italiana comunque — di una cucina straniera prendo
-          tecniche e condimenti, non gli ingredienti che qui non si trovano: dove il
-          piatto tipico chiederebbe qualcosa da negozio specializzato metto il
-          sostituto più vicino e te lo scrivo nella ricetta.
+          Scegline quante vuoi: da due in su ne sorteggio una per ogni giorno, così
+          la settimana gira su tutte invece di fermarsi sulla prima. La spesa resta
+          italiana comunque — di una cucina straniera prendo tecniche e condimenti,
+          non gli ingredienti che qui non si trovano: dove il piatto tipico
+          chiederebbe qualcosa da negozio specializzato metto il sostituto più vicino
+          e te lo scrivo nella ricetta.
         </p>
         <CuisinePicker
           value={prefs.cuisines}

@@ -8,9 +8,12 @@ dell'utente (`UserPreferences.notes`) restano il posto per tutto il resto.
 
 La riga che va nel prompt la costruisce `prompt_line()`, ed è lì che vive il vincolo
 che rende utile la funzione: **la cucina viaggia, gli ingredienti no.** Scegliere la
-cucina giapponese vuol dire chiedere quelle tecniche e quei condimenti con quello che
-si compra sotto casa, non mandare l'utente a cercare il mirin — una ricetta che
-richiede un negozio specializzato è una ricetta che non si cucina.
+cucina giapponese vuol dire chiedere quelle tecniche e quei condimenti con la base che
+si compra sotto casa, non mandare l'utente a cercare la galanga fresca — una ricetta
+che vuole il banco di un negozio specializzato è una ricetta che non si cucina. Il
+confine però passa fra il fresco e la bottiglia, non fra l'Italia e il resto del
+mondo: le salse che fanno il piatto si ordinano una volta e durano mesi, quindi si
+chiamano col loro nome invece di finire tutte nella salsa di soia.
 """
 
 import random
@@ -249,18 +252,29 @@ def labels(value: object) -> list[str]:
     return [_BY_KEY[k] for k in clean(value)]
 
 
-# La metà che non si negozia: la cucina la si sceglie per tecniche e condimenti, gli
-# ingredienti restano quelli del supermercato sotto casa. Gli esempi da una parte e
-# dall'altra ci sono perché "reperibile in Italia" da solo è un giudizio che il
-# modello dà a sentimento — con due elenchi corti il confine si vede.
+# La metà che non si negozia, col suo confine dentro: la cucina la si sceglie per
+# tecniche e condimenti, e **il condimento è l'ingrediente**. "Usa quello che si trova"
+# scritto senza quest'eccezione diventa un ordine di ridurre tutte le salse orientali a
+# quella di soia — e un saltato condito con la soia al posto del teriyaki o della salsa
+# di ostriche non è lo stesso piatto fatto con quello che c'è, è un altro piatto.
+#
+# Il confine vero non è lo scaffale sotto casa, è la conservazione: una bottiglia o un
+# barattolo si ordina una volta e dura mesi (e molte di quelle salse sono già al
+# supermercato), mentre il fresco esotico — la galanga, le foglie di kaffir — nessuno
+# lo ordina per una cena. Gli esempi da una parte e dall'altra restano, perché
+# "reperibile in Italia" da solo è un giudizio che il modello dà a sentimento.
 INGREDIENTI_LOCALI = (
-    "Un piatto appartiene a una cucina per tecnica, condimenti e struttura, non per "
-    "gli ingredienti introvabili: usa SOLO ciò che si compra in un normale "
-    "supermercato italiano (salsa di soia, curry in polvere, latte di cocco, zenzero, "
-    "lime, tortillas, paprika affumicata, tahina e cous cous ci sono; dashi, mirin, "
-    "galanga, foglie di kaffir, gochujang e salse regionali no). Dove il piatto tipico "
-    "chiederebbe un ingrediente da negozio specializzato, mettici il sostituto più "
-    "vicino e scrivilo in una riga nella descrizione."
+    "Un piatto appartiene a una cucina per tecnica, condimenti e struttura: la base "
+    "(verdura, carne, pesce, cereali) è quella di un normale supermercato italiano. I "
+    "condimenti che danno il sapore sono l'eccezione e vanno chiamati col loro nome: "
+    "salsa di soia, teriyaki, salsa di ostriche, salsa di pesce, hoisin, sriracha, "
+    "gochujang, miso, mirin, aceto di riso, olio di sesamo, pasta di curry, latte di "
+    "cocco, tahina e harissa stanno in bottiglia o in barattolo, durano mesi e si "
+    "trovano al supermercato o online. NON ridurli tutti alla salsa di soia e non "
+    "scambiarli l'uno con l'altro: sono sapori diversi. Resta fuori solo il fresco "
+    "introvabile, che non si ordina per una cena (galanga, foglie di kaffir, erbe "
+    "asiatiche fresche, pesce crudo da sushi): lì mettici il sostituto più vicino e "
+    "scrivilo in una riga nella descrizione."
 )
 
 

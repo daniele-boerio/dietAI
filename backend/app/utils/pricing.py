@@ -176,7 +176,30 @@ INGREDIENT_CATALOG: dict[str, tuple[str, float, str]] = {
     "cannella": ("condimenti", 40.00, "kg"),
     "noce moscata": ("condimenti", 60.00, "kg"),
     "senape": ("condimenti", 8.00, "kg"),
+    # ── Le salse che fanno un piatto straniero ──
+    # Stanno a catalogo perché il prompt le chiama per nome (`INGREDIENTI_LOCALI`: non
+    # si riducono tutte alla salsa di soia), e un nome che arriva in lista senza riga
+    # di anagrafica prende il reparto che `guess_category` indovina — che qui sbaglia
+    # proprio sulle più usate: "salsa di pesce" finisce al banco del pesce, "pasta di
+    # curry" fra i cereali, "latte di cocco" fra i latticini. Il prezzo è quello di una
+    # bottiglia da supermercato o da ordine online: si compra una volta e dura mesi,
+    # che è la ragione per cui queste salse si possono chiedere.
     "salsa di soia": ("condimenti", 6.00, "l"),
+    "salsa teriyaki": ("condimenti", 8.00, "l"),
+    # Elisa, come la scrive `normalize_name` ("salsa di ostriche" → "salsa d'ostriche").
+    "salsa d'ostriche": ("condimenti", 7.00, "l"),
+    "salsa di pesce": ("condimenti", 9.00, "l"),
+    "salsa hoisin": ("condimenti", 9.00, "l"),
+    "sriracha": ("condimenti", 8.00, "l"),
+    "gochujang": ("condimenti", 12.00, "kg"),
+    "miso": ("condimenti", 14.00, "kg"),
+    "mirin": ("condimenti", 10.00, "l"),
+    "aceto di riso": ("condimenti", 4.00, "l"),
+    "olio di sesamo": ("condimenti", 14.00, "l"),
+    "pasta di curry": ("condimenti", 18.00, "kg"),
+    "latte di cocco": ("condimenti", 3.00, "l"),
+    "tahina": ("condimenti", 12.00, "kg"),
+    "harissa": ("condimenti", 14.00, "kg"),
     "brodo vegetale": ("condimenti", 2.00, "l"),
     "lievito": ("condimenti", 20.00, "kg"),
     "cacao amaro": ("condimenti", 14.00, "kg"),

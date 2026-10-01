@@ -359,11 +359,12 @@ function PreferencesTab() {
         <p className="field-hint" style={{ marginBottom: 14 }}>
           Scegline quante vuoi e dai a ognuna la sua fetta di piatti: da due in su ne
           sorteggio una per ogni giorno rispettando le percentuali, così la settimana
-          gira su tutte invece di fermarsi sulla prima. La spesa resta italiana
-          comunque — di una cucina straniera prendo tecniche e condimenti,
-          non gli ingredienti che qui non si trovano: dove il piatto tipico
-          chiederebbe qualcosa da negozio specializzato metto il sostituto più vicino
-          e te lo scrivo nella ricetta.
+          gira su tutte invece di fermarsi sulla prima. Di una cucina straniera prendo
+          tecniche e condimenti, con una base da supermercato italiano: le salse che
+          fanno il piatto (teriyaki, ostriche, miso, curry) le chiamo col loro nome
+          invece di ridurle tutte alla salsa di soia — si ordinano una volta e durano
+          mesi. Dove servirebbe del fresco introvabile metto il sostituto più vicino e
+          te lo scrivo nella ricetta.
         </p>
         <CuisinePicker
           value={prefs.cuisines}

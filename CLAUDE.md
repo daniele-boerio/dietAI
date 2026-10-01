@@ -738,15 +738,36 @@ nell'elenco. La migrazione `0020` converte quello che il flag diceva davvero: ac
 `["italiana"]`, spento → `[]`.
 
 Il vincolo che rende utile la funzione sta in `prompt_line()`, ed è la seconda metà
-della richiesta: **scegliere la cucina giapponese chiede quelle tecniche con quello
-che si compra sotto casa.** Una ricetta che vuole dashi e mirin non è una ricetta
+della richiesta: **scegliere la cucina giapponese chiede quelle tecniche con la base
+che si compra sotto casa.** Una ricetta che vuole la galanga fresca non è una ricetta
 difficile, è una ricetta che non si cucina — e peggio, quella roba finisce in lista
 della spesa come se bastasse passare al supermercato. Perciò la riga porta due elenchi
-corti di esempi, da una parte e dall'altra (salsa di soia, curry, latte di cocco,
-tortillas e tahina ci sono; mirin, galanga, gochujang no): "reperibile in Italia" da
-solo è un giudizio che il modello dà a sentimento, con due elenchi il confine si vede.
-Dove il piatto tipico chiederebbe l'introvabile, il modello mette il sostituto più
-vicino e **lo scrive nella descrizione**, invece di cambiarlo in silenzio.
+corti di esempi, da una parte e dall'altra: "reperibile in Italia" da solo è un
+giudizio che il modello dà a sentimento, con due elenchi il confine si vede. Dove il
+piatto tipico chiederebbe l'introvabile, il modello mette il sostituto più vicino e
+**lo scrive nella descrizione**, invece di cambiarlo in silenzio.
+
+**Ma il confine passa fra il fresco e la bottiglia, non fra l'Italia e il resto del
+mondo.** La prima versione della riga diceva "usa SOLO ciò che si compra in un normale
+supermercato italiano" e metteva fra gli esempi la sola salsa di soia: il modello ne
+ricavava l'ordine di condire con quella **ogni** piatto orientale, e teriyaki, salsa
+di ostriche, pesce, hoisin e miso sparivano tutti dentro lo stesso ingrediente. Ma un
+saltato condito con la soia al posto del teriyaki non è lo stesso piatto fatto con
+quello che c'è, è un altro piatto — e quelle salse si comprano: metà stanno già al
+supermercato, il resto si ordina una volta e dura mesi in dispensa. Perciò i
+condimenti sono **l'eccezione dichiarata** (`INGREDIENTI_LOCALI`: salse, paste, aceti
+e oli si chiamano col loro nome, col divieto esplicito di ridurli alla salsa di soia o
+di scambiarli fra loro) e a restare fuori è solo il fresco esotico, che nessuno ordina
+per una cena: galanga, foglie di kaffir, erbe asiatiche fresche. La stessa eccezione
+va ripetuta dove il vincolo è scritto una seconda volta — `WEEK_PLAN_SYSTEM` (regola
+REALISMO), `SINGLE_MEAL_SYSTEM` e `SUBSTITUTE_SYSTEM` —, o il prompt si
+contraddirebbe da una schermata all'altra. Resta com'era `SHOPPING_CHAT_SYSTEM`, dove
+il sostituto deve stare sullo scaffale davvero: lì l'utente è in negozio e non può
+aspettare una consegna. In lista della spesa le salse restano **righe distinte**:
+`normalize_name` non le accorpa — sono alimenti diversi, con prezzi diversi — e stanno
+a catalogo (`utils/pricing.py`) perché senza una riga di anagrafica il reparto lo
+indovina `guess_category`, che proprio sulle più usate sbaglia: "salsa di pesce" al
+banco del pesce, "pasta di curry" fra i cereali, "latte di cocco" fra i latticini.
 
 Tre casi e non uno: nessuna scelta lascia mano libera (è quello che si aspetta chi
 quella schermata non l'ha aperta), la sola italiana non si porta dietro il discorso

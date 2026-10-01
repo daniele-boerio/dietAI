@@ -4,7 +4,8 @@ Due cose da difendere. La prima è il catalogo: le chiavi finiscono nel prompt e
 database, quindi un doppione o una voce rinominata è una preferenza che cambia
 significato sotto i piedi dell'utente. La seconda è la riga del contesto, che è il
 punto della funzione — scegliere la cucina giapponese deve chiedere quelle tecniche
-**senza** mandare l'utente a cercare il mirin.
+**senza** mandare l'utente a cercare la galanga fresca, e **senza** ridurre tutte le
+salse orientali a quella di soia, che sono i due modi opposti di sbagliare.
 """
 
 import random
@@ -87,23 +88,40 @@ def test_la_sola_italiana_non_si_porta_dietro_la_spiegazione():
     riga = cuisines.prompt_line(["italiana"])
 
     assert "italiana" in riga
-    assert "negozio specializzato" not in riga
+    assert "teriyaki" not in riga
 
 
 @pytest.mark.parametrize(
     "scelte", [["giapponese"], ["giapponese", "messicana", "thailandese"]]
 )
 def test_una_cucina_straniera_porta_sempre_il_vincolo_degli_ingredienti(scelte):
-    """È il punto della funzione: la cucina viaggia, gli ingredienti no.
+    """È il punto della funzione: la cucina viaggia, la base della spesa no.
 
-    Una ricetta giapponese che chiede dashi e mirin è una ricetta che non si cucina —
-    e peggio, finisce in lista della spesa come roba da comprare.
+    Una ricetta giapponese che chiede la galanga fresca è una ricetta che non si
+    cucina — e peggio, finisce in lista della spesa come roba da comprare.
     """
     riga = cuisines.prompt_line(scelte)
 
     assert "supermercato italiano" in riga
-    assert "negozio specializzato" in riga
-    assert "mirin" in riga  # l'esempio di cosa NON si trova
+    assert "galanga" in riga  # l'esempio di cosa NON si trova
+
+
+@pytest.mark.parametrize(
+    "scelte", [["giapponese"], ["giapponese", "coreana", "thailandese"]]
+)
+def test_i_condimenti_non_si_riducono_tutti_alla_salsa_di_soia(scelte):
+    """L'altra metà del vincolo, che senza questa riga lo capovolge.
+
+    "Usa quello che si trova" letto da solo è un ordine di condire ogni saltato con
+    la salsa di soia: il teriyaki, la salsa di ostriche e il miso stanno in bottiglia,
+    durano mesi e si ordinano una volta — chiamarli col loro nome è la differenza fra
+    la cucina richiesta e un piatto che le somiglia.
+    """
+    riga = cuisines.prompt_line(scelte)
+
+    assert "teriyaki" in riga
+    assert "salsa di ostriche" in riga
+    assert "NON ridurli tutti alla salsa di soia" in riga
 
 
 def test_piu_cucine_si_dicono_con_le_loro_quote():

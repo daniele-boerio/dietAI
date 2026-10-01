@@ -126,7 +126,7 @@ REGOLE DI GENERAZIONE (in ordine di importanza)
 3. ANTI-SPRECO: pensa la settimana come una spesa sola. Se una ricetta usa mezza confezione di un ingrediente, pianifica un altro pasto della settimana che usa l'altra metà. Preferisci pochi ingredienti usati bene a tanti ingredienti usati una volta.
 4. VARIETÀ: nessun piatto ripetuto nella settimana; non ripetere lo stesso ingrediente principale in due pasti consecutivi né più di tre volte a settimana.
 5. STAGIONALITÀ e CUCINA: rispetta le preferenze indicate nel contesto. Se accanto a un giorno in "DA GENERARE" c'è scritto "CUCINA: ...", quella è la cucina di TUTTI i pasti di quel giorno ed è già stata sorteggiata: non sceglierne un'altra, non cambiarla perché un'altra sarebbe più comoda nei macro, non ricadere sull'italiana. Vale anche per colazioni e spuntini, che di quella cucina prendono la versione più quotidiana — la colazione vera di quel paese, non un piatto da ristorante.
-6. REALISMO: ricette che una persona cucina davvero in casa, con ingredienti di un supermercato italiano — anche quando la cucina richiesta è straniera. Rispetta il tempo massimo di preparazione.
+6. REALISMO: ricette che una persona cucina davvero in casa, con una base (verdura, carne, pesce, cereali) da supermercato italiano — anche quando la cucina richiesta è straniera. Fanno eccezione i condimenti che quella cucina identificano: salse, paste, aceti e oli si chiamano col loro nome, come dice il contesto, e non si sostituiscono l'uno con l'altro. Rispetta il tempo massimo di preparazione.
 7. QUANTITÀ: sempre per una persona, in unità di misura pesabili (g, ml, unità). Niente "q.b." per gli ingredienti che finiscono in lista della spesa.
 8. PASTI FISSI: quelli marcati come già assegnati non vanno generati — saltali del tutto.
 
@@ -164,7 +164,7 @@ Genera le ricette per tutti e soli i pasti elencati in "DA GENERARE", rispettand
 
 SINGLE_MEAL_SYSTEM = """Sei DietAI: nutrizionista e cuoco italiano. Generi UNA ricetta per un singolo pasto.
 
-Valgono le stesse regole del piano settimanale: macro entro ±10%, nessun ingrediente escluso, porzione per una persona, cucina e stagionalità come da contesto, ingredienti pesabili e comprabili in un supermercato italiano anche quando la cucina richiesta è straniera.
+Valgono le stesse regole del piano settimanale: macro entro ±10%, nessun ingrediente escluso, porzione per una persona, cucina e stagionalità come da contesto, ingredienti pesabili e comprabili in un supermercato italiano anche quando la cucina richiesta è straniera — salvo i condimenti che quella cucina identificano (salse, paste, aceti, oli), che si chiamano col loro nome come dice il contesto.
 In più, quando scegli tu il piatto: dev'essere chiaramente DIVERSO da quello precedente (altro ingrediente principale, non una variante) e non deve ripetere i piatti già presenti nella settimana.
 
 SE IL PROMPT CONTIENE UNA "RICHIESTA DELL'UTENTE"
@@ -279,7 +279,7 @@ Il sostituto deve:
 1. mantenere gusto e consistenza del piatto;
 2. tenere le calorie totali entro ±10% dell'originale;
 3. non essere nella lista degli ingredienti esclusi;
-4. essere facilmente reperibile in un supermercato italiano.
+4. essere facilmente reperibile: un supermercato italiano, oppure — se è un condimento in bottiglia o in barattolo — qualcosa che si ordina online e dura mesi. Una salsa non si sostituisce con un'altra salsa solo perché è più comune.
 
 FORMATO OUTPUT (JSON rigoroso):
 {

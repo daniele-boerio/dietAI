@@ -553,9 +553,9 @@ function PreferencesStep({ onDone, addToast }) {
           <label className="field-label">Cucine da cui attingere</label>
           <p className="field-hint" style={{ marginBottom: 12 }}>
             Quante ne vuoi, ognuna con la sua fetta di piatti: da due in su ne
-            sorteggio una per ogni giorno, rispettando le percentuali. Gli ingredienti
-            restano quelli del supermercato sotto casa anche quando la cucina è
-            dall'altra parte del mondo.
+            sorteggio una per ogni giorno, rispettando le percentuali. La base resta
+            quella del supermercato sotto casa anche quando la cucina è dall'altra parte
+            del mondo; le salse che fanno il piatto le chiamo col loro nome.
           </p>
           <CuisinePicker
             value={prefs.cuisines}

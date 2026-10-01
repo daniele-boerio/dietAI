@@ -40,6 +40,12 @@ def _macros(recipe: Recipe | None) -> dict:
     }
 
 
+def _media_mangiata(days: list[dict]) -> int | None:
+    """La media delle calorie mangiate davvero, sui soli giorni di cui si sa tutto."""
+    completi = [d["totals"]["eaten_calories"] for d in days if d["totals"]["eaten_complete"]]
+    return round(sum(completi) / len(completi)) if completi else None
+
+
 def weekly_tracking(db: Session, week: WeekPlan) -> dict:
     rows = week_meals(db, week)
     days: dict[int, dict] = {}
@@ -69,6 +75,16 @@ def weekly_tracking(db: Session, week: WeekPlan) -> dict:
             }
         else:
             planned = _macros(None)
+
+        # Quanto si è mangiato davvero, quando si sa: il piatto in programma se è stato
+        # seguito, la stima di «cosa ho mangiato» se c'è. Il resto è un buco di dati, e
+        # resta None invece di diventare uno zero che sembra un digiuno.
+        if meal.is_followed is True and (recipe or self_managed) and not meal.is_skipped:
+            eaten = planned
+        elif meal.is_followed is False and meal.eaten_nutrition:
+            eaten = {k: meal.eaten_nutrition.get(k, 0) for k in ("calories", "protein_g", "carbs_g", "fat_g")}
+        else:
+            eaten = None
 
         entry = days.setdefault(
             day.day_of_week,
@@ -110,6 +126,7 @@ def weekly_tracking(db: Session, week: WeekPlan) -> dict:
                 "is_skipped": meal.is_skipped,
                 "is_followed": meal.is_followed,
                 "deviation_notes": meal.deviation_notes,
+                "eaten": eaten,
             }
         )
 
@@ -134,6 +151,14 @@ def weekly_tracking(db: Session, week: WeekPlan) -> dict:
             totals[key] = round(totals[key], 1)
         totals["delta"] = totals["planned_calories"] - totals["target_calories"]
         totals["color"] = compliance_color(totals["planned_calories"], totals["target_calories"])
+
+        # Mangiato davvero: la somma di quello che si sa, e se si sa di tutti i pasti.
+        # Un totale fatto di metà pasti non è il totale del giorno, e la pagina lo
+        # mostra solo quando è completo.
+        noti = [m["eaten"] for m in entry["meals"] if m["eaten"] is not None]
+        da_sapere = [m for m in entry["meals"] if m["recipe_title"] or m["self_managed"] or m["eaten"]]
+        totals["eaten_calories"] = sum(e["calories"] for e in noti)
+        totals["eaten_complete"] = bool(da_sapere) and len(noti) == len(da_sapere)
 
         tracked = [m["is_followed"] for m in entry["meals"] if m["is_followed"] is not None]
         # Un giorno conta come seguito se tutti i pasti tracciati lo sono: basta uno
@@ -172,6 +197,7 @@ def weekly_tracking(db: Session, week: WeekPlan) -> dict:
             "meals_planned": len(all_meals),
             "meals_in_range": in_range,
             "days_followed": followed_days,
+            "avg_daily_calories_eaten": _media_mangiata(counted),
             "days_skipped": len(ordered) - len(counted),
             "macro_averages": {
                 "protein_g": round(

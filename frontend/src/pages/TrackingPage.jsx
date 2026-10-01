@@ -282,6 +282,13 @@ function WeeklyView() {
                       <strong className="day-compliance-name">{day.day_name}</strong>
                       <span className="day-compliance-kcal">
                         {day.totals.planned_calories} / {day.totals.target_calories} kcal
+                        {/* Quanto si è mangiato davvero, solo se si sa di tutti i pasti:
+                            il piano seguito più le stime di «cosa ho mangiato». Un
+                            totale fatto di metà giornata non è il totale del giorno. */}
+                        {day.totals.eaten_complete &&
+                          day.totals.eaten_calories !== day.totals.planned_calories && (
+                            <span className="day-eaten"> · mangiato ≈ {day.totals.eaten_calories}</span>
+                          )}
                       </span>
                       <span
                         className={`day-compliance-delta ${day.totals.delta > 0 ? 'over' : ''}`}

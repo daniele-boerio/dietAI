@@ -182,6 +182,8 @@ paragrafo nel documento, scrivendo anche cosa non andava con la versione di prim
 - Le pesate (`WeightEntry`, una per giorno) danno lo storico; oltre `max(2 kg, 3%)` dal
   peso del questionario si **propone** il ricalcolo dei target, mai lo si fa da soli, e
   mai per la dieta di un nutrizionista.
+- «Ho mangiato altro: cosa?» si stima (`PlannedMeal.eaten_nutrition`) solo su un pasto
+  segnato così; il «mangiato davvero» del giorno si dice solo se si sa di tutti i pasti.
 
 **Generazione** (`docs/generazione.md`)
 - Una chiamata sola per settimana (anti-spreco); di default riempie solo i buchi, e la

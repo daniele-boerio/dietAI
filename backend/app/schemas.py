@@ -313,3 +313,7 @@ class DietFrequenciesUpdate(BaseModel):
 class WeightEntryIn(BaseModel):
     weight_kg: float = Field(gt=20, lt=400)
     day: date | None = None
+
+
+class EatenInsteadRequest(BaseModel):
+    text: str | None = Field(default=None, max_length=500)

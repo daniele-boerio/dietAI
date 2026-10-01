@@ -607,6 +607,7 @@ def clear_meal_cell(db: Session, meal: PlannedMeal) -> None:
     meal.is_followed = None
     meal.is_skipped = False
     meal.deviation_notes = None
+    meal.eaten_nutrition = None
     meal.pantry_used = None
     meal.skipped_to_meal_id = None
     forget_queued_meal(db, meal)
@@ -691,6 +692,7 @@ def _empty_meal(db: Session, meal: PlannedMeal) -> None:
     meal.source = "ai_generated"
     meal.is_followed = None
     meal.deviation_notes = None
+    meal.eaten_nutrition = None
     meal.skipped_to_meal_id = None
     forget_queued_meal(db, meal)
 
@@ -761,6 +763,7 @@ def skip_meal(
     target.source = meal.source
     target.is_followed = None
     target.deviation_notes = None
+    target.eaten_nutrition = None
     # Dove è finito il piatto, scritto invece che indovinato: annullare il salto deve
     # svuotare **questa** casella, non un'altra che per caso ha lo stesso piatto — e da
     # quando lo stesso piatto in due giorni è una riga di ricetta sola, "stessa ricetta"
@@ -1006,6 +1009,7 @@ def serialize_meal(
         "recurring_rule": meal.recurring_rule,
         "is_followed": meal.is_followed,
         "deviation_notes": meal.deviation_notes,
+        "eaten_nutrition": meal.eaten_nutrition,
         "recipe": serialize_recipe(db, recipe, full=full),
     }
 

@@ -12,13 +12,15 @@ from ..models import DayPlan, MealSlot, PlannedMeal, Recipe, User, WeekPlan
 from ..rate_limit import AI_LIMIT, limiter
 from ..schemas import (
     AssignMealRequest,
+    EatenInsteadRequest,
     FollowedRequest,
     GenerateWeekRequest,
     RecurringRequest,
     RegenerateMealRequest,
     SkipDayRequest,
 )
-from ..services import planner
+from ..services import planner, prompts
+from ..services.ai_client import get_client
 from ..services.planner import (
     clear_meal_cell,
     current_week_start,
@@ -373,6 +375,65 @@ def set_recurring(
     return payload
 
 
+@router.put("/meals/{meal_id}/eaten")
+@limiter.limit(AI_LIMIT)
+def set_eaten_instead(
+    request: Request,
+    meal_id: int,
+    body: EatenInsteadRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """«Ho mangiato altro: cosa?» — il testo e la stima di calorie e macro.
+
+    Vale solo su un pasto segnato «ho mangiato altro»: su uno seguito si è mangiato il
+    piatto in programma, e su uno non ancora segnato non si sa cosa sia successo. Il
+    testo vuoto cancella testo e stima. La stima la fa il modello (ruolo `chat`, una
+    chiamata breve): è un ordine di grandezza, e la pagina lo dice.
+    """
+    meal, day, _week = _get_meal(db, user.id, meal_id)
+    slot = db.get(MealSlot, meal.meal_slot_id)
+    if meal.is_followed is not False:
+        raise HTTPException(
+            400, "Prima segna il pasto come «ho mangiato altro», poi scrivi cosa."
+        )
+    testo = (body.text or "").strip()
+    if not testo:
+        meal.deviation_notes = None
+        meal.eaten_nutrition = None
+    else:
+        client = get_client(db, user, "chat")
+        db.commit()  # niente transazione aperta durante la chiamata al modello
+        data = client.generate_json(
+            prompts.EATEN_ESTIMATE_SYSTEM,
+            prompts.render(prompts.EATEN_ESTIMATE_PROMPT, slot_name=slot.name, text=testo),
+            max_tokens=600,
+            thinking=False,
+        )
+        meal.deviation_notes = testo
+        meal.eaten_nutrition = _eaten_estimate(data)
+    db.commit()
+    return serialize_meal(db, day, meal, slot, full=True)
+
+
+def _eaten_estimate(data) -> dict | None:
+    """La stima ripulita: numeri non negativi, o None se il modello non ne ha dati."""
+    if not isinstance(data, dict):
+        return None
+    out = {}
+    for key in ("calories", "protein_g", "carbs_g", "fat_g"):
+        try:
+            out[key] = max(0.0, float(data.get(key)))
+        except (TypeError, ValueError):
+            return None
+    out["calories"] = int(round(out["calories"]))
+    for key in ("protein_g", "carbs_g", "fat_g"):
+        out[key] = round(out[key], 1)
+    note = data.get("note")
+    out["note"] = str(note)[:200] if note else None
+    return out
+
+
 @router.put("/meals/{meal_id}/followed")
 def set_followed(
     meal_id: int,
@@ -392,6 +453,10 @@ def set_followed(
     cosa è stato tolto), e si rimette identica se il pasto viene corretto.
     """
     meal, day, week = _get_meal(db, user_id, meal_id)
+    # La stima di «cosa ho mangiato» vale finché il pasto resta «ho mangiato altro»:
+    # cambiando risposta non descrive più niente.
+    if meal.is_followed is not False or body.is_followed is not False:
+        meal.eaten_nutrition = None
     meal.is_followed = body.is_followed
     meal.deviation_notes = body.deviation_notes
 

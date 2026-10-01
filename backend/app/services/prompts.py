@@ -301,6 +301,19 @@ COMPOSITION_PROMPT = """ALIMENTI:
 {names}"""
 
 
+# ── «Ho mangiato altro: cosa?» ─────────────────────────────────────────────────
+
+EATEN_ESTIMATE_SYSTEM = """Sei un nutrizionista italiano. L'utente ti dice cosa ha mangiato al posto del pasto previsto, a parole sue ("una pizza margherita", "panino al bar con prosciutto e mozzarella", "niente, ho saltato").
+
+Stima calorie e macro di quello che ha mangiato, per una persona, con le porzioni tipiche in Italia (una pizza intera da pizzeria, un panino da bar, un piatto di pasta da trattoria) a meno che non dica lui le quantità. Se dice di non aver mangiato niente, tutto a zero. Meglio una stima ragionevole che nessuna: non chiedere chiarimenti.
+
+FORMATO OUTPUT (JSON rigoroso, nessun testo aggiuntivo):
+{"calories": <int>, "protein_g": <float>, "carbs_g": <float>, "fat_g": <float>, "note": "<una riga: cosa hai assunto per la stima, es. 'pizza margherita intera, circa 350 g'>"}"""
+
+EATEN_ESTIMATE_PROMPT = """PASTO PREVISTO: {slot_name}
+COSA HA MANGIATO INVECE: {text}"""
+
+
 # ── Sostituzione di un ingrediente ─────────────────────────────────────────────
 
 SUBSTITUTE_SYSTEM = """Sei DietAI. L'utente vuole sostituire un ingrediente in una ricetta.

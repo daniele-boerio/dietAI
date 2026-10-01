@@ -50,3 +50,20 @@ sono equidistanti, e a passo fisso il grafico mentirebbe sulla velocità), asse 
 non parte da zero (su 70 kg una variazione di 2 è tutto quello che c'è da vedere), il
 peso dei target come riga tratteggiata. L'elenco delle pesate a fianco è la sua vista
 tabellare. Guardie in `tests/test_peso.py`.
+
+**«Ho mangiato altro» dice anche cosa.** Un pasto saltato era un buco nei dati: si
+sapeva che il piano non era stato seguito, non cosa si era mangiato al suo posto. Sul
+pasto segnato «ho mangiato altro» ora c'è un campo («una pizza», «panino al bar») e
+`PUT /api/planning/meals/{id}/eaten` lo fa stimare al modello (ruolo `chat`, prompt
+`EATEN_ESTIMATE_SYSTEM`, porzioni tipiche italiane, mai una domanda di chiarimento): il
+testo resta in `deviation_notes`, la stima in `PlannedMeal.eaten_nutrition`. Vale solo
+lì — su un pasto seguito si è mangiato il piatto in programma, su uno non segnato non si
+sa — e cambiare risposta la cancella, perché non descrive più niente.
+
+L'andamento ne ricava **quanto si è mangiato davvero** (`eaten_calories` per giorno):
+il piatto per i pasti seguiti, la stima per quelli sostituiti. Ma lo dice solo dei
+giorni di cui si sa tutto (`eaten_complete`), e la media della settimana conta solo
+quelli: un totale fatto di metà pasti non è il totale del giorno, e uno zero al posto
+di un pasto non segnato sembrerebbe un digiuno. È la stessa regola del calendario
+dell'anno, dove un giorno non tracciato resta fuori. Guardie in
+`tests/test_mangiato_altro.py`.

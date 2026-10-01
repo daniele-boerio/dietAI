@@ -17,6 +17,7 @@ import {
 import { api, formatDate } from "../api";
 import { useApp } from "../App";
 import ConfirmDialog from "../components/ConfirmDialog";
+import EatenInstead from "../components/EatenInstead";
 import EmptyState from "../components/EmptyState";
 import LoadError from "../components/LoadError";
 import MealChat from "../components/MealChat";
@@ -333,6 +334,10 @@ export default function MealDetailPage() {
                         <X size={16} /> Ho mangiato altro
                       </button>
                     </div>
+
+                    {meal.is_followed === false && (
+                      <EatenInstead meal={meal} onSaved={setMeal} />
+                    )}
 
                     <div className="andata-rating spinta">
                       <span>Voto</span>

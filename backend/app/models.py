@@ -401,6 +401,9 @@ class PlannedMeal(Base):
     recurring_rule = Column(JSONType)  # {"type":"daily"} | {"type":"weekly","day":5}
     is_followed = Column(Boolean)  # NULL = non ancora tracciato
     deviation_notes = Column(Text)
+    # «Ho mangiato altro: cosa?» — calorie e macro stimati dal modello per quello che
+    # dice `deviation_notes`. NULL = nessuna stima: quel pasto resta un buco di dati.
+    eaten_nutrition = Column(JSONType)
     # "Ho mangiato altro": il piatto non è stato cucinato e la sua ricetta è finita in
     # fondo alla coda, su un giorno più avanti. La casella conserva `recipe_id` come
     # memoria di cosa c'era in programma, ma non conta più da nessuna parte — spesa,

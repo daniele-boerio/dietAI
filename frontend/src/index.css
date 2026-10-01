@@ -2761,6 +2761,40 @@ textarea {
   display: none;
 }
 
+/* «Cosa hai mangiato invece?»: una riga sola, il campo e il pulsante che stima, e
+   sotto la stima in mono — è un numero da leggere, non da confondere coi macro della
+   ricetta, che restano lì sopra per memoria. Prende tutta la riga delle azioni. */
+.day-eaten {
+  color: var(--text-muted);
+}
+
+.eaten-instead {
+  flex-basis: 100%;
+  display: grid;
+  gap: 6px;
+}
+
+.eaten-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.eaten-row input {
+  height: 40px;
+}
+
+.eaten-estimate {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.eaten-estimate span {
+  color: var(--text-muted);
+}
+
 .andata-answers {
   display: flex;
   gap: 10px;

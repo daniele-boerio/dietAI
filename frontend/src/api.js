@@ -253,6 +253,13 @@ export const api = {
       body: JSON.stringify({ is_recurring, recurring_rule }),
     }),
 
+  // «Ho mangiato altro: cosa?» — il testo e la stima del modello. Vuoto cancella.
+  setEatenInstead: (mealId, text) =>
+    request(`/planning/meals/${mealId}/eaten`, {
+      method: 'PUT',
+      body: JSON.stringify({ text }),
+    }),
+
   setFollowed: (mealId, is_followed, deviation_notes = null) =>
     request(`/planning/meals/${mealId}/followed`, {
       method: 'PUT',

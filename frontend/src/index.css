@@ -2857,6 +2857,31 @@ textarea {
   padding: 3px 0;
 }
 
+/* Sotto ogni pasto dell'editor della dieta: per quante persone e per quanti giorni.
+   Prende tutta la larghezza della riga della tabella, in piccolo. */
+.meal-editor-extra {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.meal-editor-extra label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.meal-editor-extra select {
+  width: auto;
+  height: 30px;
+  padding: 0 8px;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+}
+
 /* Il tetto della spesa: una riga sotto il livello di budget. */
 .budget-cap {
   display: flex;

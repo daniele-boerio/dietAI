@@ -140,6 +140,8 @@ export default function DietPage() {
         fat_g: Number(m.fat_g) || 0,
         notes: m.notes || null,
         auto_generate: m.auto_generate !== false,
+        servings: Number(m.servings) || 1,
+        batch_days: Number(m.batch_days) || 1,
       }));
       const updated = await api.updateDietMeals(diet.id, payload);
       setDiet(updated);
@@ -231,6 +233,10 @@ export default function DietPage() {
       addToast(`Totali bloccati a ${dailyTotals(base).calories} kcal al giorno ✓`);
     }
   };
+
+  // Persone e batch: non toccano i macro, quindi niente lucchetto né ridistribuzione.
+  const setExtra = (index, field, value) =>
+    setMeals((prev) => prev.map((m, i) => (i === index ? { ...m, [field]: value } : m)));
 
   // "Lo faccio io": DietAI smette di generarlo, ma i macro restano nel conto della
   // giornata — l'utente quel pasto lo mangia comunque, centrando i target. Da qui in
@@ -402,6 +408,43 @@ export default function DietPage() {
                   >
                     <X size={15} />
                   </button>
+
+                  {/* Come si cucina, non quanto: persone e batch non toccano i macro —
+                      la dieta è di una persona — ma la spesa e il piano sì. Una riga
+                      sotto il pasto e solo per quelli che genera DietAI: un pasto che
+                      prepari tu una ricetta da moltiplicare non ce l'ha. */}
+                  {meal.auto_generate !== false && (
+                    <div className="meal-editor-extra">
+                      <label>
+                        Per
+                        <select
+                          value={meal.servings || 1}
+                          onChange={(e) => setExtra(i, 'servings', Number(e.target.value))}
+                        >
+                          {[1, 2, 3, 4, 5, 6].map((n) => (
+                            <option key={n} value={n}>
+                              {n}
+                            </option>
+                          ))}
+                        </select>
+                        {(meal.servings || 1) === 1 ? 'persona' : 'persone'}
+                      </label>
+                      <label title="Batch cooking: lo stesso piatto, cucinato una volta, per più giorni di fila">
+                        Stesso piatto per
+                        <select
+                          value={meal.batch_days || 1}
+                          onChange={(e) => setExtra(i, 'batch_days', Number(e.target.value))}
+                        >
+                          {[1, 2, 3, 4].map((n) => (
+                            <option key={n} value={n}>
+                              {n}
+                            </option>
+                          ))}
+                        </select>
+                        {(meal.batch_days || 1) === 1 ? 'giorno' : 'giorni di fila'}
+                      </label>
+                    </div>
+                  )}
                 </div>
               ))}
 

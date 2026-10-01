@@ -66,6 +66,9 @@ class MealSlotInput(BaseModel):
     # False = lo prepara l'utente, l'AI non deve generarlo. Default True perché le
     # diete lette dal PDF non hanno questa informazione.
     auto_generate: bool = True
+    # Per quante persone si cucina, e per quanti giorni di fila lo stesso piatto.
+    servings: int = Field(default=1, ge=1, le=8)
+    batch_days: int = Field(default=1, ge=1, le=4)
 
 
 class DietMealsUpdate(BaseModel):

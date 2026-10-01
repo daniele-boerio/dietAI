@@ -73,6 +73,7 @@ export default function RecipeView({
   azioni,
   indietro,
   preferita,
+  persone = 1,
 }) {
   if (!recipe) return null;
 
@@ -156,6 +157,7 @@ export default function RecipeView({
           <div className="recipe-col">
             <div className="eyebrow">
               <UtensilsCrossed /> Ingredienti · per 1 persona
+              {persone > 1 && ` · cucini per ${persone}: moltiplica per ${persone}`}
             </div>
             <ul className="ingredient-list">
               {(recipe.ingredients || []).map((ing) => (

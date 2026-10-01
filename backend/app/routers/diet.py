@@ -68,6 +68,8 @@ def _serialize_diet(db: Session, diet: DietPlan) -> dict:
                 "fat_g": s.target_fat_g,
                 "notes": s.notes,
                 "auto_generate": s.auto_generate,
+                "servings": s.servings,
+                "batch_days": s.batch_days,
             }
             for s in slots
         ],
@@ -96,6 +98,8 @@ def _replace_meals(db: Session, diet: DietPlan, meals: list[dict]) -> None:
                 target_fat_g=float(meal.get("fat_g") or 0),
                 notes=(meal.get("notes") or None),
                 auto_generate=bool(meal.get("auto_generate", True)),
+                servings=max(1, min(8, int(meal.get("servings") or 1))),
+                batch_days=max(1, min(4, int(meal.get("batch_days") or 1))),
             )
         )
     db.flush()

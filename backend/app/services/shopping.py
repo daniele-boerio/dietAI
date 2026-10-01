@@ -26,6 +26,7 @@ from ..models import (
     BaseIngredient,
     DayPlan,
     Ingredient,
+    MealSlot,
     PantryItem,
     PlannedMeal,
     RecipeIngredient,
@@ -163,9 +164,15 @@ def meals_beyond_horizon(db: Session, user_id: int) -> int:
 
 def _aggregate_ingredients(db: Session, user_id: int) -> dict[tuple[int, str], float]:
     """Somma le quantità di tutte le ricette da comprare, per (ingrediente, unità base)."""
-    recipe_ids = [meal.recipe_id for _, meal in meals_to_buy(db, user_id)]
+    meals = meals_to_buy(db, user_id)
+    recipe_ids = [meal.recipe_id for _, meal in meals]
     if not recipe_ids:
         return {}
+    # Per quante persone si cucina ciascun pasto: la ricetta è per una, la spesa no.
+    porzioni = {
+        s.id: s.servings or 1
+        for s in db.query(MealSlot).filter(MealSlot.id.in_({m.meal_slot_id for _, m in meals}))
+    }
 
     totals: dict[tuple[int, str], float] = {}
     # Una ricetta può stare in due caselle (un piatto ripetuto): si conta ogni volta,
@@ -178,13 +185,14 @@ def _aggregate_ingredients(db: Session, user_id: int) -> dict[tuple[int, str], f
     ):
         per_recipe.setdefault(ri.recipe_id, []).append(ri)
 
-    for recipe_id in recipe_ids:
-        for ri in per_recipe.get(recipe_id, []):
+    for _, meal in meals:
+        persone = porzioni.get(meal.meal_slot_id, 1)
+        for ri in per_recipe.get(meal.recipe_id, []):
             quantity, unit = to_base(ri.quantity or 0, ri.unit)
             if quantity <= 0:
                 continue
             key = (ri.ingredient_id, unit)
-            totals[key] = totals.get(key, 0) + quantity
+            totals[key] = totals.get(key, 0) + quantity * persone
     return totals
 
 
@@ -459,7 +467,7 @@ def _pantry_of(db: Session, user_id: int, ingredient_id: int) -> PantryItem | No
 
 
 def consume_from_pantry(
-    db: Session, user_id: int, recipe_id: int | None
+    db: Session, user_id: int, recipe_id: int | None, servings: int = 1
 ) -> tuple[list[dict], list[dict]]:
     """Toglie dalla dispensa quello che la ricetta ha consumato.
 
@@ -500,6 +508,8 @@ def consume_from_pantry(
             continue
 
         needed, unit = to_base(ri.quantity or 0, ri.unit)
+        # Cucinato per più persone, dalla dispensa è uscito per tutte.
+        needed *= max(1, servings or 1)
         available, pantry_unit = to_base(pantry.quantity_available, pantry.unit or "unità")
         if needed <= 0:
             skipped.append({"name": ingredient.name, "reason": "quantita_ricetta"})

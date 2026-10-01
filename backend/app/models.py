@@ -129,6 +129,13 @@ class MealSlot(Base):
     # contano lo stesso nella giornata, perché l'utente lo mangia comunque centrando
     # i target. Senza questa seconda parte il tracking mostrerebbe un buco.
     auto_generate = Column(Boolean, nullable=False, default=True, server_default="true")
+    # Per quante persone si cucina questo pasto. La ricetta e i macro restano per una
+    # persona — sono la dieta di chi usa l'app —, la spesa e la dispensa moltiplicano.
+    servings = Column(Integer, nullable=False, default=1, server_default="1")
+    # Batch cooking: per quanti giorni di fila si mangia lo stesso piatto, cucinato una
+    # volta. 1 = ogni giorno il suo. La generazione raggruppa i giorni e chiede al
+    # modello una ricetta sola per gruppo (vedi `planner._batch_groups`).
+    batch_days = Column(Integer, nullable=False, default=1, server_default="1")
 
     __table_args__ = (
         UniqueConstraint("diet_plan_id", "order_index", name="uq_meal_slot_order"),

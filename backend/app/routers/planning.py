@@ -466,8 +466,9 @@ def set_followed(
         unskip_meal(db, meal)
         moved = {"moved_to": None}
         if meal.pantry_used is None:
+            slot = db.get(MealSlot, meal.meal_slot_id)
             pantry_used, pantry_skipped = consume_from_pantry(
-                db, user_id, meal.recipe_id
+                db, user_id, meal.recipe_id, slot.servings if slot else 1
             )
             # Niente scalato, niente da ricordare: `pantry_used` risponde a "cosa ho
             # tolto", ed è anche la guardia contro il doppio scalo. Segnarci una lista

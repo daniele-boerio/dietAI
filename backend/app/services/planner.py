@@ -1042,6 +1042,9 @@ def serialize_meal(
         },
         # "lo gestisco io": niente da generare, ma i macro contano nella giornata
         "self_managed": not slot.auto_generate,
+        # Per quante persone si cucina: la ricetta è per una, e chi la cucina per due
+        # deve leggerlo accanto agli ingredienti.
+        "servings": slot.servings or 1,
         "source": meal.source,
         # "Ho mangiato altro": la ricetta qui sotto è quella che era in programma, ma
         # non è stata cucinata — si è accodata più avanti e qui non conta più.
@@ -1223,6 +1226,64 @@ def frequency_report(db: Session, week: WeekPlan) -> list[dict]:
     return freq.report(regole, frequency_counts(db, week))
 
 
+def _batch_groups(
+    to_fill: list[tuple[DayPlan, PlannedMeal, MealSlot]],
+) -> tuple[list[tuple[DayPlan, PlannedMeal, MealSlot]], dict[int, list[int]], dict[int, str]]:
+    """Raggruppa le caselle dei pasti «cucinati una volta per più giorni».
+
+    Per ogni pasto con `batch_days` > 1, i giorni da riempire si mettono in fila e si
+    tagliano in gruppi di **giorni consecutivi** lunghi al massimo `batch_days`: un
+    buco (un giorno saltato, una casella già piena) chiude il gruppo, perché un piatto
+    cucinato lunedì per mercoledì e venerdì non è un batch, è un avanzo dimenticato.
+
+    Restituisce le caselle da chiedere al modello (la prima di ogni gruppo, e tutte
+    quelle dei pasti normali), le caselle che riceveranno la stessa ricetta
+    (`{prima: [seguenti]}`) e la nota da scrivere accanto alla prima.
+
+    La decisione la prende Python e non il modello, come il sorteggio delle cucine:
+    «ripeti lo stesso pranzo per tre giorni» scritto in un prompt è un invito a
+    variare lo stesso piatto, e la regola VARIETÀ lo vieterebbe comunque.
+    """
+    per_pasto: dict[int, list[tuple[DayPlan, PlannedMeal, MealSlot]]] = {}
+    for row in to_fill:
+        if (row[2].batch_days or 1) > 1:
+            per_pasto.setdefault(row[2].id, []).append(row)
+
+    seguaci: dict[int, list[int]] = {}
+    note: dict[int, str] = {}
+    fuori: set[int] = set()
+    for righe in per_pasto.values():
+        righe.sort(key=lambda r: r[0].day_of_week)
+        massimo = righe[0][2].batch_days
+        gruppo: list = []
+        gruppi = []
+        for r in righe:
+            if gruppo and (
+                r[0].day_of_week != gruppo[-1][0].day_of_week + 1 or len(gruppo) >= massimo
+            ):
+                gruppi.append(gruppo)
+                gruppo = []
+            gruppo.append(r)
+        if gruppo:
+            gruppi.append(gruppo)
+        for g in gruppi:
+            if len(g) < 2:
+                continue
+            capo = g[0][1].id
+            seguaci[capo] = [r[1].id for r in g[1:]]
+            fuori.update(seguaci[capo])
+            altri = [DAY_NAMES[r[0].day_of_week] for r in g[1:]]
+            note[capo] = (
+                f" — BATCH: si cucina una volta e si mangia anche {' e '.join(altri)} "
+                f"(lo stesso piatto per {len(g)} giorni): scegli un piatto che regge "
+                f"{len(g)} giorni in frigo e si riscalda bene; ingredienti per UNA "
+                f"porzione come sempre, e nel procedimento scrivi di prepararne {len(g)}"
+            )
+
+    prompt_rows = [r for r in to_fill if r[1].id not in fuori]
+    return prompt_rows, seguaci, note
+
+
 def _slot_line(slot: MealSlot) -> str:
     line = (
         f"{slot.name} — {slot.target_calories} kcal, P {slot.target_protein_g:g}g, "
@@ -1312,21 +1373,29 @@ def generate_week(
     # Le frequenze della dieta: quale proteina va in quale pranzo o cena, decise qui
     # — come la cucina — e scritte accanto alla casella. Si parte da quello che la
     # settimana ha già, cioè tutto ciò che non si sta per rifare.
+    # Batch cooking: i giorni consecutivi di un pasto «cucinato una volta» diventano un
+    # gruppo, e al modello si chiede solo la prima casella di ogni gruppo. Le altre
+    # ricevono la stessa ricetta dopo (`seguaci`). Da qui in avanti il prompt parla
+    # solo delle prime: `da_rifare` qui sopra resta su tutte, perché tutte cambiano.
+    prompt_rows, seguaci, note_batch = _batch_groups(to_fill)
+
     regole = diet_frequencies(db, user.id)
     proteine: dict[int, dict] = {}
     if regole:
         diet = get_active_diet(db, user.id)
         principali = [
-            (d.day_of_week, m.id) for d, m, s in to_fill
+            (d.day_of_week, m.id) for d, m, s in prompt_rows
             if is_main_slot(s, diet.total_daily_calories)
         ]
         gia = frequency_counts(db, week, exclude_meal_ids={m.id for _, m, _ in to_fill})
         proteine = freq.assign(regole, gia, principali)
 
     by_day: dict[int, list[str]] = {}
-    for day, meal, slot in to_fill:
+    for day, meal, slot in prompt_rows:
         by_day.setdefault(day.day_of_week, []).append(
-            _slot_line(slot) + freq.prompt_hint(proteine.get(meal.id))
+            _slot_line(slot)
+            + freq.prompt_hint(proteine.get(meal.id))
+            + note_batch.get(meal.id, "")
         )
     giorni = sorted(by_day)
 
@@ -1377,7 +1446,7 @@ def generate_week(
 
     progress = GenerationProgress(
         week.id,
-        expected_recipes=len(to_fill),
+        expected_recipes=len(prompt_rows),
         # Stesso database, connessione diversa: così il diario si committa da solo
         # senza portarsi dietro la settimana a metà che ha in mano questa sessione.
         session_factory=sessionmaker(bind=db.get_bind()),
@@ -1386,10 +1455,10 @@ def generate_week(
 
     # Budget: ~2.000 token a ricetta più il margine per il ragionamento. Sopra la
     # soglia il client passa automaticamente in streaming.
-    max_tokens = min(64000, 2000 * len(to_fill) + 6000)
+    max_tokens = min(64000, 2000 * len(prompt_rows) + 6000)
 
     if background:
-        ids = [(d.id, m.id, s.id) for d, m, s in to_fill]
+        ids = [(d.id, m.id, s.id) for d, m, s in prompt_rows]
         _in_background(
             db.get_bind(),
             f"genera-settimana-{week.id}",
@@ -1402,13 +1471,15 @@ def generate_week(
                 prompt=prompt,
                 max_tokens=max_tokens,
                 progress=progress,
+                followers=seguaci,
             ),
         )
         return {"status": "started", "expected": len(to_fill)}
 
     return _run_generation(
-        db, user, week, to_fill,
+        db, user, week, prompt_rows,
         client=client, prompt=prompt, max_tokens=max_tokens, progress=progress,
+        followers=seguaci,
     )
 
 
@@ -1462,6 +1533,7 @@ def _run_generation(
     prompt: str,
     max_tokens: int,
     progress,
+    followers: dict[int, list[int]] | None = None,
 ) -> dict:
     """La chiamata al modello e la scrittura del piano: la parte che dura minuti."""
     try:
@@ -1475,7 +1547,9 @@ def _run_generation(
         # Anche l'applicazione della risposta sta dentro il try: una risposta parsabile
         # ma di forma sbagliata sollevava fuori di qui, e lasciava la settimana
         # bloccata su "sto generando" fino allo scadere del quarto d'ora.
-        return _apply_generated_week(db, user, week, data, to_fill, client=client)
+        return _apply_generated_week(
+            db, user, week, data, to_fill, client=client, followers=followers
+        )
     except Exception as exc:
         # Il log è l'unico posto dove questo messaggio arriva per davvero: la risposta
         # HTTP viene scritta su una connessione che il proxy ha chiuso da minuti, e
@@ -1495,6 +1569,7 @@ def _apply_generated_week(
     to_fill: list[tuple[DayPlan, PlannedMeal, MealSlot]],
     *,
     client=None,
+    followers: dict[int, list[int]] | None = None,
 ) -> dict:
     """Scrive nel piano le ricette uscite dal modello."""
     if not isinstance(data, dict) or not isinstance(data.get("days"), list):
@@ -1548,6 +1623,14 @@ def _apply_generated_week(
             meal.source = "ai_generated"
             meal.is_followed = None
             filled += 1
+            # Il batch: la stessa ricetta nei giorni dopo, cucinata una volta sola.
+            for seguace_id in (followers or {}).get(meal.id, []):
+                seguace = db.get(PlannedMeal, seguace_id)
+                seguace.recipe_id = recipe.id
+                seguace.source = "ai_generated"
+                seguace.is_followed = None
+                forget_queued_meal(db, seguace)
+                filled += 1
 
     week.generation_started_at = None
     clear_generation_progress(db, week)

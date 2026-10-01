@@ -138,6 +138,7 @@ REGOLE DI GENERAZIONE (in ordine di importanza)
 7. QUANTITÀ: sempre per una persona, in unità di misura pesabili (g, ml, unità). Niente "q.b." per gli ingredienti che finiscono in lista della spesa.
 8. PASTI FISSI: quelli marcati come già assegnati non vanno generati — saltali del tutto.
 9. PROTEINE: se accanto a un pasto in "DA GENERARE" c'è "PROTEINA: <gruppo>", la fonte proteica principale di quel piatto è di quel gruppo (pesce, legumi, carne bianca, carne rossa, salumi, uova, formaggi) — è la frequenza settimanale della dieta, già distribuita sui giorni. "PROTEINA: libera, ma non <gruppi>" vuol dire che quei gruppi hanno già raggiunto il massimo della settimana: non usarli come ingrediente principale di quel piatto.
+10. BATCH: un pasto con "BATCH" accanto si cucina una volta per più giorni. Scegli un piatto che si conserva e si riscalda bene (stufati, zuppe, legumi, cereali con verdure, polpette al sugo), non uno che il giorno dopo è rovinato (fritture, pesce crudo, insalate condite). Le grammature restano per UNA porzione: gli altri giorni li conta l'app.
 
 FORMATO OUTPUT (JSON rigoroso, nessun testo aggiuntivo):
 {

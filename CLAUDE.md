@@ -167,6 +167,9 @@ paragrafo nel documento, scrivendo anche cosa non andava con la versione di prim
 - «Lo faccio io» (`auto_generate=False`): mai generato, mai in spesa, ma i macro
   **contano**. I pasti fissi (`_is_fixed`) non si rigenerano; togliere il fisso svuota
   le copie future (`stop_recurring_forward`).
+- Per pasto: `servings` (per quante persone: moltiplica spesa e dispensa, mai ricetta e
+  macro) e `batch_days` (stesso piatto per N giorni consecutivi: Python fa i gruppi, il
+  modello genera la prima casella, le altre ricevono la stessa ricetta).
 - Lo stesso piatto è una ricetta sola (`find_twin`); chi modifica da un pasto stacca
   prima una copia (`fork_recipe_for_meal`) e poi si riaccorpa (`settle_recipe`).
 

@@ -279,6 +279,7 @@ export default function MealDetailPage() {
               <RecipeView
                 recipe={meal.recipe}
                 target={meal.target}
+                persone={meal.servings}
                 onSubstitute={frozen ? null : substitute}
                 substituting={substituting}
                 eyebrow={`${meal.slot_name} di ${meal.day_name.toLowerCase()} ${formatDate(

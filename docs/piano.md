@@ -157,3 +157,30 @@ poi il voto più alto, poi la più vecchia), ci sposta le caselle del piano e ca
 gemelle. Va lanciato **dopo** la migrazione, mai prima: è la migrazione a leggere le
 `recipe_id` ancora tutte diverse. Guardie in `tests/test_ricette_doppie.py`, dove il
 modello finto propone lo stesso piatto tutti i giorni — come fa chiunque a colazione.
+
+**Cucinare per più persone, e una volta per più giorni.** La dieta è di una persona,
+ma in cucina spesso non si è soli e non sempre si cucina ogni giorno. Sono due
+impostazioni del pasto, accanto a «lo faccio io», nell'editor della dieta.
+
+`MealSlot.servings` dice per quante persone si cucina. La ricetta e i macro **restano
+per una**: sono la dieta di chi usa l'app, e moltiplicarli vorrebbe dire sbagliare il
+totale del giorno. A moltiplicare sono la spesa (`_aggregate_ingredients`, ricetta per
+ricetta) e la dispensa quando si segna «l'ho seguito» (`consume_from_pantry(...,
+servings)`): dal frigo è uscito per tutti. Il foglio della ricetta lo scrive accanto agli
+ingredienti, perché chi cucina per due deve leggerlo lì.
+
+`MealSlot.batch_days` dice per quanti giorni di fila si mangia lo stesso piatto,
+cucinato una volta. La generazione mette in fila i giorni da riempire di quel pasto e li
+taglia in **gruppi di giorni consecutivi** (`_batch_groups`): un buco — un giorno
+saltato, una casella già piena — chiude il gruppo, perché un piatto cucinato lunedì per
+mercoledì non è un batch, è un avanzo dimenticato. Al modello si chiede solo la prima
+casella di ogni gruppo, con la nota «BATCH» (regola 10: un piatto che regge in frigo e
+si riscalda, grammature sempre per una porzione); le altre ricevono la stessa ricetta
+dopo, ed è la ricetta condivisa di sempre — modificare un giorno ne stacca una copia. È
+la stessa scelta del sorteggio delle cucine: «ripeti lo stesso pranzo per tre giorni»
+scritto in un prompt è un invito a variarlo, e la regola VARIETÀ lo vieterebbe comunque.
+
+Un limite noto: le frequenze settimanali si assegnano sulle sole prime caselle dei
+gruppi, quindi un batch di pesce da tre giorni conta per l'assegnazione come una volta
+sola. Il resoconto dopo la generazione invece conta il piano vero, e lo dice. Guardie in
+`tests/test_porzioni_batch.py`.

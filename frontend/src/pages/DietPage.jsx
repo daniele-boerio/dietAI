@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { api, formatNumber } from '../api';
 import { useApp } from '../App';
+import FrequenciesCard from '../components/FrequenciesCard';
 import Questionnaire from '../components/Questionnaire';
 import {
   addMeal,
@@ -436,6 +437,8 @@ export default function DietPage() {
             </div>
 
             <aside className="page-aside">
+            <FrequenciesCard diet={diet} onSaved={setDiet} />
+
             <DietRulesCard />
 
             <QuestionnaireCard
@@ -606,8 +609,8 @@ function DietRulesCard() {
       <p className="field-hint" style={{ marginBottom: 12 }}>
         Scrivile come le diresti a voce: qui non servono caselle, dall'altra parte c'è
         un modello che legge l'italiano. È il posto per tutto ciò che non è un singolo
-        ingrediente da escludere — quante volte a settimana vuoi un alimento, cosa
-        preferisci la sera, abitudini che si ripetono.
+        ingrediente da escludere né una frequenza qui sopra — cosa preferisci la sera,
+        abitudini che si ripetono, un alimento preciso che vuoi più spesso.
       </p>
 
       <textarea

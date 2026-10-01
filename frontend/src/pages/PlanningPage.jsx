@@ -522,6 +522,31 @@ export default function PlanningPage() {
         </div>
       )}
 
+      {/* Le frequenze della dieta contro quello che la settimana ha davvero. Le conta il
+          server sul piano com'è adesso — rigenerare un pasto o scambiarlo le aggiorna —
+          e non sul prompt: il modello può aver ignorato un'assegnazione, e questa riga
+          è il posto dove lo si vede. */}
+      {!busy && week.frequencies?.length > 0 && (
+        <div className="freq-strip" aria-label="Frequenze settimanali della dieta">
+          {week.frequencies.map((f) => (
+            <span
+              key={f.food}
+              className={`freq-pill ${f.status}`}
+              title={
+                f.status === 'sotto'
+                  ? `Ne servono almeno ${f.min}`
+                  : f.status === 'sopra'
+                    ? `Al massimo ${f.max}`
+                    : 'Come chiede la dieta'
+              }
+            >
+              {f.label} {f.count}/{soglia(f)}
+              {f.status === 'ok' ? ' ✓' : ''}
+            </span>
+          ))}
+        </div>
+      )}
+
       {skipped.length > 0 && (
         <div className="notice notice-skip">
           <CalendarOff />
@@ -606,4 +631,11 @@ export default function PlanningPage() {
 
     </>
   );
+}
+
+// «2–3», «≥3», «≤1»: quante volte chiede la dieta, scritto come lo si leggerebbe.
+function soglia({ min, max }) {
+  if (max == null) return `≥${min}`;
+  if (min === 0) return `≤${max}`;
+  return min === max ? `${min}` : `${min}–${max}`;
 }

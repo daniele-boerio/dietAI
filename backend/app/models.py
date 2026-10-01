@@ -97,6 +97,9 @@ class DietPlan(Base):
     parsed_data = Column(JSONType, nullable=False)
     total_daily_calories = Column(Integer, nullable=False)
     notes = Column(Text)
+    # Le frequenze settimanali per gruppo di alimenti: [{"food": "pesce", "min": 2,
+    # "max": 3}, ...], chiavi di `utils/frequencies.FOODS`. NULL/[] = nessun vincolo.
+    frequencies = Column(JSONType)
     # Una sola dieta attiva per utente: caricarne una nuova disattiva la precedente
     # invece di cancellarla, così lo storico dei piani resta leggibile.
     is_active = Column(Boolean, nullable=False, default=True, server_default="true")

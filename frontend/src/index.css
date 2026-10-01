@@ -4074,6 +4074,85 @@ textarea:focus {
    È la stessa forma in due momenti: la riga che si aggiunge (`.aggiungi`, col
    pulsante largo in coda) e quella che si corregge (i due quadrati ✓ ✗).
    ─────────────────────────────────────────────────────────────── */
+/* Le frequenze della dieta: una riga per gruppo, il nome e i due numeri. Stessa
+   forma bassa delle righe della dispensa, perché sono campi da toccare uno per uno. */
+.freq-list {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.freq-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 64px 64px auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.freq-head span {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.freq-name {
+  font-size: 0.92rem;
+}
+
+.freq-row input {
+  width: 100%;
+  min-width: 0;
+  height: 38px;
+  padding: 0 10px;
+  border-radius: 12px;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+
+.freq-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.freq-actions select {
+  flex: 1 1 180px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 12px;
+}
+
+/* Nella settimana: quante volte c'è ogni gruppo, contro quante ne chiede la dieta.
+   Una riga di pastiglie, perché si legge a colpo d'occhio e poi non serve più. */
+.freq-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 14px;
+}
+
+.freq-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  color: var(--text-secondary);
+}
+
+.freq-pill.sotto,
+.freq-pill.sopra {
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
 .pantry-edit {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 110px 88px auto auto;

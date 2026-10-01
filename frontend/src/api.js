@@ -121,6 +121,15 @@ export const api = {
 
   deleteUser: (id) => request(`/admin/users/${id}`, { method: 'DELETE' }),
 
+  // Le frequenze settimanali per gruppo di alimenti («pesce 2-3 volte»), e il catalogo
+  // dei gruppi con le frequenze consigliate.
+  getFrequencyOptions: () => request('/diet/frequencies/options'),
+  updateDietFrequencies: (dietId, frequencies) =>
+    request(`/diet/${dietId}/frequencies`, {
+      method: 'PUT',
+      body: JSON.stringify({ frequencies }),
+    }),
+
   updateDietMeals: (dietId, meals) =>
     request(`/diet/${dietId}/meals`, { method: 'PUT', body: JSON.stringify({ meals }) }),
 

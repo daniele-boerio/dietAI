@@ -44,6 +44,9 @@ FORMATO OUTPUT (JSON rigoroso, nessun testo aggiuntivo):
       "fat_g": <float>,
       "notes": "<note specifiche del pasto, stringa vuota se assenti>"
     }
+  ],
+  "frequencies": [
+    {"food": "<pesce|legumi|carne_bianca|carne_rossa|salumi|uova|formaggi>", "min": <int>, "max": <int o null>}
   ]
 }
 
@@ -57,6 +60,10 @@ REGOLE:
   "una porzione di frutta a merenda"), riportali nelle note del pasto.
 - Se la dieta prevede giorni diversi tra loro, estrai la struttura del giorno tipo e
   segnala la variabilità in "notes".
+- "frequencies": le frequenze SETTIMANALI per gruppo di alimenti, se il documento le
+  indica ("pesce 2-3 volte a settimana", "carne rossa max 1 volta", "legumi almeno 3
+  volte"). Solo i sette gruppi elencati; "max" null se c'è solo un minimo, "min" 0 se
+  c'è solo un massimo. Se il documento non ne parla, lista vuota: non inventarle.
 - Rispondi ESCLUSIVAMENTE con il JSON: niente markdown, niente backtick, niente spiegazioni."""
 
 DIET_PARSE_PROMPT = (
@@ -130,6 +137,7 @@ REGOLE DI GENERAZIONE (in ordine di importanza)
 6. REALISMO: ricette che una persona cucina davvero in casa, con una base (verdura, carne, pesce, cereali) da supermercato italiano — anche quando la cucina richiesta è straniera. Fanno eccezione i condimenti che quella cucina identificano: salse, paste, aceti e oli si chiamano col loro nome, come dice il contesto, e non si sostituiscono l'uno con l'altro. Rispetta il tempo massimo di preparazione.
 7. QUANTITÀ: sempre per una persona, in unità di misura pesabili (g, ml, unità). Niente "q.b." per gli ingredienti che finiscono in lista della spesa.
 8. PASTI FISSI: quelli marcati come già assegnati non vanno generati — saltali del tutto.
+9. PROTEINE: se accanto a un pasto in "DA GENERARE" c'è "PROTEINA: <gruppo>", la fonte proteica principale di quel piatto è di quel gruppo (pesce, legumi, carne bianca, carne rossa, salumi, uova, formaggi) — è la frequenza settimanale della dieta, già distribuita sui giorni. "PROTEINA: libera, ma non <gruppi>" vuol dire che quei gruppi hanno già raggiunto il massimo della settimana: non usarli come ingrediente principale di quel piatto.
 
 FORMATO OUTPUT (JSON rigoroso, nessun testo aggiuntivo):
 {
@@ -189,7 +197,7 @@ PASTO DA GENERARE
 Ricetta attuale da sostituire (NON riproporla né variarla): {previous_recipe}
 Altre ricette già presenti in settimana (evita ripetizioni): {week_recipes}
 Ingredienti già acquistati per la settimana (riutilizzali se ha senso): {partial_ingredients}
-{user_request}
+{frequencies}{user_request}
 
 Genera la ricetta."""
 

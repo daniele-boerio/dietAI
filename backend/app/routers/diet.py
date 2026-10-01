@@ -10,11 +10,12 @@ from ..auth import get_current_user
 from ..database import get_db
 from ..models import DietPlan, MealSlot, User
 from ..rate_limit import AI_LIMIT, limiter
-from ..schemas import DietMealsUpdate, QuestionnaireRequest
+from ..schemas import DietFrequenciesUpdate, DietMealsUpdate, QuestionnaireRequest
 from ..services import prompts
 from ..services.ai_client import AIError, get_client
 from ..services.pdf import extract_text, looks_scanned
 from ..services.planner import get_active_diet, meal_slots_of
+from ..utils import frequencies as freq
 from ..utils import nutrition
 
 logger = logging.getLogger(__name__)
@@ -22,6 +23,22 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/diet", tags=["Dieta"])
 
 MAX_PDF_BYTES = 10 * 1024 * 1024  # 10 MB: un piano alimentare non pesa di più
+
+
+def _deactivate_previous(db: Session, user_id: int) -> list[dict]:
+    """Archivia la dieta attiva e restituisce le sue frequenze settimanali.
+
+    Le frequenze passano alla dieta nuova quando quella non ne porta di sue: chi
+    ricalcola i macro dal questionario perché è cambiato il peso non ha cambiato idea
+    sul pesce due volte a settimana, e perderle a ogni ricalcolo vorrebbe dire
+    riscriverle ogni volta.
+    """
+    attiva = get_active_diet(db, user_id)
+    precedenti = freq.clean(attiva.frequencies) if attiva else []
+    db.query(DietPlan).filter(
+        DietPlan.user_id == user_id, DietPlan.is_active.is_(True)
+    ).update({"is_active": False})
+    return precedenti
 
 
 def _serialize_diet(db: Session, diet: DietPlan) -> dict:
@@ -37,6 +54,7 @@ def _serialize_diet(db: Session, diet: DietPlan) -> dict:
         # il peso cambia, e ricalcolare deve costare tre secondi, non riscrivere tutto.
         "source": data.get("source") or ("pdf" if diet.filename else "manuale"),
         "profile": data.get("profile"),
+        "frequencies": freq.clean(diet.frequencies),
         "created_at": diet.created_at.isoformat() if diet.created_at else None,
         "meals": [
             {
@@ -143,9 +161,7 @@ def upload_diet(
     daily = int(data.get("daily_calories") or sum(int(m.get("calories") or 0) for m in meals))
 
     # Una sola dieta attiva: la precedente resta in archivio, disattivata.
-    db.query(DietPlan).filter(
-        DietPlan.user_id == user.id, DietPlan.is_active.is_(True)
-    ).update({"is_active": False})
+    precedenti = _deactivate_previous(db, user.id)
 
     diet = DietPlan(
         user_id=user.id,
@@ -153,6 +169,8 @@ def upload_diet(
         parsed_data=data,
         total_daily_calories=daily,
         notes=(data.get("notes") or None),
+        # Le frequenze lette dal PDF; se il PDF non ne parla, quelle che c'erano.
+        frequencies=freq.clean(data.get("frequencies")) or precedenti,
         is_active=True,
     )
     db.add(diet)
@@ -173,15 +191,14 @@ def create_diet_manually(
     """Crea la dieta a mano, senza PDF (o quando il parsing non ha funzionato)."""
     meals = [m.model_dump() for m in body.meals]
 
-    db.query(DietPlan).filter(
-        DietPlan.user_id == user.id, DietPlan.is_active.is_(True)
-    ).update({"is_active": False})
+    precedenti = _deactivate_previous(db, user.id)
 
     diet = DietPlan(
         user_id=user.id,
         filename=None,
         parsed_data={"meals": meals, "source": "manuale"},
         total_daily_calories=sum(m["calories"] for m in meals),
+        frequencies=precedenti,
         is_active=True,
     )
     db.add(diet)
@@ -251,9 +268,7 @@ def create_diet_from_questionnaire(
     """
     computed = _compute(body)
 
-    db.query(DietPlan).filter(
-        DietPlan.user_id == user.id, DietPlan.is_active.is_(True)
-    ).update({"is_active": False})
+    precedenti = _deactivate_previous(db, user.id)
 
     # I pasti effettivi finiscono nel profilo anche quando la richiesta diceva solo
     # quanti erano: riaprendo il questionario le caselle sono già quelle di prima.
@@ -273,6 +288,7 @@ def create_diet_from_questionnaire(
             "meals": computed["meals"],
         },
         total_daily_calories=computed["daily_calories"],
+        frequencies=precedenti,
         notes=(
             f"Calcolata dal questionario: metabolismo basale {computed['bmr']} kcal, "
             f"fabbisogno {computed['tdee']} kcal, obiettivo «{body.goal}»."
@@ -296,6 +312,35 @@ def create_diet_from_questionnaire(
         computed["daily_calories"],
         len(computed["meals"]),
     )
+    return _serialize_diet(db, diet)
+
+
+@router.get("/frequencies/options")
+def frequency_options(_user: User = Depends(get_current_user)):
+    """I gruppi di alimenti e le frequenze consigliate (linee guida CREA)."""
+    return freq.options()
+
+
+@router.put("/{diet_id}/frequencies")
+def update_frequencies(
+    diet_id: int,
+    body: DietFrequenciesUpdate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Le frequenze settimanali della dieta, scritte o corrette a mano."""
+    diet = (
+        db.query(DietPlan)
+        .filter(DietPlan.id == diet_id, DietPlan.user_id == user.id)
+        .first()
+    )
+    if not diet:
+        raise HTTPException(404, "Dieta non trovata")
+    sconosciuti = [f.food for f in body.frequencies if f.food not in freq.FOODS]
+    if sconosciuti:
+        raise HTTPException(400, f"Gruppo di alimenti non valido: {', '.join(sconosciuti)}")
+    diet.frequencies = freq.clean([f.model_dump() for f in body.frequencies])
+    db.commit()
     return _serialize_diet(db, diet)
 
 

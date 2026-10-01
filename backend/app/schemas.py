@@ -296,3 +296,13 @@ class PaidPriceRequest(BaseModel):
     """Quanto è costato, in euro, per la quantità presa. None = torna al catalogo."""
 
     paid: float | None = Field(default=None, gt=0, le=10000)
+
+
+class DietFrequency(BaseModel):
+    food: str = Field(max_length=40)
+    min: int = Field(default=0, ge=0, le=21)
+    max: int | None = Field(default=None, ge=0, le=21)
+
+
+class DietFrequenciesUpdate(BaseModel):
+    frequencies: list[DietFrequency] = Field(default_factory=list, max_length=20)

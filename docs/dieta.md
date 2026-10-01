@@ -77,3 +77,36 @@ salvare. L'unico posto dove i totali forzati arrivano al server è il questionar
 li accetta come `targets` e ci divide sopra i pasti: lì i pavimenti della formula (mai
 sotto il metabolismo basale) **non si applicano**, perché difendono un calcolo
 automatico, non discutono i numeri di chi li sta scrivendo a mano.
+
+**Le frequenze settimanali sono un dato della dieta, non una regola a parole.** «Pesce
+2-3 volte, carne rossa al massimo una»: le diete dei nutrizionisti sono scritte così,
+e fin qui il vincolo poteva vivere solo nelle regole libere, cioè in un prompt che il
+modello leggeva in fondo a venti righe — un auspicio, come lo era «alterna le cucine».
+Ora `DietPlan.frequencies` tiene una riga per gruppo (`utils/frequencies.FOODS`: pesce,
+legumi, carne bianca, carne rossa, salumi, uova, formaggi — un catalogo chiuso per la
+stessa ragione delle cucine) con minimo e massimo, e Python fa due cose.
+
+Prima della chiamata, `freq.assign` decide quale proteina va in quale **pasto
+principale** da generare e lo scrive accanto alla casella in «DA GENERARE» (`PROTEINA:
+Pesce`), partendo da quello che la settimana ha già. Prima i minimi che mancano —
+sparpagliati: mai due nello stesso giorno, il più lontano possibile, la stessa idea del
+sorteggio delle cucine —, poi le caselle libere, che portano il divieto dei gruppi già
+al massimo (`PROTEINA: libera, ma non carne rossa`). Un pasto è principale se porta
+almeno un quarto delle calorie del giorno (`is_main_slot`): i nomi li sceglie il
+nutrizionista, il peso no. La rigenerazione di un pasto non assegna niente — si rifà un
+piatto, non si pianifica la settimana — ma dice cosa manca e cosa è già al massimo;
+con una richiesta dell'utente tace, perché comanda lei.
+
+Dopo, `frequency_report` conta cosa c'è **davvero** nel piano e `serialize_week` lo
+espone: la settimana lo mostra in una riga di pastiglie, in giallo quello che non torna.
+Il conto è sul piano e non sul prompt, perché il modello può ignorare un'assegnazione,
+e questa riga è dove lo si vede. Conta come «una volta» un piatto che di quel gruppo ha
+una porzione vera (`SOGLIA_G`): il cucchiaio di parmigiano non è la porzione di
+formaggi, l'acciuga nel sugo non è il pesce.
+
+Le frequenze arrivano dal PDF (il prompt di lettura le chiede, e dice di non
+inventarle), si correggono dalla pagina della dieta e, per chi non ha una dieta
+scritta, ci sono quelle delle linee guida CREA a un clic — proposte, mai imposte. Una
+dieta nuova senza frequenze sue **eredita quelle della precedente**
+(`_deactivate_previous`): chi ricalcola i macro dal questionario perché è cambiato il
+peso non ha cambiato idea sul pesce. Guardie in `tests/test_frequenze.py`.

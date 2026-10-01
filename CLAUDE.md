@@ -81,6 +81,7 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
 │           ├── seasonality.py  # stagionalità prodotti italiani
 │           ├── nutrition.py    # questionario → calorie e macro (Mifflin-St Jeor)
 │           ├── pricing.py      # catalogo ingredienti: categoria + prezzo medio
+│           ├── frequencies.py  # frequenze settimanali per gruppo: assegnazione e conto
 │           └── composition.py  # composizione per 100 g degli alimenti del catalogo
 └── frontend/src/
     ├── App.jsx                 # layout, routing, gate onboarding, AppContext (toast)
@@ -146,6 +147,10 @@ paragrafo nel documento, scrivendo anche cosa non andava con la versione di prim
   grande): la somma è esattamente il totale.
 - Col lucchetto chiuso il totale del giorno è invariante e le modifiche si
   ridistribuiscono, saltando i pasti «lo faccio io». Il riallineamento aspetta il blur.
+- Le frequenze settimanali («pesce 2-3 volte») stanno su `DietPlan.frequencies`, gruppi
+  di `utils/frequencies.FOODS`. Python assegna le proteine ai pasti principali prima di
+  chiamare il modello (`freq.assign`) e conta dopo cosa c'è davvero
+  (`frequency_report`). Una dieta nuova senza frequenze eredita quelle di prima.
 
 **Piano** (`docs/piano.md`)
 - La settimana esiste sempre: aprirla crea le caselle (in avanti). Una settimana

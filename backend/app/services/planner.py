@@ -32,6 +32,7 @@ from ..models import (
     WeekPlan,
 )
 from ..utils import cuisines
+from ..utils import frequencies as freq
 from ..utils.seasonality import current_month, current_month_name, in_season
 from ..utils.units import format_quantity
 from . import prompts
@@ -1097,6 +1098,7 @@ def serialize_week(db: Session, week: WeekPlan) -> dict:
         # E qui trova com'è finita, se è finita male: la risposta alla POST che
         # l'avrebbe detto è quasi sempre già stata buttata via da un proxy.
         "generation_error": generation_error(week),
+        "frequencies": frequency_report(db, week) if week.id else [],
         "meals_total": total_slots,
         "meals_filled": filled,
         "meals_self_managed": self_managed,
@@ -1106,6 +1108,74 @@ def serialize_week(db: Session, week: WeekPlan) -> dict:
 
 
 # ── Generazione ────────────────────────────────────────────────────────────────
+
+
+# ── Frequenze settimanali ──────────────────────────────────────────────────────
+
+
+def is_main_slot(slot: MealSlot, daily_calories: int | None) -> bool:
+    """Pranzo e cena, non colazione e spuntini: il pasto che porta la proteina.
+
+    Lo si riconosce dal peso e non dal nome — «Pranzo», «Pasto 2», «Lunch» — perché i
+    nomi li scrive il nutrizionista: un pasto principale porta almeno un quarto delle
+    calorie del giorno.
+    """
+    if not daily_calories:
+        return False
+    return (slot.target_calories or 0) >= 0.25 * daily_calories
+
+
+def diet_frequencies(db: Session, user_id: int) -> list[dict]:
+    diet = get_active_diet(db, user_id)
+    return freq.clean(diet.frequencies) if diet else []
+
+
+def _foods_in_recipe(db: Session, recipe_id: int) -> set[str]:
+    """I gruppi di cui un piatto contiene una porzione vera (`freq.SOGLIA_G`)."""
+    from .macros import grams_of
+
+    gruppi = set()
+    rows = (
+        db.query(RecipeIngredient, Ingredient)
+        .join(Ingredient, Ingredient.id == RecipeIngredient.ingredient_id)
+        .filter(RecipeIngredient.recipe_id == recipe_id)
+        .all()
+    )
+    for ri, ing in rows:
+        food = freq.food_of(ing.category, ing.name)
+        if not food:
+            continue
+        grams = grams_of(ing, ri.quantity, ri.unit)
+        # Contato a pezzi senza un peso noto: un pezzo intero (un uovo, una scatoletta)
+        # è una porzione.
+        if grams is None or grams >= freq.SOGLIA_G[food]:
+            gruppi.add(food)
+    return gruppi
+
+
+def frequency_counts(
+    db: Session, week: WeekPlan, *, exclude_meal_ids: set[int] | None = None
+) -> dict[str, int]:
+    """Quante volte ogni gruppo compare nella settimana, un pasto alla volta.
+
+    Contano i pasti con una ricetta, non saltati, su giorni non saltati: le stesse
+    caselle che contano nei totali del giorno.
+    """
+    escludi = exclude_meal_ids or set()
+    counts: dict[str, int] = {}
+    for day, meal, _slot in week_meals(db, week):
+        if day.is_skipped or meal.is_skipped or not meal.recipe_id or meal.id in escludi:
+            continue
+        for food in _foods_in_recipe(db, meal.recipe_id):
+            counts[food] = counts.get(food, 0) + 1
+    return counts
+
+
+def frequency_report(db: Session, week: WeekPlan) -> list[dict]:
+    regole = diet_frequencies(db, week.user_id)
+    if not regole:
+        return []
+    return freq.report(regole, frequency_counts(db, week))
 
 
 def _slot_line(slot: MealSlot) -> str:
@@ -1194,9 +1264,25 @@ def generate_week(
     da_rifare = {m.id for _, m, _ in to_fill}
     fixed = [(d, m, s) for d, m, s in rows if m.recipe_id and m.id not in da_rifare]
 
+    # Le frequenze della dieta: quale proteina va in quale pranzo o cena, decise qui
+    # — come la cucina — e scritte accanto alla casella. Si parte da quello che la
+    # settimana ha già, cioè tutto ciò che non si sta per rifare.
+    regole = diet_frequencies(db, user.id)
+    proteine: dict[int, dict] = {}
+    if regole:
+        diet = get_active_diet(db, user.id)
+        principali = [
+            (d.day_of_week, m.id) for d, m, s in to_fill
+            if is_main_slot(s, diet.total_daily_calories)
+        ]
+        gia = frequency_counts(db, week, exclude_meal_ids={m.id for _, m, _ in to_fill})
+        proteine = freq.assign(regole, gia, principali)
+
     by_day: dict[int, list[str]] = {}
-    for day, _meal, slot in to_fill:
-        by_day.setdefault(day.day_of_week, []).append(_slot_line(slot))
+    for day, meal, slot in to_fill:
+        by_day.setdefault(day.day_of_week, []).append(
+            _slot_line(slot) + freq.prompt_hint(proteine.get(meal.id))
+        )
     giorni = sorted(by_day)
 
     # Il sorteggio: una cucina per giorno, estratta qui e scritta **accanto al
@@ -1448,6 +1534,33 @@ def _apply_generated_week(
     }
 
 
+def _single_meal_frequencies(
+    db: Session, user: User, week: WeekPlan, meal: PlannedMeal, slot: MealSlot
+) -> str:
+    """La riga delle frequenze per un pasto rigenerato da solo.
+
+    Non si assegna un gruppo — si sta rifacendo un piatto, non pianificando la
+    settimana — ma si dice cosa manca e cosa è già al massimo, senza contare il piatto
+    che si sta buttando. Con una richiesta dell'utente non si scrive niente: comanda lei.
+    """
+    regole = diet_frequencies(db, user.id)
+    diet = get_active_diet(db, user.id)
+    if not regole or not diet or not is_main_slot(slot, diet.total_daily_calories):
+        return ""
+    righe = freq.report(regole, frequency_counts(db, week, exclude_meal_ids={meal.id}))
+    mancano = [r["label"].lower() for r in righe if r["status"] == "sotto"]
+    pieni = [
+        r["label"].lower() for r in righe
+        if r["max"] is not None and r["count"] >= r["max"]
+    ]
+    parti = []
+    if mancano:
+        parti.append("mancano ancora in settimana: " + ", ".join(mancano) + " — preferiscili")
+    if pieni:
+        parti.append("già al massimo della settimana, da non usare: " + ", ".join(pieni))
+    return ("FREQUENZE DELLA DIETA: " + "; ".join(parti) + "\n") if parti else ""
+
+
 def _partial_ingredients(
     db: Session, week: WeekPlan, exclude_meal_id: int
 ) -> list[str]:
@@ -1533,6 +1646,9 @@ def regenerate_meal(
         partial_ingredients=_fmt_list(
             _partial_ingredients(db, week, meal.id), "nessuno"
         ),
+        frequencies=_single_meal_frequencies(db, user, week, meal, slot)
+        if not user_request
+        else "",
         user_request=(
             "\nRICHIESTA DELL'UTENTE (ha la precedenza sulle regole di varietà qui "
             f"sopra): {user_request}\n"

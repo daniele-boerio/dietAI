@@ -2599,6 +2599,14 @@ textarea {
   margin-top: 16px;
 }
 
+.nutrition-source {
+  margin: 6px 0 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
 .nutrition-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

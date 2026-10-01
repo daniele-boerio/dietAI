@@ -58,6 +58,12 @@ function passi(testo) {
  *  - `indietro`: il tondo in alto a sinistra sulla fascia del piatto
  *  - `preferita`: il tondo in alto a destra, sulla stessa fascia
  */
+const NUMERI_DA = {
+  calcolata: 'Macro calcolati dagli ingredienti',
+  dichiarata: 'Macro stimati dal modello: un ingrediente non ha valori nutrizionali',
+  utente: 'Macro scritti da te',
+}
+
 export default function RecipeView({
   recipe,
   target,
@@ -133,6 +139,14 @@ export default function RecipeView({
         </div>
 
         <MacroBar protein={recipe.protein_g} carbs={recipe.carbs_g} fat={recipe.fat_g} />
+
+        {/* Da dove vengono i numeri qui sopra. Calcolati vuol dire sommati dagli
+            ingredienti; dichiarati vuol dire che un ingrediente non aveva composizione
+            e sono quelli che ha scritto il modello — e allora va detto, perché
+            sembrano uguali. */}
+        {NUMERI_DA[recipe.nutrition_source] && (
+          <p className="nutrition-source">{NUMERI_DA[recipe.nutrition_source]}</p>
+        )}
 
         {/* Ingredienti e procedimento sono due colonne dello stesso foglio, non due
             riquadri impilati: si leggono insieme — «quanto farro» mentre si è al passo

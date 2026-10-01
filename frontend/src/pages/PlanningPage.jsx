@@ -244,12 +244,18 @@ export default function PlanningPage() {
     try {
       const data = await api.generateWeek(week.id, selezione);
       setWeek(data);
-      const { filled, missing } = data.generation || {};
-      addToast(
-        missing
-          ? `Generati ${filled} pasti (${missing} non riusciti, riprova)`
-          : `${filled} ricette pronte ✓`
-      );
+      // Di norma il server risponde subito (202) e il lavoro va avanti per conto suo:
+      // la settimana arriva con `is_generating` acceso, il polling qui sopra la segue
+      // e l'esito lo annuncia lui. Il resoconto con i conti c'è solo quando il server
+      // ha aspettato il modello — un'istanza configurata in primo piano.
+      if (!data.is_generating) {
+        const { filled, missing } = data.generation || {};
+        addToast(
+          missing
+            ? `Generati ${filled} pasti (${missing} non riusciti, riprova)`
+            : `${filled} ricette pronte ✓`
+        );
+      }
     } catch (e) {
       // La richiesta può morire molto prima della generazione: dura minuti, e davanti
       // c'è un proxy che chiude (nginx a 300s, Cloudflare a 100s). Un errore qui non

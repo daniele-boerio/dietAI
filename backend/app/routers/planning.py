@@ -3,7 +3,7 @@
 import logging
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user, get_current_user_id
@@ -18,6 +18,7 @@ from ..schemas import (
     RegenerateMealRequest,
     SkipDayRequest,
 )
+from ..services import planner
 from ..services.planner import (
     clear_meal_cell,
     current_week_start,
@@ -155,6 +156,7 @@ def get_week_by_date(
 @limiter.limit(AI_LIMIT)
 def generate(
     request: Request,
+    response: Response,
     week_id: int,
     regenerate_all: bool = False,
     body: GenerateWeekRequest | None = None,
@@ -181,7 +183,13 @@ def generate(
         only_missing=not (regenerate_all or scelta.regenerate_all),
         days=scelta.days,
         slot_ids=scelta.slot_ids,
+        background=planner.GENERATION_IN_BACKGROUND,
     )
+    # In background la risposta arriva subito: 202, settimana con `is_generating`
+    # acceso, e l'esito lo dirà la settimana stessa al polling.
+    if result.get("status") == "started":
+        response.status_code = 202
+    db.refresh(week)
     payload = serialize_week(db, week)
     payload["generation"] = result
     return payload

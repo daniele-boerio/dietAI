@@ -26,7 +26,7 @@ from app.database import Base, get_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import User  # noqa: E402
 from app.rate_limit import limiter  # noqa: E402
-from app.services import planner  # noqa: E402
+from app.services import macros, planner  # noqa: E402
 
 # Ogni test fa login da "testclient": con il limite reale (10 al minuto) dall'undicesimo
 # test in poi arriverebbe un 429 che non c'entra niente con quello che si sta provando.
@@ -50,6 +50,29 @@ def oggi_e_lunedi(monkeypatch):
     (`test_giorni_saltati.py`) sposta questa data per conto suo.
     """
     monkeypatch.setattr(planner, "today", lambda: planner.monday_of(date.today()))
+
+
+@pytest.fixture(autouse=True)
+def macro_dichiarati(monkeypatch):
+    """La suite gira coi macro che dichiara il modello, non con quelli calcolati.
+
+    I modelli finti scrivono numeri tondi (400, 700, 600 kcal) che con le loro
+    grammature non tornano: ricalcolarli cambierebbe ogni totale della suite, e
+    ritoccare le grammature cambierebbe ogni conto della dispensa. Chi prova il calcolo
+    (`test_macro_calcolati.py`) lo riaccende.
+    """
+    monkeypatch.setattr(macros, "ATTIVO", False)
+
+
+@pytest.fixture(autouse=True)
+def generazione_in_primo_piano(monkeypatch):
+    """La POST di generazione aspetta il modello invece di lanciarlo in un thread.
+
+    Così ogni test legge il piano generato dalla risposta, come faceva prima che la
+    generazione passasse in background. `test_generazione_in_background.py` lo
+    riaccende e prova il thread.
+    """
+    monkeypatch.setattr(planner, "GENERATION_IN_BACKGROUND", False)
 
 
 @pytest.fixture()

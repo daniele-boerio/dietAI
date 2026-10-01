@@ -2,7 +2,7 @@
 
 L'app è single-user, ma ogni tabella che contiene dati personali porta comunque
 `user_id`: è quello che permette di riusare lo schema se un giorno gli utenti
-diventano due, ed è il filtro obbligatorio in ogni query (vedi CLAUDE.md).
+diventano due, ed è il filtro obbligatorio in ogni query (vedi CLAUDE.md e docs/account.md).
 """
 
 from sqlalchemy import (
@@ -179,6 +179,22 @@ class Ingredient(Base):
         Boolean, nullable=False, default=False, server_default="false"
     )
     last_paid_at = Column(DateTime(timezone=True))
+    # Composizione per 100 g del prodotto come si compra: è ciò che permette di
+    # **calcolare** i macro di una ricetta invece di credere a quelli che scrive il
+    # modello (vedi `services/macros.py`). NULL = non si sa, e la ricetta che lo usa
+    # tiene i macro dichiarati.
+    kcal_100g = Column(Float)
+    protein_100g = Column(Float)
+    carbs_100g = Column(Float)
+    fat_100g = Column(Float)
+    # Quanto pesa un pezzo (per "2 uova", "mezzo limone") e quanti grammi fa un
+    # millilitro (per "1 cucchiaio d'olio"). NULL = non convertibile / 1.
+    grams_per_unit = Column(Float)
+    density = Column(Float)
+    # Da dove vengono quei numeri: "catalogo" (il seed, a ogni avvio), "ai" (stimati
+    # dal modello per un nome che il catalogo non ha), "utente" (corretti a mano, e
+    # il seed non li tocca più).
+    composition_source = Column(String)
 
     __table_args__ = (
         CheckConstraint(
@@ -256,6 +272,11 @@ class Recipe(Base):
     is_favorite = Column(Boolean, nullable=False, default=False, server_default="false")
     is_custom = Column(Boolean, nullable=False, default=False, server_default="false")
     generation_prompt = Column(Text)  # utile per capire perché è uscita così
+    # Da dove vengono calorie e macro qui sopra: "calcolata" (dagli ingredienti, con
+    # la composizione dell'anagrafica), "dichiarata" (quelli che ha scritto il modello,
+    # perché un ingrediente non aveva composizione), "utente" (scritti a mano in una
+    # ricetta propria). NULL = ricetta di prima che si calcolasse.
+    nutrition_source = Column(String)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (

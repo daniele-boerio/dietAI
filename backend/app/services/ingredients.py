@@ -463,6 +463,11 @@ def get_or_create_ingredient(db: Session, name: str) -> Ingredient:
         avg_price_per_unit=price,
         price_unit=price_unit,
     )
+    # La composizione del catalogo arriva subito, non al prossimo avvio del seed: la
+    # ricetta che sta nascendo adesso è la prima che ne ha bisogno.
+    from .macros import apply_catalog_composition
+
+    apply_catalog_composition(ingredient)
     db.add(ingredient)
     try:
         db.flush()

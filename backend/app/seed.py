@@ -13,8 +13,9 @@ import sys
 from .config import SEED_USER_EMAIL, SEED_USER_PASSWORD
 from .database import SessionLocal
 from .models import Ingredient, User
+from .services.macros import apply_catalog_composition
 from .services.accounts import admin_user, create_user
-from .utils.pricing import INGREDIENT_CATALOG
+from .utils.pricing import INGREDIENT_CATALOG, guess_category
 from .utils.seasonality import season_months_for
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -38,20 +39,47 @@ def seed_ingredients(db) -> tuple[int, int]:
                 ingredient.avg_price_per_unit = price
                 ingredient.price_unit = price_unit
             ingredient.season_months = season_months_for(name)
+            # La composizione corretta a mano non si tocca, come il reparto e il prezzo.
+            apply_catalog_composition(ingredient)
             updated += 1
         else:
-            db.add(
-                Ingredient(
-                    name=name,
-                    category=category,
-                    avg_price_per_unit=price,
-                    price_unit=price_unit,
-                    season_months=season_months_for(name),
-                )
+            ingredient = Ingredient(
+                name=name,
+                category=category,
+                avg_price_per_unit=price,
+                price_unit=price_unit,
+                season_months=season_months_for(name),
             )
+            apply_catalog_composition(ingredient)
+            db.add(ingredient)
             created += 1
     db.commit()
     return created, updated
+
+
+def reguess_categories(db) -> int:
+    """Rifà il reparto indovinato delle righe che il catalogo non conosce.
+
+    Quelle righe hanno il reparto che `guess_category` ha dato loro il giorno in cui
+    il modello ha scritto il nome per la prima volta, e quando la stima migliora (la
+    ricerca in mezzo alle parole metteva i "peperoni friggitelli" fra i condimenti)
+    le righe vecchie restano sbagliate per sempre. Il reparto spostato a mano non si
+    tocca: quello non è una stima.
+    """
+    changed = 0
+    rows = (
+        db.query(Ingredient)
+        .filter(Ingredient.name.notin_(list(INGREDIENT_CATALOG)))
+        .filter(Ingredient.category_by_user.is_(False))
+        .all()
+    )
+    for ingredient in rows:
+        guess = guess_category(ingredient.name)
+        if ingredient.category != guess:
+            ingredient.category = guess
+            changed += 1
+    db.commit()
+    return changed
 
 
 def seed_user(db) -> User | None:
@@ -93,6 +121,7 @@ def main() -> int:
     try:
         created, updated = seed_ingredients(db)
         logger.info("Ingredienti: %s creati, %s aggiornati.", created, updated)
+        logger.info("Reparti indovinati di nuovo: %s.", reguess_categories(db))
         user = seed_user(db)
         if not user:
             return 1

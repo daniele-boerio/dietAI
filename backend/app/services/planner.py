@@ -9,6 +9,7 @@ dall'utente) l'AI non le tocca mai.
 
 import json
 import logging
+import threading
 import time
 from datetime import date, datetime, timedelta, timezone
 
@@ -35,7 +36,13 @@ from ..utils.seasonality import current_month, current_month_name, in_season
 from ..utils.units import format_quantity
 from . import prompts
 from .ai_client import AIError, get_client
-from .recipes import create_recipe, recipe_for_prompt, serialize_recipe
+from .recipes import (
+    create_recipe,
+    fit_recipe_data,
+    learn_composition,
+    recipe_for_prompt,
+    serialize_recipe,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1117,8 +1124,13 @@ def generate_week(
     only_missing: bool = True,
     days: list[int] | None = None,
     slot_ids: list[int] | None = None,
+    background: bool = False,
 ) -> dict:
     """Genera in un'unica chiamata le ricette della settimana.
+
+    Con `background` la chiamata al modello parte in un thread e la funzione torna
+    subito con `{"status": "started"}`: vedi `_in_background`. Senza, aspetta e
+    restituisce il resoconto (`filled`, `missing`), come fanno i test.
 
     Una chiamata sola, non una per pasto: è l'unico modo perché l'AI possa
     distribuire gli avanzi (mezza zucchina lunedì, l'altra metà giovedì) e non
@@ -1244,6 +1256,83 @@ def generate_week(
     # Budget: ~2.000 token a ricetta più il margine per il ragionamento. Sopra la
     # soglia il client passa automaticamente in streaming.
     max_tokens = min(64000, 2000 * len(to_fill) + 6000)
+
+    if background:
+        ids = [(d.id, m.id, s.id) for d, m, s in to_fill]
+        _in_background(
+            db.get_bind(),
+            f"genera-settimana-{week.id}",
+            lambda s: _run_generation(
+                s,
+                s.get(User, user.id),
+                s.get(WeekPlan, week.id),
+                [(s.get(DayPlan, d), s.get(PlannedMeal, m), s.get(MealSlot, sl)) for d, m, sl in ids],
+                client=client,
+                prompt=prompt,
+                max_tokens=max_tokens,
+                progress=progress,
+            ),
+        )
+        return {"status": "started", "expected": len(to_fill)}
+
+    return _run_generation(
+        db, user, week, to_fill,
+        client=client, prompt=prompt, max_tokens=max_tokens, progress=progress,
+    )
+
+
+# La rotta genera in background; i test lo spengono (`conftest.py`) e aspettano il
+# resoconto, come faceva la POST prima. Chi prova il thread lo riaccende.
+GENERATION_IN_BACKGROUND = True
+
+# I thread delle generazioni in corso. Servono ai test (per aspettarle) e a nient'altro:
+# lo stato vero di una generazione sta sul `WeekPlan`, non qui.
+_THREADS: list[threading.Thread] = []
+
+
+def _in_background(bind, name: str, work) -> threading.Thread:
+    """Fa girare `work(sessione)` in un thread, con una sessione tutta sua.
+
+    **La generazione non vive dentro la richiesta HTTP.** Dura minuti, e davanti c'è
+    un proxy che chiude molto prima (nginx a 300 s, Cloudflare a 100): la POST restava
+    appesa per tutto quel tempo su una connessione già morta, tenendo occupato un
+    worker del threadpool. Lo stato, il diario e l'errore stavano già sul `WeekPlan`
+    proprio per questo; adesso ci sta anche il lavoro, e la POST risponde subito 202.
+
+    Sessione propria perché quella della richiesta si chiude quando la richiesta
+    finisce. Il thread è `daemon`: se il processo si riavvia a metà, la settimana resta
+    "in generazione" fino a `GENERATION_TIMEOUT`, come prima — il segno sul database
+    è l'unica cosa che sopravvive a un riavvio.
+    """
+
+    def corpo():
+        session = sessionmaker(bind=bind)()
+        try:
+            work(session)
+        except Exception:  # noqa: BLE001 — già loggato e registrato da _run_generation
+            pass
+        finally:
+            session.close()
+
+    thread = threading.Thread(target=corpo, name=name, daemon=True)
+    _THREADS[:] = [t for t in _THREADS if t.is_alive()]
+    _THREADS.append(thread)
+    thread.start()
+    return thread
+
+
+def _run_generation(
+    db: Session,
+    user: User,
+    week: WeekPlan,
+    to_fill: list[tuple[DayPlan, PlannedMeal, MealSlot]],
+    *,
+    client,
+    prompt: str,
+    max_tokens: int,
+    progress,
+) -> dict:
+    """La chiamata al modello e la scrittura del piano: la parte che dura minuti."""
     try:
         data = client.generate_json(
             prompts.WEEK_PLAN_SYSTEM,
@@ -1255,7 +1344,7 @@ def generate_week(
         # Anche l'applicazione della risposta sta dentro il try: una risposta parsabile
         # ma di forma sbagliata sollevava fuori di qui, e lasciava la settimana
         # bloccata su "sto generando" fino allo scadere del quarto d'ora.
-        return _apply_generated_week(db, user, week, data, to_fill)
+        return _apply_generated_week(db, user, week, data, to_fill, client=client)
     except Exception as exc:
         # Il log è l'unico posto dove questo messaggio arriva per davvero: la risposta
         # HTTP viene scritta su una connessione che il proxy ha chiuso da minuti, e
@@ -1273,10 +1362,25 @@ def _apply_generated_week(
     week: WeekPlan,
     data: dict | list,
     to_fill: list[tuple[DayPlan, PlannedMeal, MealSlot]],
+    *,
+    client=None,
 ) -> dict:
     """Scrive nel piano le ricette uscite dal modello."""
     if not isinstance(data, dict) or not isinstance(data.get("days"), list):
         raise AIError("Claude ha restituito un piano in un formato inatteso.")
+
+    # Prima di scrivere: i nomi che il catalogo non conosce ricevono una composizione
+    # (una chiamata per tutta la settimana), così i macro si possono calcolare.
+    if client is not None:
+        learn_composition(
+            db,
+            client,
+            [
+                (m.get("recipe") or {})
+                for d in data["days"] if isinstance(d, dict)
+                for m in (d.get("meals") or []) if isinstance(m, dict)
+            ],
+        )
 
     # Indice delle caselle da riempire: (giorno, nome pasto normalizzato) → riga DB.
     index = {(d.day_of_week, s.name.strip().lower()): (d, m, s) for d, m, s in to_fill}
@@ -1302,9 +1406,12 @@ def _apply_generated_week(
             recipe_data = meal_data.get("recipe") or {}
             if not recipe_data.get("title"):
                 continue
-            _day, meal, _slot = target
+            _day, meal, slot = target
             recipe = create_recipe(
-                db, user.id, recipe_data, generation_prompt="week_plan"
+                db,
+                user.id,
+                fit_recipe_data(db, recipe_data, slot),
+                generation_prompt="week_plan",
             )
             meal.recipe_id = recipe.id
             meal.source = "ai_generated"
@@ -1444,8 +1551,12 @@ def regenerate_meal(
     if not isinstance(data, dict) or not data.get("title"):
         raise AIError("Claude non ha restituito una ricetta valida.")
 
+    learn_composition(db, client, [data])
     recipe = create_recipe(
-        db, user.id, data, generation_prompt=json.dumps({"slot": slot.name})
+        db,
+        user.id,
+        fit_recipe_data(db, data, slot),
+        generation_prompt=json.dumps({"slot": slot.name}),
     )
 
     # Se il pasto era stato tracciato come seguito, reimmetti gli ingredienti nella dispensa

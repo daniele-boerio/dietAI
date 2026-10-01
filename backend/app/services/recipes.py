@@ -20,6 +20,7 @@ stacca prima una copia. È la stessa garanzia di quando le copie si facevano sub
 from sqlalchemy.orm import Session
 
 from ..models import Ingredient, PlannedMeal, Recipe, RecipeIngredient
+from . import macros
 from .ingredients import get_or_create_ingredient
 
 _DIFFICULTIES = {"easy", "medium", "hard"}
@@ -257,6 +258,19 @@ def create_recipe(
     carbs_g = _num(nutrition.get("carbs_g", data.get("carbs_g")))
     fat_g = _num(nutrition.get("fat_g", data.get("fat_g")))
 
+    # I numeri dichiarati valgono solo se non si possono calcolare. Prima del gemello,
+    # così due piatti uguali si riconoscono sui macro veri e non su quello che il
+    # modello ha scritto quel giorno. Le ricette scritte a mano tengono i loro.
+    if is_custom:
+        nutrition_source = "utente"
+    else:
+        calcolati = macros.compute(db, items)
+        nutrition_source = "calcolata" if calcolati else "dichiarata"
+        if calcolati:
+            n = calcolati.as_nutrition()
+            calories, protein_g = n["calories"], n["protein_g"]
+            carbs_g, fat_g = n["carbs_g"], n["fat_g"]
+
     twin = find_twin(
         db,
         user_id,
@@ -285,6 +299,7 @@ def create_recipe(
         tags=data.get("tags"),
         is_custom=is_custom,
         generation_prompt=generation_prompt,
+        nutrition_source=nutrition_source,
     )
     db.add(recipe)
     db.flush()
@@ -293,6 +308,48 @@ def create_recipe(
 
     db.flush()
     return recipe
+
+
+def learn_composition(db: Session, client, recipes_data: list[dict]) -> int:
+    """Fa stimare al modello la composizione dei nomi nuovi, per tutte le ricette.
+
+    Una chiamata sola per tutta la risposta (una settimana, un pasto): i nomi che il
+    catalogo non conosce sono pochi, e una volta imparati restano in anagrafica.
+    Si committa prima di chiamare, come ovunque: niente transazione aperta durante
+    una chiamata al modello.
+    """
+    if not macros.ATTIVO:
+        return 0
+    ids = []
+    for data in recipes_data:
+        ids += [i["ingredient_id"] for i in _resolve(db, _clean_ingredients(data.get("ingredients")))]
+    if not macros.missing_composition(db, ids):
+        return 0
+    db.commit()
+    imparati = macros.ensure_composition(db, client, ids)
+    db.commit()
+    return imparati
+
+
+def fit_recipe_data(db: Session, data: dict, slot) -> dict:
+    """La ricetta del modello con le grammature ritoccate verso i target del pasto.
+
+    Si lavora sul dizionario prima di creare la ricetta, così il gemello si cerca
+    sulle quantità vere e la ricetta nasce già giusta. Vedi `macros.fit_to_target`.
+    """
+    if not macros.ATTIVO or slot is None:
+        return data
+    items = _resolve(db, _clean_ingredients(data.get("ingredients")))
+    target = macros.Target(
+        kcal=slot.target_calories or 0,
+        protein=slot.target_protein_g or 0,
+        carbs=slot.target_carbs_g or 0,
+        fat=slot.target_fat_g or 0,
+    )
+    ritoccati = macros.fit_to_target(db, items, target)
+    if ritoccati is items:
+        return data
+    return {**data, "ingredients": ritoccati}
 
 
 def replace_ingredients(db: Session, recipe: Recipe, items: list[dict]) -> None:
@@ -338,6 +395,33 @@ def update_recipe_from_ai(db: Session, recipe: Recipe, data: dict) -> None:
         recipe.fat_g = _num(nutrition.get("fat_g"), recipe.fat_g)
     if data.get("ingredients"):
         replace_ingredients(db, recipe, data["ingredients"])
+    recompute_nutrition(db, recipe)
+
+
+def recompute_nutrition(db: Session, recipe: Recipe) -> bool:
+    """Rifà calorie e macro dagli ingredienti salvati. False = non si può.
+
+    Le ricette scritte a mano restano coi numeri dell'utente; per le altre, se un
+    ingrediente non ha composizione, restano i numeri dichiarati e lo si segna.
+    """
+    if recipe.is_custom or not macros.ATTIVO:
+        return False
+    db.flush()
+    items = [
+        {"ingredient_id": ri.ingredient_id, "quantity": ri.quantity, "unit": ri.unit}
+        for ri in db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == recipe.id)
+    ]
+    calcolati = macros.compute(db, items)
+    if calcolati is None:
+        recipe.nutrition_source = "dichiarata"
+        return False
+    n = calcolati.as_nutrition()
+    recipe.calories = n["calories"]
+    recipe.protein_g = n["protein_g"]
+    recipe.carbs_g = n["carbs_g"]
+    recipe.fat_g = n["fat_g"]
+    recipe.nutrition_source = "calcolata"
+    return True
 
 
 def fork_recipe_for_meal(db: Session, meal: PlannedMeal) -> Recipe | None:
@@ -434,6 +518,7 @@ def copy_recipe(db: Session, recipe: Recipe) -> Recipe:
         tags=recipe.tags,
         is_favorite=recipe.is_favorite,
         is_custom=recipe.is_custom,
+        nutrition_source=recipe.nutrition_source,
     )
     db.add(clone)
     db.flush()
@@ -558,6 +643,7 @@ def serialize_recipe(db: Session, recipe: Recipe | None, *, full: bool = True) -
         "rating": recipe.rating,
         "is_favorite": recipe.is_favorite,
         "is_custom": recipe.is_custom,
+        "nutrition_source": recipe.nutrition_source,
         "created_at": recipe.created_at.isoformat() if recipe.created_at else None,
     }
     if full:

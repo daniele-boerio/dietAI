@@ -92,6 +92,7 @@ CONTEXT_TEMPLATE = """CONTESTO UTENTE
 - Ingredienti di BASE (sempre in casa, non vanno in lista della spesa): {base}
 - Dispensa attuale (da consumare in via prioritaria): {pantry}
 - NOMI: quando usi un ingrediente che è già in dispensa o fra quelli di base, scrivilo con lo STESSO nome che leggi qui sopra — stesse parole, stesso singolare/plurale, senza aggiungere il colore o la varietà ("peperoni", non "peperoni rossi"). Un nome diverso è un altro ingrediente per la lista della spesa, che lo farà ricomprare pur essendo già in casa.
+- PESI: le grammature sono del prodotto CRUDO, come si compra — pasta, riso e legumi secchi, carne e pesce crudi, verdura pulita. Mai "pasta cotta" o "pollo cotto": i macro si calcolano su quelle quantità.
 - UNITÀ: quello che al supermercato si compra a pezzo (limoni, uova, avocado, cipolle) va in "unità" anche quando ne serve solo una parte — "limone: 0.5 unità", mai "limone: 15 ml" per dirne il succo, che è la stessa cosa scritta in un modo che al banco non si compra. Il succo, la scorza o il modo di usarlo si scrivono nelle note dell'ingrediente e nel procedimento. Lo stesso ingrediente misurato in due unità diverse fa due voci nella lista della spesa, e la dispensa non ne copre nessuna delle due.
 - CUCINE da cui attingere: {cuisine}
 - Stagionalità: {seasonality}
@@ -269,6 +270,27 @@ FORMATO (solo dopo [RECIPES_UPDATE]):
 
 dove <RICETTA> è:
 """ + RECIPE_JSON_SHAPE
+
+
+# ── Composizione di un alimento ────────────────────────────────────────────────
+# I macro delle ricette si calcolano dagli ingredienti (`services/macros.py`). Quelli
+# che il catalogo non conosce li stima il modello, una volta: il numero resta in
+# anagrafica e vale da lì in poi per tutte le ricette.
+
+COMPOSITION_SYSTEM = """Sei un nutrizionista italiano. Per ogni alimento elencato dai i valori medi per 100 g del prodotto COSÌ COME SI COMPRA in un supermercato italiano (crudo, secco se è un cereale o un legume secco, parte edibile), come nelle tabelle CREA.
+
+Per ogni alimento:
+- kcal, protein_g, carbs_g, fat_g per 100 g;
+- grams_per_unit: quanto pesa in media un pezzo, se è una cosa che si conta a pezzi (un uovo, un limone, una fetta, un vasetto); altrimenti null;
+- density: grammi per millilitro, se è un liquido o una salsa; altrimenti null.
+
+Usa il nome ESATTAMENTE come ti viene dato. Se un nome è ambiguo, scegli il prodotto più comune in Italia.
+
+FORMATO OUTPUT (JSON rigoroso, nessun testo aggiuntivo):
+{"items": [{"name": "<nome>", "kcal": <float>, "protein_g": <float>, "carbs_g": <float>, "fat_g": <float>, "grams_per_unit": <float|null>, "density": <float|null>}]}"""
+
+COMPOSITION_PROMPT = """ALIMENTI:
+{names}"""
 
 
 # ── Sostituzione di un ingrediente ─────────────────────────────────────────────

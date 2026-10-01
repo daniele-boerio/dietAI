@@ -506,6 +506,15 @@ export default function ShoppingPage() {
                   : `${list.priced_items} di ${list.total_items} articoli a prezzo tuo`}
               {list.total_items > 0 && ` · ${list.total_items - list.checked_items} da prendere`}
             </div>
+            {/* Il tetto scalato sui giorni che la lista copre: la lista non compra una
+                settimana, compra fino a due. Contro il tetto di una sola, chiunque
+                abbia generato anche la prossima risulterebbe fuori budget. */}
+            {list.budget && (
+              <div className={`shopping-budget ${list.budget.over ? 'over' : ''}`}>
+                {list.budget.over ? 'Oltre il budget' : 'Nel budget'}: {formatMoney(list.budget.limit)}{' '}
+                per {list.budget.days === 7 ? 'la settimana' : `${list.budget.days} giorni`}
+              </div>
+            )}
             <button
               className="btn btn-primary btn-block"
               disabled={list.checked_items === 0}

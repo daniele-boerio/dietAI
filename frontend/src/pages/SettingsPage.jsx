@@ -332,6 +332,26 @@ function PreferencesTab() {
             </button>
           ))}
         </div>
+        {/* Il livello dice che tipo di ingredienti; il tetto è un numero, e il conto
+            della spesa lo confronta col totale. Vuoto = nessun tetto. */}
+        <div className="budget-cap">
+          <span>Tetto della spesa</span>
+          <input
+            type="number"
+            min="1"
+            step="5"
+            inputMode="decimal"
+            placeholder="nessuno"
+            defaultValue={prefs.weekly_budget_eur ?? ''}
+            aria-label="Tetto della spesa in euro a settimana"
+            onBlur={(e) => {
+              const n = e.target.value === '' ? null : Number(e.target.value);
+              if (n === (prefs.weekly_budget_eur ?? null)) return;
+              save({ ...prefs, weekly_budget_eur: n && n > 0 ? n : null });
+            }}
+          />
+          <span>€ a settimana</span>
+        </div>
       </div>
 
       {/* L'interruttore sta nel suo riquadro, con la levetta a sinistra: è una frase

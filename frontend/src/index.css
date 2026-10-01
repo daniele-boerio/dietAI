@@ -2764,6 +2764,34 @@ textarea {
 /* «Cosa hai mangiato invece?»: una riga sola, il campo e il pulsante che stima, e
    sotto la stima in mono — è un numero da leggere, non da confondere coi macro della
    ricetta, che restano lì sopra per memoria. Prende tutta la riga delle azioni. */
+/* Il tetto della spesa: una riga sotto il livello di budget. */
+.budget-cap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.budget-cap input {
+  width: 96px;
+  height: 36px;
+  font-family: var(--font-mono);
+}
+
+.shopping-budget {
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.shopping-budget.over {
+  color: var(--warning);
+}
+
 /* Il promemoria serale: l'ora e i comandi in una riga, che va a capo da sola. */
 .reminder-row {
   display: flex;

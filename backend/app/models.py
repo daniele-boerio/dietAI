@@ -590,6 +590,10 @@ class UserPreferences(Base):
     cuisines = Column(JSONType)
     max_prep_time_min = Column(Integer)
     budget_level = Column(String)  # "economico", "medio", "premium"
+    # Il tetto della spesa in euro a settimana. NULL = nessun tetto. Il livello qui
+    # sopra dice al modello che tipo di ingredienti scegliere; questo è un numero, e il
+    # conto della spesa lo confronta col totale.
+    weekly_budget_eur = Column(Float)
     # Regole in linguaggio naturale che non stanno in una lista: "niente insaccati",
     # "carne al massimo due volte a settimana", "la domenica mangio fuori". Vanno nel
     # prompt così come sono — il destinatario è un modello, non un parser.

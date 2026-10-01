@@ -180,6 +180,8 @@ paragrafo nel documento, scrivendo anche cosa non andava con la versione di prim
 - Le scorte possono avere una scadenza (`PantryItem.expires_on`): nel contesto della
   generazione la dispensa va in ordine di scadenza, con la data per quello che scade
   entro una settimana.
+- Il tetto di spesa settimanale (`weekly_budget_eur`) arriva al modello come cifra e il
+  conto lo confronta col totale **scalato sui giorni che la lista copre**.
 
 **Andamento** (`docs/andamento.md`)
 - Un giorno senza pasti tracciati resta fuori dalle medie; nel grafico della settimana

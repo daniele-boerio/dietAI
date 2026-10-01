@@ -31,6 +31,7 @@ from ..models import (
     RecipeIngredient,
     ShoppingList,
     ShoppingListItem,
+    UserPreferences,
     WeekPlan,
 )
 from ..utils.units import format_quantity, price_for, to_base
@@ -388,6 +389,7 @@ def serialize_shopping_list(db: Session, user_id: int, lst: ShoppingList) -> dic
         # tre settimane vede meno roba di quella che si aspetta e pensa a un errore.
         "horizon": shopping_horizon().isoformat(),
         "meals_beyond": meals_beyond_horizon(db, user_id),
+        "budget": _budget_for(db, user_id, lst.estimated_cost, giorni),
         "total_items": total_items,
         "checked_items": checked_items,
         "priced_items": priced_items,
@@ -398,6 +400,31 @@ def serialize_shopping_list(db: Session, user_id: int, lst: ShoppingList) -> dic
         "all_categories": [
             {"key": key, "label": CATEGORY_LABELS[key]} for key in CATEGORY_ORDER
         ],
+    }
+
+
+def _budget_for(db: Session, user_id: int, costo: float | None, giorni: list) -> dict | None:
+    """Il tetto settimanale portato sul periodo che la lista copre davvero.
+
+    La lista non compra una settimana: compra dal primo all'ultimo giorno con una
+    ricetta ancora da cucinare, fino a due settimane. Confrontarne il totale con il
+    tetto di **una** settimana direbbe «fuori budget» a chiunque abbia generato anche
+    la prossima. Quindi il tetto si scala sui giorni coperti (60 € a settimana, nove
+    giorni = 77 €), e il confronto è con quello.
+    """
+    prefs = db.query(UserPreferences).filter(UserPreferences.user_id == user_id).first()
+    if not prefs or not prefs.weekly_budget_eur:
+        return None
+    if giorni:
+        n = (max(giorni) - min(giorni)).days + 1
+    else:
+        n = 7
+    tetto = round(prefs.weekly_budget_eur * n / 7, 2)
+    return {
+        "weekly": prefs.weekly_budget_eur,
+        "days": n,
+        "limit": tetto,
+        "over": costo is not None and costo > tetto,
     }
 
 

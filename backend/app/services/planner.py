@@ -901,6 +901,25 @@ def _pantry_descriptions(db: Session, user_id: int) -> list[str]:
     return out
 
 
+def _budget_line(prefs: UserPreferences | None) -> str:
+    """Il livello di budget e, se c'è, il tetto in euro della settimana.
+
+    Il tetto è per una persona e per sette giorni, come le porzioni: il modello lo
+    legge come ordine di grandezza della spesa della settimana che sta componendo, e
+    l'anti-spreco è già la sua regola più forte. I prezzi che contano sono quelli del
+    supermercato italiano — dirlo evita che ragioni in dollari o su prezzi da
+    ristorante.
+    """
+    livello = prefs.budget_level if prefs and prefs.budget_level else "medio"
+    if not prefs or not prefs.weekly_budget_eur:
+        return livello
+    return (
+        f"{livello}; TETTO di spesa: {prefs.weekly_budget_eur:g} € a settimana per tutti "
+        "i pasti di una persona, ai prezzi di un supermercato italiano. Stacci dentro: "
+        "prima legumi, uova, pollo, pesce azzurro e verdura di stagione, poi il resto"
+    )
+
+
 def _rated_titles(db: Session, user_id: int, high: bool) -> list[str]:
     query = db.query(Recipe.title).filter(Recipe.user_id == user_id)
     query = (
@@ -977,7 +996,7 @@ def build_context(db: Session, user_id: int, *, cuisine: str | None = None) -> s
             if prefs and prefs.max_prep_time_min
             else "nessun limite"
         ),
-        budget=(prefs.budget_level if prefs and prefs.budget_level else "medio"),
+        budget=_budget_line(prefs),
         liked=_fmt_list(_rated_titles(db, user_id, True), "nessuna ancora"),
         disliked=_fmt_list(_rated_titles(db, user_id, False), "nessuna ancora"),
     )

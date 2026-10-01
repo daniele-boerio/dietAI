@@ -136,3 +136,19 @@ piano con un altro nome.
 La spesa fatta non tocca la scadenza di una scorta che c'era già: la data si riferiva
 al pacco vecchio, e indovinare quella del nuovo sarebbe inventare. La si corregge dalla
 dispensa. Guardie in `tests/test_scadenze.py`.
+
+**Il budget è anche un numero.** Il livello (economico, medio, premium) diceva al
+modello che tipo di ingredienti scegliere, ma non era una cifra contro cui misurare la
+spesa; ora che i prezzi sono quelli dello scaffale, un tetto in euro si può confrontare.
+`UserPreferences.weekly_budget_eur` fa due cose. Nel contesto (`_budget_line`) arriva
+come «TETTO di spesa: 60 € a settimana per tutti i pasti di una persona, ai prezzi di
+un supermercato italiano», con l'ordine degli ingredienti economici da cui partire —
+senza il dove, un modello ragiona volentieri in dollari o su prezzi da ristorante. Nel
+conto della spesa (`_budget_for`) il tetto si **scala sui giorni che la lista copre**:
+la lista non compra una settimana, compra dal primo all'ultimo giorno con una ricetta
+da cucinare, fino a due settimane, e contro il tetto di una sola chiunque avesse
+generato anche la prossima risulterebbe fuori budget.
+
+Il campo si salva insieme alle altre preferenze ma solo se c'è nel corpo
+(`model_fields_set`): un client che salva le preferenze senza conoscerlo non lo deve
+cancellare. Guardie in `tests/test_budget.py`.

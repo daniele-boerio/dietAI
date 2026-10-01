@@ -151,6 +151,9 @@ class PreferencesUpdate(BaseModel):
     cuisines: dict[str, float] | list[str] = Field(default_factory=dict)
     max_prep_time_min: int | None = Field(default=None, ge=5, le=480)
     budget_level: str | None = None
+    # Facoltativo anche nel senso di «può mancare dal corpo»: chi salva le preferenze
+    # senza mandarlo non lo cancella (vedi `update_preferences`).
+    weekly_budget_eur: float | None = Field(default=None, gt=0, le=2000)
     # Regole libere ("niente insaccati", "carne max 2 volte a settimana"). Il tetto
     # serve a non far esplodere il prompt: viene rimandato a ogni generazione.
     notes: str | None = Field(default=None, max_length=2000)

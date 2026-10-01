@@ -370,6 +370,7 @@ def _serialize_prefs(prefs: UserPreferences) -> dict:
         "cuisines": cuisines.clean(prefs.cuisines),
         "max_prep_time_min": prefs.max_prep_time_min,
         "budget_level": prefs.budget_level,
+        "weekly_budget_eur": prefs.weekly_budget_eur,
         "notes": prefs.notes,
     }
 
@@ -422,6 +423,8 @@ def update_preferences(
     prefs.cuisines = cuisines.clean(body.cuisines)
     prefs.max_prep_time_min = body.max_prep_time_min
     prefs.budget_level = body.budget_level
+    if "weekly_budget_eur" in body.model_fields_set:
+        prefs.weekly_budget_eur = body.weekly_budget_eur
     prefs.notes = (body.notes or "").strip() or None
     db.commit()
     return _serialize_prefs(prefs)

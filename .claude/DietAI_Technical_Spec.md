@@ -1,5 +1,10 @@
 # DietAI — Specifica Tecnica per Implementazione
 
+> ⚠️ **Documento storico.** È la specifica da cui il progetto è partito; da allora
+> molte scelte sono cambiate (account multipli, spesa come funzione del piano,
+> ricette condivise, cucine con quote...). Dove questo file e il codice non
+> coincidono valgono `CLAUDE.md` e `docs/`. Non aggiornarlo: si aggiornano quelli.
+
 > **Scopo di questo documento**: specifica tecnica completa per la generazione del progetto DietAI con Claude Code. Ogni sezione contiene indicazioni implementative precise: struttura cartelle, modelli dati, endpoint API, componenti frontend, prompt AI e regole di business.
 
 ---

@@ -7,7 +7,7 @@ description: Disegnare o correggere l'interfaccia React di DietAI — pagine, co
 
 Testo UI **in italiano**. Un solo foglio, `frontend/src/index.css`, con custom
 properties: niente CSS modules, niente Tailwind, niente librerie UI. Icone Lucide.
-Le ragioni di ogni regola sono in `CLAUDE.md` (sezione *Convenzioni* e i paragrafi
+Le ragioni di ogni regola sono in `docs/interfaccia.md` (le convenzioni visive e i paragrafi
 sulla home, il piano, la spesa): leggi quello della schermata che tocchi.
 
 ## Checklist

@@ -27,7 +27,7 @@ grep -n "supermercato\|±10%\|ESCLUSI\|NOMI\|stagionalità" backend/app/services
 
 I prompt che condividono le regole: `WEEK_PLAN_SYSTEM`, `SINGLE_MEAL_SYSTEM`, la chat del
 pasto (marcatore `[RECIPE_UPDATE]`), `SHOPPING_CHAT_SYSTEM` (`[RECIPES_UPDATE]`),
-`SUBSTITUTE_SYSTEM`. Una differenza voluta va **dichiarata** (in CLAUDE.md e in un
+`SUBSTITUTE_SYSTEM`. Una differenza voluta va **dichiarata** (in `docs/` e in un
 commento), es. la chat della spesa vuole il sostituto sullo scaffale perché l'utente è
 in negozio.
 
@@ -63,7 +63,7 @@ catalogo → skill `ingredienti-e-nomi`.
    `test_genera_su_richiesta.py`, più quelli della parte toccata.
 2. Se cambia una regola dichiarata, aggiorna i testi che la spiegano all'utente
    (Impostazioni → Preferenze in `SettingsPage.jsx`, `OnboardingPage.jsx`) e il
-   paragrafo di `CLAUDE.md`, che racconta il **perché**: scrivi anche cosa non andava
+   paragrafo di `docs/chat.md`, `docs/cucine.md` o `docs/generazione.md`, che racconta il **perché**: scrivi anche cosa non andava
    con la versione di prima.
 3. Una guardia in un test che legga la frase o il comportamento nuovo: senza, il
    prossimo ritocco la toglie in silenzio.

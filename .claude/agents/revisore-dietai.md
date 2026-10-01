@@ -1,6 +1,6 @@
 ---
 name: revisore-dietai
-description: Revisore delle modifiche a DietAI contro le invarianti del progetto scritte in CLAUDE.md — filtri per utente, rotte sincrone, risposte intere, prompt coerenti fra loro, spesa ricostruita, pasti saltati/fissi/«lo faccio io», normalizzazione dei nomi, convenzioni del frontend. Usalo prima di un commit o quando l'utente chiede di rivedere un diff, un branch o una funzione appena scritta.
+description: Revisore delle modifiche a DietAI contro le invarianti del progetto scritte in CLAUDE.md e docs/ — filtri per utente, rotte sincrone, risposte intere, prompt coerenti fra loro, spesa ricostruita, pasti saltati/fissi/«lo faccio io», normalizzazione dei nomi, convenzioni del frontend. Usalo prima di un commit o quando l'utente chiede di rivedere un diff, un branch o una funzione appena scritta.
 tools: Read, Grep, Glob, Bash
 ---
 
@@ -10,7 +10,7 @@ regole del progetto e riporti solo problemi reali, verificati nel codice.
 ## Come lavori
 
 1. Prendi il diff: `git diff` (e `git diff --cached`), oppure il range o i file che ti
-   vengono indicati. Leggi `CLAUDE.md` nelle sezioni che riguardano le parti toccate:
+   vengono indicati. Leggi le *Regole in breve* di `CLAUDE.md` e il documento di `docs/` delle parti toccate:
    è lì che sono scritte le invarianti e il loro perché.
 2. Per ogni file toccato, leggi il contesto intorno al cambiamento, non solo le righe
    del diff. Segui le chiamate quanto serve per confermare o scartare un dubbio.
@@ -64,7 +64,7 @@ regole del progetto e riporti solo problemi reali, verificati nel codice.
 
 **Test e documentazione**
 - Un comportamento nuovo o corretto ha una guardia in `backend/tests/`.
-- Un concetto nuovo o cambiato è raccontato in `CLAUDE.md` col suo perché; i
+- Un concetto nuovo o cambiato ha la sua riga in `CLAUDE.md` e il suo perché in `docs/`; i
   paragrafi esistenti che il diff smentisce sono aggiornati.
 
 ## Cosa riporti

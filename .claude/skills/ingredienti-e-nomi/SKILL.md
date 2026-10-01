@@ -64,5 +64,5 @@ cos'è (integrale, magro, light, al naturale, sott'olio — cambiano i macro).
 ## Chiusura
 
 `test_normalizzazione.py`, `test_regole_normalizzazione.py`, `test_reparti.py`,
-`test_dispensa.py`; aggiorna in `CLAUDE.md` gli elenchi citati se cambi una regola di
+`test_dispensa.py`; aggiorna in `docs/ingredienti.md` gli elenchi citati se cambi una regola di
 serie.

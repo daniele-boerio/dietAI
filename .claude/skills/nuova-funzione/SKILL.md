@@ -30,10 +30,11 @@ description: Aggiungere o cambiare una funzione di DietAI che attraversa backend
    `ai_client.py`, `_DEFAULTS` in `config.py`, `ROLE_LABELS` in `routers/config.py`.
 7. **Chi tocca il piano** (ricette, pasti saltati/seguiti, giorni) chiama
    `rebuild_shopping_list(db, user_id)`: la spesa è una funzione del piano.
-8. Le invarianti di dominio stanno in `CLAUDE.md` (pasti saltati che conservano la
-   ricetta, `pantry_used` NULL e non `[]`, «lo faccio io» che conta nei macro, ricette
-   condivise da staccare con `fork_recipe_for_meal`, settimane passate non create).
-   Leggi il paragrafo della parte che tocchi **prima** di scrivere.
+8. Le invarianti di dominio stanno in `CLAUDE.md` (in breve) e in `docs/` (il
+   perché): pasti saltati che conservano la ricetta, `pantry_used` NULL e non `[]`,
+   «lo faccio io» che conta nei macro, ricette condivise da staccare con
+   `fork_recipe_for_meal`, settimane passate non create. Leggi il documento della
+   parte che tocchi **prima** di scrivere.
 
 ## Frontend
 
@@ -56,5 +57,5 @@ frontend va in `lib/` con il suo `.test.js` (vitest).
 ## Documentazione
 
 Se la funzione introduce un concetto (una regola che "si dimentica scrivendo il
-codice"), aggiungi il paragrafo in `CLAUDE.md`, sezione *Concetti da avere in testa*,
-con il perché e il test che lo guarda. Aggiorna la mappa di *Struttura* se aggiungi file.
+codice"), aggiungi la riga in `CLAUDE.md` (*Regole in breve*) e il paragrafo nel
+`docs/` dell'area, con il perché e il test che lo guarda. Aggiorna la mappa di *Struttura* se aggiungi file.

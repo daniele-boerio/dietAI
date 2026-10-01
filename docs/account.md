@@ -1,0 +1,56 @@
+# Account, amministratore e accesso
+
+Chi paga la chiave, chi crea gli account, come si sospende e come si rientra. Il perché di ogni scelta: le regole in breve stanno in
+`CLAUDE.md`, qui c'è la storia che le giustifica.
+
+**Gli account sono più d'uno, ma la API key la mette una persona sola.**
+`User.is_admin` è chi paga: l'unico che vede la schermata della chiave
+(`PUT /api/auth/api-key` è `get_current_admin`), l'unico che sceglie i modelli
+(`/api/config/ai/models`, GET e PUT) e l'unico che crea account
+(`/api/admin/*`). Gli altri **generano con la sua chiave e con i suoi modelli**:
+`ai_owner(db, user)` restituisce l'admin per chi non lo è, e `get_client` costruisce
+il client su quello — chiave, modello e conto sono suoi. Nascondere la scheda nel
+frontend non basta e non è la difesa: le rotte rispondono 403 da sole
+(`tests/test_due_account.py`).
+
+Due conseguenze che si dimenticano scrivendo il codice. La prima: `has_api_key` in
+`/api/auth/me` dice **la chiave con cui quell'utente genererà**, non "ne possiede
+una" — e il gate dell'onboarding pesa la chiave solo per chi la gestisce
+(`can_manage_api_key`), altrimenti l'ospite resterebbe chiuso nel percorso guidato
+per sempre, con tutti i passi fatti. La seconda: i messaggi d'errore non possono
+mandare in "Impostazioni → Account" chi quella schermata non ce l'ha.
+
+Il flag arriva da tre parti, in ordine di quanto è probabile: la migrazione `0015` lo
+dà all'utente più vecchio, il seed lo dà a `SEED_USER_EMAIL` **quando in tabella non c'è
+nessun amministratore** (gira a ogni avvio del container, quindi si ripara da sé al
+primo deploy), e `python -m app.make_admin [--email ...]` lo alza a mano. Serve un
+comando perché da qui non si esce dalla UI: le rotte che rimetterebbero il flag sono
+proprio quelle riservate all'amministratore, e un database senza admin è chiuso a
+chiave dall'interno.
+
+Due interruttori, che sono due problemi diversi: `is_active` toglie l'accesso
+(login 403, `get_current_user_id` 403, sessioni revocate e `token_version` alzata,
+perché sospendere deve avere effetto adesso e non fra mezz'ora) e `ai_enabled` spegne
+solo le funzioni AI — l'app resta in piedi, i dati non si toccano, ed è il freno sulla
+bolletta di chi mette la chiave. Cancellare un account porta via tutto (FK in
+CASCADE): è proprio il motivo per cui esiste la sospensione. L'amministratore non si
+sospende, non si cancella e non si resetta da solo (`_target` in `routers/admin.py`):
+da lì si tornerebbe soltanto con `python -m app.reset_password` dal container. Un
+**altro** amministratore il pannello non lo tocca affatto, e per quello c'è
+`python -m app.delete_user --email ...`: senza `--yes` stampa solo l'inventario di cosa
+sparirebbe, e si rifiuta di lasciare l'app senza amministratori o di cancellare
+l'utente di `SEED_USER_EMAIL`, che il seed ricreerebbe al riavvio successivo.
+
+Quello che **non** è per-utente è l'anagrafica ingredienti (`Ingredient`): è un
+dizionario di nomi, reparti e prezzi al kg, non un dato personale. Se un utente
+corregge il prezzo del pane, il pane costa quello per tutti.
+
+**Niente email, in tutta l'app.** Nessun SMTP, nessuna registrazione, nessun recupero
+password via link: l'unico endpoint pubblico è `/auth/login`. L'amministratore nasce
+dal seed; gli altri li crea lui da Impostazioni → Utenti, e la password iniziale gliela
+dice a voce (per questo il campo è in chiaro: bisogna poterla leggere per dettarla).
+Chi perde la password se la fa rimettere dall'amministratore; se a perderla è
+l'amministratore c'è `python -m app.reset_password` dal container, ed è l'unica via.
+Cancellare la riga utente per farla ricreare dal seed **distrugge tutti i dati** (FK in
+CASCADE) — e il seed **non** ricrea gli altri account: gira a ogni avvio del container
+e resusciterebbe ogni volta chi è stato cancellato apposta.

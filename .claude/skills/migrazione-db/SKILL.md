@@ -40,7 +40,7 @@ rompe la produzione.
 5. Test: la suite completa (i modelli li usano tutti).
 6. Se i dati vecchi vanno riallineati con logica Python complessa, fai uno script
    `python -m app.qualcosa` con anteprima di default e `--yes` per applicare (modello:
-   `merge_recipes.py`, `delete_user.py`), e documenta in `CLAUDE.md` l'ordine rispetto
+   `merge_recipes.py`, `delete_user.py`), e documenta nel `docs/` dell'area l'ordine rispetto
    alla migrazione.
 
 ## In produzione

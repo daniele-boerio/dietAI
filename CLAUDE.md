@@ -179,6 +179,9 @@ paragrafo nel documento, scrivendo anche cosa non andava con la versione di prim
 **Andamento** (`docs/andamento.md`)
 - Un giorno senza pasti tracciati resta fuori dalle medie; nel grafico della settimana
   il colore è l'aderenza, non lo scarto dal target.
+- Le pesate (`WeightEntry`, una per giorno) danno lo storico; oltre `max(2 kg, 3%)` dal
+  peso del questionario si **propone** il ricalcolo dei target, mai lo si fa da soli, e
+  mai per la dieta di un nutrizionista.
 
 **Generazione** (`docs/generazione.md`)
 - Una chiamata sola per settimana (anti-spreco); di default riempie solo i buchi, e la

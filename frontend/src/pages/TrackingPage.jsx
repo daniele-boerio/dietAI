@@ -4,6 +4,7 @@ import { api, formatDate, formatNumber } from '../api';
 import { useApp } from '../App';
 import EmptyState from '../components/EmptyState';
 import LoadError from '../components/LoadError';
+import WeightView from '../components/WeightView';
 import YearHeatmap from '../components/YearHeatmap';
 
 // Com'è andata quel giorno, in una parola sola — ed è quello che decide il colore
@@ -59,7 +60,9 @@ export default function TrackingPage() {
           <p className="page-subtitle">
             {view === 'week'
               ? 'Quanto il piano generato aderisce alla dieta, giorno per giorno.'
-              : "Quanto hai rispettato la dieta ogni giorno dell'anno."}
+              : view === 'year'
+                ? "Quanto hai rispettato la dieta ogni giorno dell'anno."
+                : 'Come cambia il peso, e quando vale la pena ricalcolare i target.'}
           </p>
         </div>
         {/* Le due schede stanno nella testata: sono l'unica cosa che si sceglie in
@@ -79,11 +82,17 @@ export default function TrackingPage() {
             >
               Anno
             </button>
+            <button
+              className={`week-tab ${view === 'weight' ? 'active' : ''}`}
+              onClick={() => setView('weight')}
+            >
+              Peso
+            </button>
           </div>
         </div>
       </div>
 
-      {view === 'week' ? <WeeklyView /> : <YearHeatmap />}
+      {view === 'week' ? <WeeklyView /> : view === 'year' ? <YearHeatmap /> : <WeightView />}
     </>
   );
 }

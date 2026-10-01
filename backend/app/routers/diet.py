@@ -14,6 +14,7 @@ from ..schemas import DietFrequenciesUpdate, DietMealsUpdate, QuestionnaireReque
 from ..services import prompts
 from ..services.ai_client import AIError, get_client
 from ..services.pdf import extract_text, looks_scanned
+from ..services import planner, weight
 from ..services.planner import get_active_diet, meal_slots_of
 from ..utils import frequencies as freq
 from ..utils import nutrition
@@ -304,6 +305,9 @@ def create_diet_from_questionnaire(
     db.add(diet)
     db.flush()
     _replace_meals(db, diet, computed["meals"])
+    # Il peso scritto nel questionario è anche una pesata: è il punto da cui lo
+    # storico parte, e il riferimento contro cui si misura quando ricalcolare.
+    weight.upsert(db, user.id, planner.today(), body.weight_kg)
     db.commit()
 
     logger.info(

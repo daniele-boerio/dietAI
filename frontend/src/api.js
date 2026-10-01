@@ -372,6 +372,16 @@ export const api = {
     request(`/tracking/year${year ? `?year=${year}` : ''}`),
 
   getDashboard: () => request('/tracking/dashboard'),
+
+  // Lo storico del peso. Ogni risposta è lo storico intero, con l'eventuale proposta
+  // di ricalcolare i target: la pagina si ridisegna con quella, senza rileggere.
+  getWeight: () => request('/tracking/weight'),
+  saveWeight: (weightKg, day = null) =>
+    request('/tracking/weight', {
+      method: 'PUT',
+      body: JSON.stringify({ weight_kg: weightKg, day }),
+    }),
+  deleteWeight: (day) => request(`/tracking/weight/${day}`, { method: 'DELETE' }),
 };
 
 // ── Formattatori condivisi ──

@@ -4153,6 +4153,131 @@ textarea:focus {
   color: var(--warning);
 }
 
+/* Andamento → Peso. Una linea sola nel colore d'accento, punti da 8px con un
+   bersaglio invisibile più grande, griglia e assi recessivi; il riferimento (il peso
+   con cui sono stati calcolati i target) è tratteggiato e non colorato. */
+.weight-chart {
+  position: relative;
+  margin-top: 8px;
+}
+
+.weight-chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.wc-grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.wc-axis {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  fill: var(--text-muted);
+}
+
+.wc-ref {
+  stroke: var(--text-muted);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+}
+
+.wc-cross {
+  stroke: var(--border-light);
+  stroke-width: 1;
+}
+
+.wc-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.wc-dot {
+  fill: var(--accent);
+  stroke: var(--bg-card);
+  stroke-width: 2;
+}
+
+.wc-dot.on {
+  r: 6;
+}
+
+.wc-tip {
+  position: absolute;
+  transform: translate(-50%, calc(-100% - 12px));
+  pointer-events: none;
+  display: grid;
+  gap: 2px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--bg-elevated, var(--bg-card));
+  border: 1px solid var(--border-light);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.wc-tip span {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.weight-input {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.weight-input input {
+  height: 40px;
+  font-family: var(--font-mono);
+}
+
+.weight-input > span {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.weight-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.weight-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 0;
+  border-top: 1px solid var(--border);
+}
+
+.weight-list li:first-child {
+  border-top: none;
+}
+
+.weight-day {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.weight-kg {
+  font-family: var(--font-mono);
+}
+
+.weight-recalc {
+  margin-bottom: 16px;
+}
+
 .pantry-edit {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 110px 88px auto auto;

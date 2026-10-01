@@ -7,7 +7,9 @@ from sqlalchemy.orm import Session
 
 from ..auth import get_current_user_id
 from ..database import get_db
-from ..models import Recipe, ShoppingList, ShoppingListItem, WeekPlan
+from ..models import Recipe, ShoppingList, ShoppingListItem, WeekPlan, WeightEntry
+from ..schemas import WeightEntryIn
+from ..services import planner, weight
 from ..services.planner import (
     DAY_NAMES,
     current_week_start,
@@ -28,6 +30,41 @@ from ..services.tracking import (
 )
 
 router = APIRouter(prefix="/api/tracking", tags=["Tracking"])
+
+
+@router.get("/weight")
+def get_weight(
+    user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
+):
+    """Le pesate e, se la dieta viene dal questionario, se è ora di ricalcolarla."""
+    return weight.history(db, user_id)
+
+
+@router.put("/weight")
+def put_weight(
+    body: WeightEntryIn,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    """Segna il peso di un giorno (oggi, se non si dice quale). Ripesarsi corregge."""
+    # `planner.today()` e non `date.today()`: è la data che i test possono fissare.
+    giorno = body.day or planner.today()
+    if giorno > planner.today():
+        raise HTTPException(400, "Il peso di un giorno che non è ancora arrivato non si segna.")
+    weight.upsert(db, user_id, giorno, body.weight_kg)
+    db.commit()
+    return weight.history(db, user_id)
+
+
+@router.delete("/weight/{day}")
+def delete_weight(
+    day: date,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    db.query(WeightEntry).filter_by(user_id=user_id, day=day).delete()
+    db.commit()
+    return weight.history(db, user_id)
 
 
 @router.get("/weekly")

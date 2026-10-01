@@ -28,3 +28,25 @@ per l'app quella giornata una risposta non ce l'ha e non c'è modo di distinguer
 «no». È l'opposto della regola del calendario dell'anno, dove un giorno non tracciato
 resta fuori — lì il numero è una media e contarlo falserebbe il conto, qui è una barra
 in un grafico di sette e toglierla lascerebbe un buco nella settimana.
+
+**Il peso è un film, e il ricalcolo si propone, non si fa.** Il peso del questionario
+era una fotografia: quella del giorno in cui lo si era compilato. `WeightEntry` (una
+pesata per giorno: ripesarsi lo stesso giorno corregge, non aggiunge) dà lo storico,
+e la scheda «Peso» di Andamento lo disegna. Il questionario stesso segna una pesata,
+così lo storico parte da lì.
+
+I target di una dieta da questionario dipendono dal peso (Mifflin-St Jeor, proteine
+per chilo): sei chili dopo sono i target di un'altra persona. `services/weight.history`
+confronta l'ultima pesata col peso del profilo e, oltre `max(2 kg, 3%)` — sotto, la
+differenza sui target è di poche decine di kcal, meno dello scarto fra due pesate a ore
+diverse —, propone il ricalcolo. Il pulsante porta alla dieta col questionario già
+aperto e il peso nuovo dentro (`state.ricalcolaConPeso`, consumato subito come quello
+della dialog di generazione). L'app non ricalcola da sola: cambierebbe la dieta sotto i
+piedi dell'utente. E per la dieta di un nutrizionista non propone niente: i suoi numeri
+non vengono da una formula che l'app conosce.
+
+Il grafico è una linea sola, quindi senza legenda: asse x sul tempo vero (le pesate non
+sono equidistanti, e a passo fisso il grafico mentirebbe sulla velocità), asse y che
+non parte da zero (su 70 kg una variazione di 2 è tutto quello che c'è da vedere), il
+peso dei target come riga tratteggiata. L'elenco delle pesate a fianco è la sua vista
+tabellare. Guardie in `tests/test_peso.py`.

@@ -5,6 +5,8 @@ gioco sono aggregate da più tabelle (pasto + ricetta + ingredienti + macro targ
 un dict costruito nel servizio è più leggibile di dieci schemi annidati.
 """
 
+from datetime import date
+
 from pydantic import BaseModel, Field
 
 # ── Auth ───────────────────────────────────────────────────────────────────────
@@ -306,3 +308,8 @@ class DietFrequency(BaseModel):
 
 class DietFrequenciesUpdate(BaseModel):
     frequencies: list[DietFrequency] = Field(default_factory=list, max_length=20)
+
+
+class WeightEntryIn(BaseModel):
+    weight_kg: float = Field(gt=20, lt=400)
+    day: date | None = None

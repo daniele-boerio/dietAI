@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Calculator,
   FileUp,
@@ -37,6 +38,17 @@ const CAMPI = [
 // un menu di configurazione la faceva sembrare un dettaglio da sistemare una volta.
 export default function DietPage() {
   const { addToast } = useApp();
+  // Arrivati da Andamento → Peso col pulsante «Ricalcola i target»: il questionario si
+  // apre già compilato col peso di adesso. Il segno si consuma subito, o tornando
+  // indietro si riaprirebbe addosso a chi voleva solo guardare la dieta.
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [pesoNuovo] = useState(() => location.state?.ricalcolaConPeso ?? null);
+  useEffect(() => {
+    if (location.state?.ricalcolaConPeso) {
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location.state, location.pathname, navigate]);
   const [diet, setDiet] = useState(null);
   const [meals, setMeals] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -443,6 +455,7 @@ export default function DietPage() {
 
             <QuestionnaireCard
               diet={diet}
+              pesoNuovo={pesoNuovo}
               onDone={(updated) => {
                 setDiet(updated);
                 setMeals(updated.meals);
@@ -503,9 +516,10 @@ const ATTIVITA = {
 // pagina davanti ai numeri che si vengono a correggere qui il 90% delle volte. Ma il
 // riassunto dei dati resta a vista, perché è quello che dice se vale la pena riaprirla:
 // il peso di sei settimane fa si riconosce a colpo d'occhio.
-function QuestionnaireCard({ diet, onDone }) {
-  const [open, setOpen] = useState(false);
-  const profile = diet?.profile;
+function QuestionnaireCard({ diet, onDone, pesoNuovo }) {
+  const [open, setOpen] = useState(Boolean(pesoNuovo && diet?.profile));
+  const profile =
+    pesoNuovo && diet?.profile ? { ...diet.profile, weight_kg: pesoNuovo } : diet?.profile;
 
   return (
     <div className="card settings-section">

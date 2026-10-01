@@ -538,6 +538,32 @@ class PantryItem(Base):
     )
 
 
+class WeightEntry(Base):
+    """Una pesata: il peso di un giorno.
+
+    Il peso del questionario è una fotografia del giorno in cui lo si è compilato; qui
+    c'è il film. Serve a due cose: vedere come va (Andamento → Peso) e accorgersi
+    quando i target calcolati sono di un'altra persona — sei chili fa — e proporre di
+    ricalcolarli. Uno per giorno: pesarsi due volte lo stesso giorno corregge, non
+    aggiunge.
+    """
+
+    __tablename__ = "weight_entries"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    day = Column(Date, nullable=False)
+    weight_kg = Column(Float, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "day", name="uq_weight_entry_day"),
+        CheckConstraint("weight_kg > 0 AND weight_kg < 500", name="ck_weight_range"),
+    )
+
+
 class UserPreferences(Base):
     __tablename__ = "user_preferences"
 

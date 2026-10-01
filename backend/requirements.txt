@@ -13,3 +13,5 @@ anthropic==0.117.0
 openai==2.46.0
 pypdf==6.14.2
 cryptography==46.0.3
+pywebpush==2.0.3
+tzdata==2025.2

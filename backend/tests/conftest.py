@@ -15,6 +15,8 @@ from cryptography.fernet import Fernet
 os.environ.setdefault("SECRET_KEY", "chiave-di-test-non-usata-in-produzione")
 os.environ.setdefault("ENCRYPTION_KEY", Fernet.generate_key().decode())
 os.environ.setdefault("COOKIE_SECURE", "false")
+# Niente thread dei promemoria: proverebbe a parlare con un Postgres che non c'è.
+os.environ["DIETAI_SCHEDULER"] = "0"
 
 from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import create_engine, event  # noqa: E402

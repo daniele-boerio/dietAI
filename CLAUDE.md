@@ -63,7 +63,7 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
 │       ├── merge_ingredients.py # `python -m app.merge_ingredients`: fonde i doppioni di anagrafica
 │       ├── merge_recipes.py    # `python -m app.merge_recipes`: fonde le ricette identiche
 │       ├── recompute_macros.py # `python -m app.recompute_macros`: ricalcola i macro dell'archivio
-│       ├── routers/            # auth, admin, diet, config, planning, recipes, chat, shopping, tracking
+│       ├── routers/            # auth, admin, diet, config, planning, recipes, chat, shopping, tracking, push
 │       ├── services/
 │       │   ├── accounts.py     # chi è l'amministratore, creazione di un account
 │       │   ├── ai_client.py    # due backend (openrouter/anthropic) dietro una interfaccia
@@ -75,6 +75,8 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
 │       │   ├── ingredients.py  # normalizzazione nomi, anagrafica
 │       │   ├── shopping.py     # aggregazione lista, costo, spesa fatta
 │       │   ├── macros.py       # macro calcolati dagli ingredienti, ritocco grammature
+│       │   ├── push.py         # notifiche push e promemoria serale (thread ogni minuto)
+│       │   ├── weight.py       # storico del peso, proposta di ricalcolo
 │       │   └── tracking.py     # pianificato vs target
 │       └── utils/
 │           ├── units.py        # conversione unità (g/ml/unità)
@@ -187,6 +189,9 @@ paragrafo nel documento, scrivendo anche cosa non andava con la versione di prim
   mai per la dieta di un nutrizionista.
 - «Ho mangiato altro: cosa?» si stima (`PlannedMeal.eaten_nutrition`) solo su un pasto
   segnato così; il «mangiato davvero» del giorno si dice solo se si sa di tutti i pasti.
+- Il promemoria serale (push) parte all'ora italiana scelta, una volta al giorno e solo
+  se oggi c'è qualcosa da segnare. Lo manda un thread del backend (`push.start_scheduler`,
+  spento nei test); le chiavi VAPID si ricavano da `SECRET_KEY`.
 
 **Generazione** (`docs/generazione.md`)
 - Una chiamata sola per settimana (anti-spreco); di default riempie solo i buchi, e la

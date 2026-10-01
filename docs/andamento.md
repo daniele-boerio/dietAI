@@ -67,3 +67,30 @@ quelli: un totale fatto di metà pasti non è il totale del giorno, e uno zero a
 di un pasto non segnato sembrerebbe un digiuno. È la stessa regola del calendario
 dell'anno, dove un giorno non tracciato resta fuori. Guardie in
 `tests/test_mangiato_altro.py`.
+
+**Il promemoria serale chiude il buco dei giorni mai segnati.** Un giorno passato e mai
+segnato finisce rosso nel grafico della settimana, perché per l'app non c'è modo di
+distinguerlo da un «no» — e quasi sempre non è un giorno andato male, è un giorno in
+cui ci si è dimenticati. Da Impostazioni → Preferenze si sceglie un'ora; a quell'ora
+(italiana: `push.FUSO`, perché il container gira in UTC e «21:00» arriverebbe alle 23)
+arriva una notifica push **solo se oggi c'è ancora qualcosa da segnare**: una notifica
+che non chiede niente insegna a ignorare le notifiche. Una volta al giorno
+(`UserPreferences.last_reminder_on`, segnato anche quando non si manda, così il giro
+non ricontrolla la stessa persona ogni minuto fino a mezzanotte); spostare l'ora lo
+azzera, o spostare il promemoria a più tardi lo perderebbe per oggi.
+
+Il giro lo fa un thread del backend, ogni minuto (`push.start_scheduler`, avviato
+all'avvio dell'app), come le settimane si archiviano senza scheduler esterno: il
+backend gira in un processo solo, e il thread vive con lui. Se il processo si riavvia
+nel minuto del promemoria lo si perde: è un promemoria, non una scadenza. I test lo
+spengono con `DIETAI_SCHEDULER=0`.
+
+Le chiavi VAPID che firmano le notifiche si **ricavano da `SECRET_KEY`** se
+`VAPID_PRIVATE_KEY` non c'è: niente da configurare su Coolify, e restano le stesse a
+ogni riavvio — chiavi nuove renderebbero inutili tutte le iscrizioni dei telefoni. Ogni
+dispositivo è una `PushSubscription` (l'`endpoint` è unico: lo stesso telefono con un
+altro account loggato passa a quell'account); quelle che il servizio di push dichiara
+morte (404/410) si cancellano al primo invio. Su iPhone le notifiche esistono solo per
+l'app installata sulla schermata Home, e la pagina lo dice invece di mostrare un
+pulsante che non funziona. Guardie in `tests/test_promemoria.py`, compreso il giro vero
+di cifratura e firma fino alla richiesta HTTP esclusa.

@@ -319,3 +319,21 @@ class WeightEntryIn(BaseModel):
 
 class EatenInsteadRequest(BaseModel):
     text: str | None = Field(default=None, max_length=500)
+
+
+class PushKeys(BaseModel):
+    p256dh: str = Field(min_length=1, max_length=200)
+    auth: str = Field(min_length=1, max_length=100)
+
+
+class PushSubscribeRequest(BaseModel):
+    endpoint: str = Field(min_length=10, max_length=1000)
+    keys: PushKeys
+
+
+class PushUnsubscribeRequest(BaseModel):
+    endpoint: str = Field(min_length=10, max_length=1000)
+
+
+class ReminderUpdate(BaseModel):
+    time: str | None = Field(default=None, max_length=5)

@@ -380,6 +380,15 @@ export const api = {
 
   getDashboard: () => request('/tracking/dashboard'),
 
+  // Notifiche push: chiave pubblica e stato, iscrizione del dispositivo, ora del
+  // promemoria serale (null = spento), notifica di prova.
+  getPush: () => request('/push'),
+  subscribePush: (subscription) =>
+    request('/push/subscribe', { method: 'POST', body: JSON.stringify(subscription) }),
+  setReminder: (time) =>
+    request('/push/reminder', { method: 'PUT', body: JSON.stringify({ time }) }),
+  testPush: () => request('/push/test', { method: 'POST' }),
+
   // Lo storico del peso. Ogni risposta è lo storico intero, con l'eventuale proposta
   // di ricalcolare i target: la pagina si ridisegna con quella, senza rileggere.
   getWeight: () => request('/tracking/weight'),

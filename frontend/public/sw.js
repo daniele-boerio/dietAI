@@ -19,6 +19,43 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
+// Il promemoria serale (e la notifica di prova): il server manda titolo, testo e
+// l'indirizzo da aprire. Il `tag` fa sì che due promemoria non si impilino: il
+// secondo sostituisce il primo.
+self.addEventListener('push', (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = { body: event.data && event.data.text() };
+  }
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'DietAI', {
+      body: data.body || '',
+      icon: '/icon.svg',
+      badge: '/icon.svg',
+      tag: data.tag || 'dietai',
+      data: { url: data.url || '/' },
+    })
+  );
+});
+
+// Toccando la notifica si torna all'app se è già aperta, invece di aprirne un'altra.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || '/';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((finestre) => {
+      const aperta = finestre.find((c) => new URL(c.url).origin === self.location.origin);
+      if (aperta) {
+        aperta.focus();
+        return aperta.navigate(url);
+      }
+      return self.clients.openWindow(url);
+    })
+  );
+});
+
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;

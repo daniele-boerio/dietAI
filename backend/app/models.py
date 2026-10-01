@@ -600,6 +600,31 @@ class UserPreferences(Base):
     ai_model_planning = Column(String)
     ai_model_chat = Column(String)
     ai_model_diet = Column(String)
+    # Il promemoria serale: «HH:MM» nell'ora italiana, NULL = spento. `last_reminder_on`
+    # è il giorno dell'ultimo giro fatto per questo utente, mandato o no: una volta al
+    # giorno e non di più (vedi `services/push.py`).
+    reminder_time = Column(String(5))
+    last_reminder_on = Column(Date)
+
+
+class PushSubscription(Base):
+    """Un dispositivo che riceve le notifiche: l'iscrizione del suo browser.
+
+    L'`endpoint` è l'indirizzo del servizio di push del browser (Google, Apple,
+    Mozilla) ed è unico per dispositivo: se lo stesso telefono lo rimanda con un altro
+    utente loggato, l'iscrizione passa a quell'utente invece di raddoppiare.
+    """
+
+    __tablename__ = "push_subscriptions"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    endpoint = Column(Text, nullable=False, unique=True)
+    p256dh = Column(String, nullable=False)
+    auth = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
 # ─────────────────────────── Lista della spesa ───────────────────────────

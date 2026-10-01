@@ -9,6 +9,7 @@ import CuisinePicker from '../components/CuisinePicker';
 import IngredientInput from '../components/IngredientInput';
 import ModelPicker from '../components/ModelPicker';
 import NormalizationSettings from '../components/NormalizationSettings';
+import ReminderSettings from '../components/ReminderSettings';
 
 // Qui stanno solo le cose che si impostano una volta e poi restano. Quelle che
 // cambiano di continuo hanno una pagina loro: la dieta (`/diet`) e la dispensa
@@ -372,6 +373,8 @@ function PreferencesTab() {
           onChange={(cuisines) => saveTraPoco({ ...prefs, cuisines })}
         />
       </div>
+
+      <ReminderSettings />
     </div>
   );
 }

@@ -13,7 +13,8 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from .rate_limit import limiter
-from .routers import admin, auth, chat, diet, planning, recipes, shopping, tracking
+from .database import SessionLocal
+from .routers import admin, auth, chat, diet, planning, push, recipes, shopping, tracking
 from .routers import config as config_router
 
 logging.basicConfig(level=logging.INFO)
@@ -44,6 +45,17 @@ app.include_router(recipes.router)
 app.include_router(chat.router)
 app.include_router(shopping.router)
 app.include_router(tracking.router)
+app.include_router(push.router)
+
+
+# Il giro dei promemoria serali: un thread che controlla ogni minuto chi ha un
+# promemoria arrivato all'ora (vedi `services/push.py`). Parte con l'app e muore con
+# lei; i test lo spengono con DIETAI_SCHEDULER=0.
+@app.on_event("startup")
+def _avvia_promemoria() -> None:
+    from .services.push import start_scheduler
+
+    start_scheduler(SessionLocal)
 
 
 # Tutte le rotte sono `def`, non `async def`: il lavoro dell'app è sincrono e

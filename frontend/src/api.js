@@ -106,6 +106,8 @@ export const api = {
 
   // ── Utenti (solo amministratore) ──
   getUsers: () => request('/admin/users'),
+  // Chiamate, token e costo dell'AI per account, negli ultimi `days` giorni.
+  getAiUsage: (days = 30) => request(`/admin/usage?days=${days}`),
 
   createUser: (email, password) =>
     request('/admin/users', { method: 'POST', body: JSON.stringify({ email, password }) }),

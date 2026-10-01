@@ -611,6 +611,31 @@ class UserPreferences(Base):
     last_reminder_on = Column(Date)
 
 
+class AIUsage(Base):
+    """Una chiamata al modello: chi l'ha fatta, per cosa, quanto è costata.
+
+    Chi mette la chiave paga per tutti: senza questa tabella aveva solo l'interruttore
+    `ai_enabled` e nessun numero per decidere quando usarlo. `user_id` è chi ha
+    premuto il pulsante, non chi paga — chi paga è sempre l'amministratore.
+    """
+
+    __tablename__ = "ai_usage"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    role = Column(String, nullable=False)
+    model = Column(String, nullable=False)
+    input_tokens = Column(Integer, nullable=False, default=0, server_default="0")
+    output_tokens = Column(Integer, nullable=False, default=0, server_default="0")
+    # In dollari, come li conta il provider. NULL = né il provider né il listino lo
+    # sapevano; `cost_estimated` = calcolato dal listino invece che dichiarato.
+    cost_usd = Column(Float)
+    cost_estimated = Column(Boolean, nullable=False, default=False, server_default="false")
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+
 class PushSubscription(Base):
     """Un dispositivo che riceve le notifiche: l'iscrizione del suo browser.
 

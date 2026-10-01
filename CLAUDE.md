@@ -77,6 +77,7 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
 │       │   ├── macros.py       # macro calcolati dagli ingredienti, ritocco grammature
 │       │   ├── push.py         # notifiche push e promemoria serale (thread ogni minuto)
 │       │   ├── weight.py       # storico del peso, proposta di ricalcolo
+│       │   ├── usage.py        # registro delle chiamate AI e conto per utente
 │       │   └── tracking.py     # pianificato vs target
 │       └── utils/
 │           ├── units.py        # conversione unità (g/ml/unità)
@@ -138,6 +139,8 @@ paragrafo nel documento, scrivendo anche cosa non andava con la versione di prim
   schermate che non ha.
 - `is_active` toglie l'accesso subito (sessioni revocate, `token_version`);
   `ai_enabled` spegne solo l'AI. L'admin non si sospende, cancella o resetta da solo.
+- Ogni chiamata al modello lascia una riga in `AIUsage` (token e costo, a chi ha premuto
+  il pulsante): il client la scrive da sé se è stato costruito da `get_client`.
 - Niente email: l'unico endpoint pubblico è `/auth/login`. Cancellare un utente porta
   via tutto (CASCADE); il seed ricrea solo l'amministratore.
 

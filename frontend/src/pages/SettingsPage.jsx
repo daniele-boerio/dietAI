@@ -5,6 +5,7 @@ import { api, formatDate } from '../api';
 import { useApp } from '../App';
 import { useAuth } from '../AuthContext';
 import ConfirmDialog from '../components/ConfirmDialog';
+import AiUsageCard from '../components/AiUsageCard';
 import CuisinePicker from '../components/CuisinePicker';
 import IngredientInput from '../components/IngredientInput';
 import ModelPicker from '../components/ModelPicker';
@@ -572,6 +573,8 @@ function UsersTab() {
 
   return (
     <>
+      <AiUsageCard />
+
       <div className="card settings-section">
         <div className="card-title">
           <UserPlus /> Nuovo account

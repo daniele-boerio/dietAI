@@ -54,3 +54,25 @@ l'amministratore c'è `python -m app.reset_password` dal container, ed è l'unic
 Cancellare la riga utente per farla ricreare dal seed **distrugge tutti i dati** (FK in
 CASCADE) — e il seed **non** ricrea gli altri account: gira a ogni avvio del container
 e resusciterebbe ogni volta chi è stato cancellato apposta.
+
+**Chi paga vede quanto.** L'amministratore mette la chiave e paga per tutti, e fin qui
+aveva solo l'interruttore `ai_enabled` per frenare la bolletta, senza un numero per
+decidere quando usarlo. Ora ogni chiamata lascia una riga (`AIUsage`): token in
+entrata e in uscita e il costo in dollari, e Impostazioni → Utenti mostra il conto per
+account su 7, 30 o 90 giorni (`GET /api/admin/usage`, solo amministratore). La riga va
+a **chi ha premuto il pulsante**, non a chi paga — chi paga è sempre lui, e la domanda
+a cui il pannello risponde è un'altra.
+
+Il costo lo dichiara OpenRouter nella risposta (`usage.cost`, fra i campi che l'SDK non
+conosce); in streaming serve `stream_options={"include_usage": True}`, perché l'uso
+arriva nell'ultimo pezzo senza `choices` — e la generazione della settimana, la più
+cara, va proprio in streaming. Dove il costo non c'è (il backend Anthropic) si stima
+dal listino del catalogo modelli **solo se è già in memoria**: il registro non deve mai
+essere il motivo di una richiesta di rete nel mezzo di una generazione. Le chiamate
+senza costo noto si dichiarano nel pannello invece di sparire dal totale.
+
+Due dettagli. L'uso si registra nel `finally` di `_complete`: una risposta finita a
+vuoto per «length» i token li ha consumati tutti, ed è proprio quella da contare. E si
+scrive con una sessione propria (`usage.recorder`), perché chi chiama può avere in mano
+mezza settimana non committata; se la scrittura fallisce si logga e basta. Guardie in
+`tests/test_costo_ai.py`.

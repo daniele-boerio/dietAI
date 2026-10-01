@@ -2764,6 +2764,52 @@ textarea {
 /* «Cosa hai mangiato invece?»: una riga sola, il campo e il pulsante che stima, e
    sotto la stima in mono — è un numero da leggere, non da confondere coi macro della
    ricetta, che restano lì sopra per memoria. Prende tutta la riga delle azioni. */
+/* Il costo dell'AI per account: una riga ciascuno, i numeri in mono perché si
+   incolonnino da soli. Sul telefono l'email prende la sua riga. */
+.usage-list {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+}
+
+.usage-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  gap: 12px;
+  align-items: baseline;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+
+.usage-list li:first-child {
+  border-top: none;
+}
+
+.usage-email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.usage-num {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.usage-list strong.usage-num {
+  color: var(--text-primary);
+}
+
+@media (max-width: 560px) {
+  .usage-list li {
+    grid-template-columns: auto auto auto;
+  }
+  .usage-email {
+    grid-column: 1 / -1;
+  }
+}
+
 /* Il tetto della spesa: una riga sotto il livello di budget. */
 .budget-cap {
   display: flex;

@@ -167,6 +167,26 @@ def _provider_message(exc) -> str:
 # ── Backend ────────────────────────────────────────────────────────────────────
 
 
+def _usage_dict(usage) -> dict | None:
+    """Token e costo da una risposta OpenAI-compatibile. OpenRouter mette il costo in
+    dollari nello stesso oggetto (`usage.cost`), fra i campi che l'SDK non conosce."""
+    if usage is None:
+        return None
+    extra = getattr(usage, "model_extra", None) or {}
+    cost = getattr(usage, "cost", None)
+    if cost is None:
+        cost = extra.get("cost")
+    try:
+        cost = float(cost) if cost is not None else None
+    except (TypeError, ValueError):
+        cost = None
+    return {
+        "input_tokens": getattr(usage, "prompt_tokens", 0) or 0,
+        "output_tokens": getattr(usage, "completion_tokens", 0) or 0,
+        "cost_usd": cost,
+    }
+
+
 class _AnthropicBackend:
     """SDK ufficiale Anthropic. L'unico che legge PDF nativamente."""
 
@@ -179,6 +199,7 @@ class _AnthropicBackend:
         self._client = anthropic.Anthropic(api_key=api_key, timeout=600)
 
     def complete(self, *, model, system, messages, max_tokens, thinking, on_progress=None) -> str:
+        self.last_usage = None
         params: dict = {
             "model": model,
             "max_tokens": max_tokens,
@@ -220,6 +241,14 @@ class _AnthropicBackend:
         except anthropic.APIStatusError as exc:
             logger.warning("Errore API Anthropic %s: %s", exc.status_code, exc.message)
             raise AIError(f"Errore dal fornitore ({exc.status_code}). Riprova.")
+
+        usage = getattr(message, "usage", None)
+        if usage is not None:
+            self.last_usage = {
+                "input_tokens": getattr(usage, "input_tokens", 0) or 0,
+                "output_tokens": getattr(usage, "output_tokens", 0) or 0,
+                "cost_usd": None,
+            }
 
         if message.stop_reason == "refusal":
             raise AIError("Il modello ha rifiutato di rispondere a questa richiesta.")
@@ -280,6 +309,7 @@ class _OpenAICompatibleBackend:
 
     def complete(self, *, model, system, messages, max_tokens, thinking, on_progress=None) -> str:
         payload = [{"role": "system", "content": system}, *messages]
+        self.last_usage = None
 
         # Sui modelli che ragionano (GLM, Hy3, o-series...) il ragionamento è ACCESO
         # di default e i suoi token si scalano da max_tokens: senza un freno un modello
@@ -313,9 +343,15 @@ class _OpenAICompatibleBackend:
                     messages=payload,
                     max_tokens=max_tokens,
                     stream=True,
+                    # L'uso arriva nell'ultimo pezzo, che non ha `choices`: senza
+                    # questa richiesta una generazione in streaming non direbbe quanto
+                    # è costata, ed è proprio la più cara.
+                    stream_options={"include_usage": True},
                     extra_body=extra_body,
                 )
+                usage = None
                 for chunk in stream:
+                    usage = getattr(chunk, "usage", None) or usage
                     if not chunk.choices:
                         continue
                     choice = chunk.choices[0]
@@ -338,10 +374,14 @@ class _OpenAICompatibleBackend:
                 response = self._client.chat.completions.create(
                     model=model, messages=payload, max_tokens=max_tokens, extra_body=extra_body
                 )
+                usage = getattr(response, "usage", None)
                 choice = response.choices[0]
                 text = choice.message.content or ""
                 finish_reason = choice.finish_reason
 
+            # Prima del controllo sulla risposta vuota: una risposta finita a vuoto
+            # per «length» i token li ha consumati tutti, e va contata.
+            self.last_usage = _usage_dict(usage)
             if not text.strip():
                 raise _empty_response_error(model, max_tokens, finish_reason)
             return text
@@ -422,6 +462,9 @@ class AIClient:
                 "API key non configurata. Inseriscila in Impostazioni → Account.", 400
             )
         self.model = model
+        # Chi riceve l'uso di ogni chiamata (`services/usage.recorder`). None = nessuno:
+        # un client costruito a mano, nei test, non registra niente.
+        self.on_usage = None
         api_key = decrypt_api_key(user.claude_api_key_enc)
         self._backend = (
             _AnthropicBackend(api_key)
@@ -433,15 +476,25 @@ class AIClient:
     def supports_native_pdf(self) -> bool:
         return self._backend.supports_native_pdf
 
+    def _report_usage(self) -> None:
+        usage = getattr(self._backend, "last_usage", None)
+        if usage and self.on_usage:
+            self.on_usage(self.model, usage)
+
     def _complete(self, system, messages, max_tokens, thinking, on_progress=None) -> str:
-        text = self._backend.complete(
-            model=self.model,
-            system=system,
-            messages=messages,
-            max_tokens=max_tokens,
-            thinking=thinking,
-            on_progress=on_progress,
-        )
+        # Nel `finally`: anche una risposta che poi fallisce (vuota, rifiutata) è stata
+        # pagata, e il registro deve contarla.
+        try:
+            text = self._backend.complete(
+                model=self.model,
+                system=system,
+                messages=messages,
+                max_tokens=max_tokens,
+                thinking=thinking,
+                on_progress=on_progress,
+            )
+        finally:
+            self._report_usage()
         if not text.strip():
             raise AIError("Il modello ha restituito una risposta vuota. Riprova.")
         return text
@@ -517,9 +570,12 @@ class AIClient:
             raise AIError(
                 "Il provider configurato non legge i PDF direttamente.", 400
             )
-        text = self._backend.complete_with_pdf(
-            model=self.model, system=system, pdf_b64=pdf_b64, prompt=prompt
-        )
+        try:
+            text = self._backend.complete_with_pdf(
+                model=self.model, system=system, pdf_b64=pdf_b64, prompt=prompt
+            )
+        finally:
+            self._report_usage()
         try:
             return _extract_json(text)
         except ValueError:
@@ -568,4 +624,10 @@ def get_client(db: Session, user: User, role: str) -> AIClient:
             400,
         )
 
-    return AIClient(owner, model_for(db, owner.id, role))
+    client = AIClient(owner, model_for(db, owner.id, role))
+    # Il conto lo paga `owner`, ma la riga del registro va a chi ha premuto il
+    # pulsante: è la domanda a cui il pannello degli utenti risponde.
+    from .usage import recorder
+
+    client.on_usage = recorder(db.get_bind(), user.id, role)
+    return client

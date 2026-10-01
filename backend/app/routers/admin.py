@@ -10,13 +10,14 @@ martedì sera, e per rimetterla non si apre un terminale su Coolify dal telefono
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_admin, get_password_hash, revoke_all_sessions
 from ..database import get_db
 from ..models import DietPlan, User
 from ..schemas import UserCreateRequest, UserFlagsUpdate, UserPasswordResetRequest
+from ..services import usage
 from ..services.accounts import create_user
 
 logger = logging.getLogger(__name__)
@@ -58,6 +59,20 @@ def _target(db: Session, user_id: int, admin: User) -> User:
     if target.is_admin:
         raise HTTPException(400, "Non si tocca un altro amministratore da qui.")
     return target
+
+
+@router.get("/usage")
+def ai_usage(
+    days: int = Query(30, ge=1, le=366),
+    _admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Chiamate al modello, token e costo per utente negli ultimi `days` giorni.
+
+    Chi mette la chiave paga per tutti, e `ai_enabled` è il suo freno: questo è il
+    numero che serve a decidere quando tirarlo.
+    """
+    return usage.summary(db, days)
 
 
 @router.get("/users")

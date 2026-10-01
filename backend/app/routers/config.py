@@ -435,7 +435,7 @@ def update_preferences(
 ROLE_LABELS = {
     "planning": "Pianificazione settimanale",
     "chat": "Chat e modifiche",
-    "diet": "Lettura della dieta",
+    "diet": "Lettura di documenti (dieta e scontrini)",
 }
 
 ROLE_HINTS = {
@@ -449,8 +449,9 @@ ROLE_HINTS = {
         "economico qui si nota poco e si sente sulla bolletta."
     ),
     "diet": (
-        "Due o tre volte l'anno. Se il PDF contiene testo va bene qualunque modello; "
-        "se è una scansione serve un modello che sappia guardare le immagini."
+        "La dieta due o tre volte l'anno, lo scontrino dopo ogni spesa. Se il PDF "
+        "contiene testo va bene qualunque modello; per le scansioni e per le foto degli "
+        "scontrini serve un modello che sappia guardare le immagini."
     ),
 }
 

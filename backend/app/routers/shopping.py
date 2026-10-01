@@ -2,17 +2,22 @@
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+import base64
+
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
-from ..auth import get_current_user_id
+from ..auth import get_current_user, get_current_user_id
 from ..database import get_db
-from ..models import Ingredient, ShoppingList, ShoppingListItem, WeekPlan
+from ..models import Ingredient, ShoppingList, ShoppingListItem, User, WeekPlan
+from ..rate_limit import AI_LIMIT, limiter
 from ..schemas import BoughtQuantityRequest, CheckItemRequest, PaidPriceRequest
+from ..services import prompts
+from ..services.ai_client import get_client
 from ..services.planner import refresh_week_statuses
 from ..utils.pricing import catalog_entry
-from ..utils.units import price_for, unit_price_from
+from ..utils.units import format_quantity, price_for, to_base, unit_price_from
 from ..services.shopping import (
     complete_shopping,
     current_list,
@@ -209,6 +214,119 @@ def set_paid_price(
     _refresh_prices(db, lst)
     db.commit()
     return serialize_shopping_list(db, user_id, lst)
+
+
+_MAX_FOTO = 8 * 1024 * 1024
+
+
+@router.post("/current/receipt")
+@limiter.limit(AI_LIMIT)
+def read_receipt(
+    request: Request,
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """La foto dello scontrino: prezzi e quantità prese, riga per riga.
+
+    Segnare il prezzo a mano è una riga alla volta, al supermercato col carrello in
+    mano. Lo scontrino li ha tutti, e a casa si fotografa in un secondo. Il modello
+    legge le righe e le **abbina lui** agli articoli della lista — gli scontrini
+    abbreviano, e "PETTO POLLO FILE'" è un lavoro di significato, non di lettere — e
+    da lì vale la stessa logica del prezzo scritto a mano: la cifra resta sulla riga,
+    il prezzo al chilo si impara, la riga si spunta. Le righe che non corrispondono a
+    niente in lista si restituiscono, perché l'utente sappia cosa è rimasto fuori.
+
+    Usa il modello del ruolo «diet», che è quello che legge i documenti.
+    """
+    if not (file.content_type or "").startswith("image/"):
+        raise HTTPException(400, "Serve una foto dello scontrino.")
+    content = file.file.read()
+    if not content:
+        raise HTTPException(400, "La foto è vuota.")
+    if len(content) > _MAX_FOTO:
+        raise HTTPException(400, "La foto è troppo grande (massimo 8 MB).")
+
+    refresh_week_statuses(db, user.id)
+    lst = rebuild_shopping_list(db, user.id)
+    righe = (
+        db.query(ShoppingListItem, Ingredient)
+        .join(Ingredient, Ingredient.id == ShoppingListItem.ingredient_id)
+        .filter(ShoppingListItem.shopping_list_id == lst.id)
+        .all()
+    )
+    if not righe:
+        raise HTTPException(400, "La lista è vuota: non c'è niente a cui abbinare lo scontrino.")
+    elenco = "\n".join(
+        f"{item.id} → {ing.name}, {format_quantity(item.total_quantity, item.unit)}"
+        for item, ing in righe
+    )
+
+    client = get_client(db, user, "diet")
+    db.commit()  # niente transazione aperta durante la chiamata al modello
+    data = client.read_image_json(
+        prompts.RECEIPT_SYSTEM,
+        prompts.render(prompts.RECEIPT_PROMPT, items=elenco),
+        base64.standard_b64encode(content).decode(),
+        file.content_type,
+    )
+
+    per_id = {item.id: item for item, _ in righe}
+    pagato: dict[int, float] = {}
+    preso: dict[int, float] = {}
+    fuori: list[dict] = []
+    for riga in (data or {}).get("lines", []) if isinstance(data, dict) else []:
+        if not isinstance(riga, dict):
+            continue
+        try:
+            prezzo = float(riga.get("price"))
+        except (TypeError, ValueError):
+            continue
+        item = per_id.get(riga.get("item_id")) if isinstance(riga.get("item_id"), int) else None
+        if item is None or prezzo <= 0:
+            fuori.append({"text": str(riga.get("text") or "")[:80], "price": prezzo})
+            continue
+        pagato[item.id] = pagato.get(item.id, 0.0) + prezzo
+        quantita = _quantita_nella_riga(riga, item.unit)
+        if quantita:
+            preso[item.id] = preso.get(item.id, 0.0) + quantita
+
+    for item_id, prezzo in pagato.items():
+        item = per_id[item_id]
+        item.is_checked = True
+        if item_id in preso:
+            item.bought_quantity = round(preso[item_id], 3)
+        item.paid_price = round(prezzo, 2)
+        _impara_prezzo_unitario(db, item)
+
+    _refresh_prices(db, lst)
+    db.commit()
+    return {
+        "list": serialize_shopping_list(db, user.id, lst),
+        "matched": len(pagato),
+        "unmatched": fuori,
+        "receipt_total": data.get("total") if isinstance(data, dict) else None,
+    }
+
+
+def _quantita_nella_riga(riga: dict, unita_lista: str) -> float | None:
+    """La quantità della riga dello scontrino, nell'unità della riga della lista.
+
+    Solo se le due unità parlano la stessa lingua (grammi con grammi, pezzi con
+    pezzi): 1 L di latte contro una lista in grammi non si converte, e una quantità
+    inventata insegnerebbe un prezzo al chilo sbagliato.
+    """
+    try:
+        q = float(riga.get("quantity"))
+    except (TypeError, ValueError):
+        return None
+    if q <= 0 or not riga.get("unit"):
+        return None
+    base_q, base_u = to_base(q, str(riga["unit"]))
+    lista_q, lista_u = to_base(1, unita_lista or "unità")
+    if base_u != lista_u:
+        return None
+    return base_q / lista_q
 
 
 @router.post("/current/complete")

@@ -560,6 +560,38 @@ class AIClient:
             "Se succede spesso, prova un modello più capace da Impostazioni → Modelli AI."
         )
 
+    def read_image_json(
+        self, system: str, prompt: str, image_b64: str, media_type: str, *, max_tokens: int = 6000
+    ) -> dict | list:
+        """Una foto più una domanda, risposta in JSON (lo scontrino).
+
+        I due backend vogliono l'immagine in due forme diverse — blocco `image` per
+        Anthropic, `image_url` con un data URL per le API OpenAI-compatibili — e il
+        resto è identico. Il modello deve saper guardare le immagini: se non sa, il
+        fornitore risponde 400 e il messaggio arriva così com'è all'utente.
+        """
+        if isinstance(self._backend, _AnthropicBackend):
+            immagine = {
+                "type": "image",
+                "source": {"type": "base64", "media_type": media_type, "data": image_b64},
+            }
+        else:
+            immagine = {
+                "type": "image_url",
+                "image_url": {"url": f"data:{media_type};base64,{image_b64}"},
+            }
+        messages = [
+            {"role": "user", "content": [immagine, {"type": "text", "text": prompt}]}
+        ]
+        text = self._complete(system, messages, max_tokens, False)
+        try:
+            return _extract_json(text)
+        except ValueError:
+            raise AIError(
+                f"Il modello '{self.model}' non ha restituito un JSON valido leggendo "
+                "l'immagine. Riprova con una foto più nitida."
+            )
+
     def chat(self, system: str, messages: list[dict], *, max_tokens: int = 2000) -> str:
         """Conversazione multi-turno (chat per pasto). Risposta come testo libero."""
         return self._complete(system, messages, max_tokens, False)

@@ -152,3 +152,27 @@ generato anche la prossima risulterebbe fuori budget.
 Il campo si salva insieme alle altre preferenze ma solo se c'è nel corpo
 (`model_fields_set`): un client che salva le preferenze senza conoscerlo non lo deve
 cancellare. Guardie in `tests/test_budget.py`.
+
+**Lo scontrino si fotografa.** Segnare i prezzi a mano è una riga alla volta, col
+carrello in mano; lo scontrino li ha tutti, e a casa si fotografa in un secondo. `POST
+/api/shopping/current/receipt` manda la foto al modello del ruolo `diet` — quello che
+legge i documenti, ed è per questo che l'etichetta è diventata «Lettura di documenti»
+— insieme all'elenco degli articoli in lista **col loro id**: l'abbinamento lo fa il
+modello, perché gli scontrini abbreviano e «PETTO POLLO FILE'» è un lavoro di
+significato, non di lettere. Si applicano solo gli id che sono davvero in lista.
+
+Da lì vale la logica del prezzo scritto a mano: la cifra va su `paid_price` (due righe
+dello stesso articolo si sommano), il prezzo al chilo si impara
+(`_impara_prezzo_unitario`), la riga si spunta. La quantità presa si segna solo se
+l'unità dello scontrino parla la stessa lingua della riga (grammi con grammi, pezzi
+con pezzi): 1 L di latte contro una lista in grammi non si converte, e una quantità
+inventata insegnerebbe un prezzo al chilo sbagliato. Le righe rimaste fuori tornano
+indietro e la pagina le mostra: un detersivo è normale, una riga di pollo non abbinata
+no.
+
+La foto si rimpicciolisce nel browser (1600 px di lato, JPEG) prima di partire: un
+telefono ne fa da 4 MB, e ogni pixel in più si paga in token. Le due API vogliono
+l'immagine in due forme diverse — blocco `image` per Anthropic, `image_url` con un data
+URL per OpenRouter — e `read_image_json` le costruisce entrambe. Sul telefono il
+pulsante sta in testata, perché il conto è una barra in fondo dove non ci sta. Guardie
+in `tests/test_scontrino.py`.

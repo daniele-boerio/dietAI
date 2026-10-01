@@ -31,6 +31,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
 import LoadError from '../components/LoadError';
 import ShoppingChat from '../components/ShoppingChat';
+import ReceiptReader from '../components/ReceiptReader';
 import { useDueColonne } from '../lib/schermo';
 
 /**
@@ -296,6 +297,13 @@ export default function ShoppingPage() {
           <button className="btn btn-secondary" onClick={copyList}>
             <Copy size={16} /> Copia
           </button>
+          {/* Sul telefono il conto è una barra in fondo, dove lo scontrino non ci sta:
+              qui in testata, dove il telefono — che è anche la fotocamera — lo trova. */}
+          {list.total_items > 0 && (
+            <div className="receipt-in-testata">
+              <ReceiptReader onList={setList} />
+            </div>
+          )}
         </div>
       </div>
 
@@ -527,6 +535,7 @@ export default function ShoppingPage() {
               davvero, e da lì sparisce dalla lista: quello che resta è quello che non
               hai preso.
             </p>
+            {list.total_items > 0 && <ReceiptReader onList={setList} />}
           </div>
 
           {/* Sul monitor la chat vive qui, accanto alla lista: è lì che si sta

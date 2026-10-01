@@ -2810,6 +2810,53 @@ textarea {
   }
 }
 
+/* Lo scontrino: un pulsante sotto «Ho fatto la spesa» e, se serve, l'elenco delle
+   righe che non hanno trovato posto in lista. Sul telefono sta in testata (vedi la
+   barra del conto più giù). */
+.receipt-in-testata {
+  display: none;
+}
+
+.receipt-reader {
+  margin-top: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.receipt-unmatched {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 8px 12px;
+}
+
+.receipt-unmatched-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.receipt-unmatched-head button {
+  margin-left: auto;
+}
+
+.receipt-unmatched ul {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+}
+
+.receipt-unmatched li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 3px 0;
+}
+
 /* Il tetto della spesa: una riga sotto il livello di budget. */
 .budget-cap {
   display: flex;
@@ -6761,8 +6808,17 @@ input[type="range"]:disabled {
     box-shadow: none;
   }
   .shopping-total-card .card-title,
-  .shopping-total-hint {
+  .shopping-total-hint,
+  .shopping-total-card .receipt-reader,
+  .shopping-total-card .shopping-budget {
     display: none;
+  }
+  .receipt-in-testata {
+    display: block;
+    flex-basis: 100%;
+  }
+  .receipt-in-testata .receipt-reader {
+    margin-top: 0;
   }
   .shopping-total {
     grid-area: 1 / 1;

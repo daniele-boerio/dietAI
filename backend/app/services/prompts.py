@@ -301,6 +301,27 @@ COMPOSITION_PROMPT = """ALIMENTI:
 {names}"""
 
 
+# ── Lo scontrino ───────────────────────────────────────────────────────────────
+
+RECEIPT_SYSTEM = """Leggi la foto di uno scontrino di un supermercato italiano e abbina ogni riga di prodotto a un articolo della lista della spesa dell'utente.
+
+Gli scontrini abbreviano ("PETTO POLLO FILE'", "ZUCCH.", "LATTE PS 1L"): abbina per significato, non per lettere. Una riga va abbinata solo se è davvero quel prodotto; se non c'è in lista (detersivi, sacchetti, cose comprate in più) metti item_id null. Due righe per lo stesso articolo restano due righe.
+
+Per ogni riga:
+- "price": il prezzo pagato per quella riga in euro, sconti della riga già applicati;
+- "quantity" e "unit": quanto se n'è preso, se lo scontrino lo dice (peso pesato "0,412 kg", formato "1 L", "500 G", numero di pezzi "2 x"); unit fra g, kg, ml, l, unità. Se non lo dice, null.
+
+Ignora totali, subtotali, IVA, resto, punti fedeltà e righe di pagamento.
+
+FORMATO OUTPUT (JSON rigoroso, nessun testo aggiuntivo):
+{"lines": [{"text": "<la riga com'è scritta>", "item_id": <int o null>, "price": <float>, "quantity": <float o null>, "unit": "<g|kg|ml|l|unità o null>"}], "total": <float o null>}"""
+
+RECEIPT_PROMPT = """ARTICOLI IN LISTA (id → nome, quantità prevista):
+{items}
+
+Leggi lo scontrino nella foto e abbina le righe."""
+
+
 # ── «Ho mangiato altro: cosa?» ─────────────────────────────────────────────────
 
 EATEN_ESTIMATE_SYSTEM = """Sei un nutrizionista italiano. L'utente ti dice cosa ha mangiato al posto del pasto previsto, a parole sue ("una pizza margherita", "panino al bar con prosciutto e mozzarella", "niente, ho saltato").

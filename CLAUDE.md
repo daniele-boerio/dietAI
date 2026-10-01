@@ -185,6 +185,8 @@ paragrafo nel documento, scrivendo anche cosa non andava con la versione di prim
   entro una settimana.
 - Il tetto di spesa settimanale (`weekly_budget_eur`) arriva al modello come cifra e il
   conto lo confronta col totale **scalato sui giorni che la lista copre**.
+- La foto dello scontrino la legge il modello del ruolo `diet` e abbina lui le righe
+  agli id degli articoli in lista; da lì è un prezzo scritto a mano come gli altri.
 
 **Andamento** (`docs/andamento.md`)
 - Un giorno senza pasti tracciati resta fuori dalle medie; nel grafico della settimana

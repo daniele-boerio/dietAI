@@ -89,6 +89,9 @@ export const api = {
 
   uploadDiet: (file) => upload('/diet/upload', file),
 
+  // La foto dello scontrino: il modello abbina le righe alla lista e segna i prezzi.
+  readReceipt: (file) => upload('/shopping/current/receipt', file),
+
   createDietManually: (meals) =>
     request('/diet/manual', { method: 'POST', body: JSON.stringify({ meals }) }),
 

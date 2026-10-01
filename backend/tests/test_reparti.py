@@ -121,3 +121,57 @@ def test_il_seed_riallinea_quello_che_l_utente_non_ha_toccato(db):
     seed_ingredients(db)
     db.refresh(pasta)
     assert pasta.category == "cereali"
+
+
+# ── Il reparto indovinato ──────────────────────────────────────────────────────
+
+
+def test_il_catalogo_si_indovina_da_solo():
+    """`guess_category` è la riserva per i nomi che il catalogo non ha: misurarla sui
+    nomi che il catalogo ha è il modo più onesto di sapere quanto sbaglia. Con la
+    ricerca in mezzo alle parole ne sbagliava venti su centottanta — peperoni fra i
+    condimenti, melanzane fra la frutta, melagrana fra i latticini."""
+    from app.utils.pricing import INGREDIENT_CATALOG, guess_category
+
+    sbagliati = {
+        nome: (categoria, guess_category(nome))
+        for nome, (categoria, _, _) in INGREDIENT_CATALOG.items()
+        if guess_category(nome) != categoria
+    }
+    assert sbagliati == {}
+
+
+@pytest.mark.parametrize(
+    "nome, reparto",
+    [
+        ("peperoni friggitelli", "verdura"),  # "pepe" sta dentro, non all'inizio
+        ("salsa di pesce", "condimenti"),  # conta il primo nome, non il secondo
+        ("petto di pollo", "carne"),  # se il primo non dice niente, il successivo
+        ("peperoncino", "condimenti"),  # la parola chiave più lunga vince
+        ("gamberetti", "pesce"),
+    ],
+)
+def test_il_reparto_lo_decide_l_inizio_del_nome(nome, reparto):
+    from app.utils.pricing import guess_category
+
+    assert guess_category(nome) == reparto
+
+
+def test_il_seed_rifa_le_stime_vecchie_ma_non_le_scelte(db):
+    """Le righe fuori catalogo tengono il reparto indovinato il primo giorno: quando
+    la stima migliora il seed le riallinea, senza toccare quelle spostate a mano."""
+    from app.seed import reguess_categories
+
+    db.add_all(
+        [
+            Ingredient(name="peperoni friggitelli", category="condimenti"),
+            Ingredient(name="melagrana sgranata", category="latticini",
+                       category_by_user=True),
+        ]
+    )
+    db.commit()
+
+    assert reguess_categories(db) == 1
+    reparti = {i.name: i.category for i in db.query(Ingredient).all()}
+    assert reparti["peperoni friggitelli"] == "verdura"
+    assert reparti["melagrana sgranata"] == "latticini"

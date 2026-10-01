@@ -8,6 +8,8 @@ spesa, non a fare il conto esatto alla cassa.
 Formato: nome → (categoria, prezzo medio, unità di prezzo).
 """
 
+import re
+
 INGREDIENT_CATALOG: dict[str, tuple[str, float, str]] = {
     # ── Verdura ──
     "zucchine": ("verdura", 2.50, "kg"),
@@ -234,10 +236,11 @@ DEFAULT_BASE_INGREDIENTS = [
 ]
 
 # Parole chiave per indovinare la categoria di un ingrediente che non è a catalogo
-# (l'AI ne inventa di continuo). L'ordine conta: la prima che matcha vince.
+# (l'AI ne inventa di continuo). Sono **inizi di parola**, non pezzi qualsiasi: come
+# le legge `guess_category` è scritto lì.
 _CATEGORY_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
     ("pesce", ("pesce", "salmone", "tonno", "merluzzo", "orata", "branzino", "gambero",
-               "calamar", "seppi", "cozz", "vongol", "alici", "acciug", "sgombro",
+               "calamar", "seppi", "cozz", "vongol", "alici", "acciug", "sgombro", "gamber",
                "platessa", "polpo", "sogliola", "trota", "baccalà")),
     ("carne", ("pollo", "tacchino", "manzo", "vitello", "maiale", "agnello", "coniglio",
                "salsicc", "prosciutto", "bresaola", "speck", "pancetta", "guanciale",
@@ -254,7 +257,7 @@ _CATEGORY_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
                  "cous", "polenta", "gnocchi", "crackers", "fette biscottate", "cereali",
                  "grissini", "piadina", "tortilla", "bulgur", "miglio", "mais",
                  "pangrattato", "biscott")),
-    ("frutta", ("mel", "pera", "banana", "arance", "arancia", "mandarin", "limon",
+    ("frutta", ("mel", "pera", "pere", "banan", "arance", "arancia", "mandarin", "limon",
                 "pompelmo", "kiwi", "fragol", "cilieg", "pesc", "albicocc", "susin",
                 "uva", "melone", "anguria", "fich", "cachi", "melagrana", "mirtill",
                 "lampon", "ananas", "avocado", "mandorl", "noci", "nocciol", "pinoli",
@@ -268,22 +271,52 @@ _CATEGORY_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
     ("condimenti", ("olio", "aceto", "sale", "pepe", "zucchero", "miele", "spezi",
                     "origano", "peperoncino", "curry", "paprika", "curcuma", "cannella",
                     "noce moscata", "senape", "salsa", "brodo", "lievito", "cacao",
-                    "cioccolat", "vaniglia", "maionese", "ketchup", "erbe", "aroma")),
+                    "cioccolat", "vaniglia", "maionese", "ketchup", "erbe", "aroma",
+                    "teriyaki", "hoisin", "sriracha", "gochujang", "miso", "mirin",
+                    "tahin", "harissa", "pasta di curry", "latte di cocco")),
     ("verdura", ("zucchin", "melanzan", "pomodor", "peperon", "carot", "cipoll", "aglio",
                  "sedano", "patat", "spinac", "bietol", "broccol", "cavol", "verza",
                  "finocch", "radicch", "lattug", "rucola", "insalat", "cetriol", "zucca",
                  "asparag", "carciof", "fungh", "fagiolin", "pisell", "porr", "cicoria",
                  "prezzemolo", "basilico", "rosmarino", "salvia", "menta", "ravanell",
-                 "barbabietol", "sedano rapa", "topinambur", "germogli", "verdur")),
+                 "barbabietol", "sedano rapa", "topinambur", "germogli", "verdur", "minestron")),
 ]
 
 
+_INIZI_DI_PAROLA = re.compile(r"(?:^|(?<=[\s'-]))\w")
+
+
 def guess_category(name: str) -> str:
-    """Categoria per un ingrediente non a catalogo. Ripiega su "altro"."""
+    """Categoria per un ingrediente non a catalogo. Ripiega su "altro".
+
+    Due regole, e tutte e due vengono da un errore. La prima: una parola chiave vale
+    solo **all'inizio di una parola**. Cercata in mezzo, "pepe" stava dentro
+    "peperoni" (finiti fra i condimenti), "grana" dentro "melagrana" (fra i
+    latticini), "mel" dentro qualunque cosa cominciasse diversamente.
+
+    La seconda: in italiano il nome che conta è il **primo**, il resto lo qualifica —
+    "salsa di pesce" è una salsa, "aceto di riso" un aceto, "petto di pollo" (dove
+    "petto" non dice niente) è pollo. Quindi si scorre il nome parola per parola, e la
+    prima parola che riconosce qualcosa decide; se ci sono più parole chiave che vi
+    combaciano vince la più lunga, che è la più precisa ("peperon" batte "pepe",
+    "fagiolin" batte "fagiol", "pesce" batte "pesc"). L'ordine delle categorie non
+    conta più: conta solo per i pareggi esatti, che non succedono.
+    """
     n = name.strip().lower()
-    for category, keywords in _CATEGORY_KEYWORDS:
-        if any(k in n for k in keywords):
-            return category
+    for inizio in _INIZI_DI_PAROLA.finditer(n):
+        resto = n[inizio.start():]
+        migliore = max(
+            (
+                (len(k), category)
+                for category, keywords in _CATEGORY_KEYWORDS
+                for k in keywords
+                if resto.startswith(k)
+            ),
+            default=None,
+            key=lambda c: c[0],
+        )
+        if migliore:
+            return migliore[1]
     return "altro"
 
 

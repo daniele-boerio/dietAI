@@ -73,15 +73,15 @@ def test_rigenerare_un_pasto_tracciato_rimette_gli_ingredienti_in_dispensa(
 
     assert scorta(client, "pasta")["quantity"] == 400  # 500 - 100
 
-    # Rigenera il pasto: gli ingredienti devono tornare (la ricetta nuova avrà gli stessi)
+    # Rigenera il pasto: il piatto mangiato non è più in programma, quindi i 100 g
+    # tornano in dispensa. Il piatto nuovo non è ancora stato mangiato — la rotta
+    # azzera `is_followed` — e non scala niente.
     res = client.post(f"/api/planning/meals/{mid}/regenerate")
 
     assert res.status_code == 200, res.text
     assert res.json()["recipe"] is not None  # Nuovo piatto assegnato
-    # Con la ricetta FakeModel (sempre la stessa), gli ingredienti sono identici
-    assert (
-        scorta(client, "pasta")["quantity"] == 400
-    )  # FakeModel torna la stessa ricetta, che consume altri 100 g
+    assert res.json()["is_followed"] is None
+    assert scorta(client, "pasta")["quantity"] == 500
 
 
 def test_eliminare_pasto_non_tracciato_non_cambia_dispensa(client, settimana):

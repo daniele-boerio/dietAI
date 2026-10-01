@@ -41,6 +41,18 @@ class FakeModel:
         self.supports_native_pdf = False
 
     def generate_json(self, system, prompt, **kwargs):
+        # La rigenerazione di un singolo pasto vuole una ricetta, non una settimana:
+        # senza questo ramo ogni test che preme «rigenera» col modello di base finiva
+        # su "non ha restituito una ricetta valida", che non è quello che provava.
+        if "PASTO DA GENERARE" in prompt:
+            return _fake_recipe(
+                "Pasta rigenerata",
+                700,
+                [
+                    {"name": "pasta", "quantity": 100, "unit": "g"},
+                    {"name": "zucchine", "quantity": 150, "unit": "g"},
+                ],
+            )
         days = []
         for dow in range(DAYS):
             days.append(

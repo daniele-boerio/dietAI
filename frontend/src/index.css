@@ -4394,6 +4394,34 @@ textarea:focus {
 /* Su schermo stretto le cinque colonne diventano due righe **dichiarate**: il nome
    prende tutta la prima, quantità e unità si dividono la seconda, e i comandi
    restano in coda. È l'andare a capo scelto, non quello che capita. */
+.pantry-scadenza {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.pantry-scadenza input[type="date"] {
+  width: auto;
+  height: 36px;
+  font-family: var(--font-mono);
+}
+
+.pantry-scadenza .field-hint {
+  margin: 0;
+}
+
+.pantry-expiry {
+  color: var(--warning);
+}
+
+.pantry-expiry.over {
+  color: var(--danger);
+}
+
 @media (max-width: 560px) {
   .pantry-edit,
   .pantry-edit.aggiungi {

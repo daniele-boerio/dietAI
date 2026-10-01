@@ -175,6 +175,9 @@ paragrafo nel documento, scrivendo anche cosa non andava con la versione di prim
 - «Ho fatto la spesa» sposta gli spuntati in dispensa; «l'ho seguito» scala la
   dispensa e scrive `pantry_used` (NULL, non `[]`, se non scala niente) e spiega gli
   scarti (`pantry_skipped`). Cambiare una ricetta non tocca la dispensa.
+- Le scorte possono avere una scadenza (`PantryItem.expires_on`): nel contesto della
+  generazione la dispensa va in ordine di scadenza, con la data per quello che scade
+  entro una settimana.
 
 **Andamento** (`docs/andamento.md`)
 - Un giorno senza pasti tracciati resta fuori dalle medie; nel grafico della settimana

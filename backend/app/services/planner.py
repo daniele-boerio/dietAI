@@ -862,21 +862,42 @@ def _base_names(db: Session, user_id: int) -> list[str]:
     return [r[0] for r in rows]
 
 
+# Entro quanti giorni una scadenza va detta al modello. Oltre una settimana non
+# cambia niente per il piano che si sta generando.
+SCADENZA_VICINA_GIORNI = 7
+
+
 def _pantry_descriptions(db: Session, user_id: int) -> list[str]:
+    """La dispensa per il contesto, con prima quello che scade.
+
+    «Da consumare in via prioritaria» vale per tutta la dispensa, ma la ricotta che
+    scade dopodomani non pesa quanto il pacco di riso: l'ordine e la scritta accanto
+    dicono al modello cosa usare per primo, e in quali giorni (la data c'è apposta,
+    perché giovedì è troppo tardi per una cosa che scade martedì). Una scorta già
+    scaduta resta in elenco col suo avviso invece di sparire: la lista della spesa la
+    conta ancora come presente, e il modello non deve né usarla né ignorarne il nome.
+    """
     rows = (
         db.query(PantryItem, Ingredient)
         .join(Ingredient, Ingredient.id == PantryItem.ingredient_id)
         .filter(PantryItem.user_id == user_id)
         .all()
     )
+    oggi = today()
+    rows.sort(key=lambda r: (r[0].expires_on is None, r[0].expires_on or oggi, r[1].name))
     out = []
     for item, ing in rows:
+        voce = ing.name
         if item.quantity_available:
-            out.append(
-                f"{ing.name} ({format_quantity(item.quantity_available, item.unit or 'unità')})"
-            )
-        else:
-            out.append(ing.name)
+            voce += f" ({format_quantity(item.quantity_available, item.unit or 'unità')})"
+        if item.expires_on:
+            giorni = (item.expires_on - oggi).days
+            data = item.expires_on.strftime("%d/%m")
+            if giorni < 0:
+                voce += f" — SCADUTA il {data}: non usarla"
+            elif giorni <= SCADENZA_VICINA_GIORNI:
+                voce += f" — SCADE il {data}: usala per prima, entro quel giorno"
+        out.append(voce)
     return out
 
 
@@ -944,7 +965,8 @@ def build_context(db: Session, user_id: int, *, cuisine: str | None = None) -> s
         # piano si genera tutto in una volta e il modello vede l'intera settimana.
         extra_rules=((prefs.notes or "").strip() if prefs else "") or "nessuna",
         base=_fmt_list(_base_names(db, user_id)),
-        pantry=_fmt_list(_pantry_descriptions(db, user_id), "vuota"),
+        # Non `_fmt_list`, che ordina alfabeticamente: qui l'ordine è la scadenza.
+        pantry=", ".join(_pantry_descriptions(db, user_id)) or "vuota",
         # La riga la compone il catalogo: è lì che sta il vincolo che la rende utile
         # — la cucina viaggia, gli ingredienti restano quelli del supermercato sotto
         # casa (vedi `utils/cuisines.prompt_line`).

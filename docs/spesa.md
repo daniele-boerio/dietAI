@@ -120,3 +120,19 @@ risposta li porta in `pantry_skipped`, che il frontend rende con
 `nonScalatiDallaDispensa`. Una dispensa che resta ferma senza spiegazioni sembra un
 pulsante rotto, mentre il motivo è quasi sempre correggibile in dieci secondi — di
 solito lo yogurt contato a vasetti contro una ricetta che pesa in grammi.
+
+**Quello che scade si usa prima.** «Dispensa attuale (da consumare in via
+prioritaria)» valeva per tutta la dispensa allo stesso modo: la ricotta che scade
+dopodomani pesava quanto il pacco di riso. `PantryItem.expires_on` è facoltativa — la
+si segna per le cose che scadono davvero — e `_pantry_descriptions` ne fa due usi:
+l'ordine (prima ciò che scade, poi il resto) e una scritta accanto alla voce entro
+`SCADENZA_VICINA_GIORNI` (7) con **la data**, perché giovedì è troppo tardi per una
+cosa che scade martedì. Per la stessa ragione la riga della dispensa nel contesto non
+passa da `_fmt_list`, che mette in ordine alfabetico. Una scorta già scaduta resta in
+elenco con l'avviso di non usarla invece di sparire: la lista della spesa la conta
+ancora come presente, e toglierla di nascosto dal contesto la farebbe ricomparire nel
+piano con un altro nome.
+
+La spesa fatta non tocca la scadenza di una scorta che c'era già: la data si riferiva
+al pacco vecchio, e indovinare quella del nuovo sarebbe inventare. La si corregge dalla
+dispensa. Guardie in `tests/test_scadenze.py`.

@@ -126,7 +126,10 @@ export default function PantryPage() {
                   <strong>{i.name}</strong>
                   <span>{i.category}</span>
                 </div>
-                <span style={{ color: 'var(--text-secondary)' }}>{i.label || '—'}</span>
+                <span style={{ color: 'var(--text-secondary)' }}>
+                  {i.label || '—'}
+                  <Scadenza giorni={i.expires_in_days} />
+                </span>
                 <button
                   className="icon-button"
                   onClick={() => setEditing(i.id)}
@@ -172,6 +175,7 @@ function PantryRowEditor({ item, onDone, onCancel, innerRef }) {
   const [name, setName] = useState(item.name);
   const [quantity, setQuantity] = useState(item.quantity ?? '');
   const [unit, setUnit] = useState(item.unit || 'g');
+  const [expires, setExpires] = useState(item.expires_on || '');
   const [busy, setBusy] = useState(false);
 
   const save = async () => {
@@ -187,6 +191,7 @@ function PantryRowEditor({ item, onDone, onCancel, innerRef }) {
         ingredient_name: name.trim(),
         quantity: quantity === '' ? null : Number(quantity),
         unit: quantity === '' ? null : unit,
+        expires_on: expires || null,
       });
       onDone();
     } catch (e) {
@@ -220,6 +225,28 @@ function PantryRowEditor({ item, onDone, onCancel, innerRef }) {
       <button className="pantry-edit-no" onClick={onCancel} disabled={busy} title="Annulla">
         <X size={16} />
       </button>
+      {/* La scadenza su una riga sua, sotto: è facoltativa e la si segna di rado — le
+          cose che scadono davvero — quindi non ruba una colonna a nome e quantità. */}
+      <label className="pantry-scadenza">
+        <span>Scade il</span>
+        <input type="date" value={expires} onChange={(e) => setExpires(e.target.value)} />
+        <span className="field-hint">
+          facoltativo: le ricette useranno per prima quello che sta per scadere
+        </span>
+      </label>
     </div>
+  );
+}
+
+// Quanto manca alla scadenza, solo quando conta: oltre una settimana non è
+// un'informazione, è rumore su una riga che si legge al volo.
+function Scadenza({ giorni }) {
+  if (giorni == null || giorni > 7) return null;
+  if (giorni < 0) return <span className="pantry-expiry over"> · scaduta</span>;
+  return (
+    <span className="pantry-expiry">
+      {' · '}
+      {giorni === 0 ? 'scade oggi' : giorni === 1 ? 'scade domani' : `scade tra ${giorni} giorni`}
+    </span>
   );
 }

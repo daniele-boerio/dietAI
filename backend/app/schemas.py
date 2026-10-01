@@ -127,6 +127,7 @@ class PantryCreate(BaseModel):
     ingredient_name: str = Field(min_length=1, max_length=120)
     quantity: float | None = Field(default=None, ge=0)
     unit: str | None = Field(default=None, max_length=20)
+    expires_on: date | None = None
 
 
 class PantryUpdate(BaseModel):
@@ -135,6 +136,7 @@ class PantryUpdate(BaseModel):
     ingredient_name: str | None = Field(default=None, min_length=1, max_length=120)
     quantity: float | None = Field(default=None, ge=0)
     unit: str | None = Field(default=None, max_length=20)
+    expires_on: date | None = None
 
 
 class PreferencesUpdate(BaseModel):

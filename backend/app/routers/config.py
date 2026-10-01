@@ -36,6 +36,7 @@ from ..schemas import (
     PantryUpdate,
     PreferencesUpdate,
 )
+from ..services import planner
 from ..services.ai_client import ai_owner
 from ..services.catalog import list_models
 from ..services.ingredients import (
@@ -240,6 +241,12 @@ def _serialize_pantry(item: PantryItem, ingredient: Ingredient) -> dict:
             if item.quantity_available
             else None
         ),
+        "expires_on": item.expires_on.isoformat() if item.expires_on else None,
+        # Giorni che mancano: negativo = già scaduta. Lo calcola il server perché
+        # "oggi" è quello di `planner.today()`, lo stesso di tutto il resto.
+        "expires_in_days": (
+            (item.expires_on - planner.today()).days if item.expires_on else None
+        ),
     }
 
 
@@ -277,6 +284,7 @@ def add_pantry(
         ingredient_id=ingredient.id,
         quantity_available=body.quantity,
         unit=normalize_unit(body.unit) if body.unit else None,
+        expires_on=body.expires_on,
     )
     db.add(item)
     db.commit()
@@ -329,6 +337,8 @@ def update_pantry(
         item.quantity_available = body.quantity
     if "unit" in body.model_fields_set:
         item.unit = normalize_unit(body.unit) if body.unit else None
+    if "expires_on" in body.model_fields_set:
+        item.expires_on = body.expires_on
     db.commit()
     return _serialize_pantry(item, db.get(Ingredient, item.ingredient_id))
 

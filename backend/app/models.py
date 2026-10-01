@@ -535,6 +535,9 @@ class PantryItem(Base):
     )
     quantity_available = Column(Float)
     unit = Column(String)
+    # Quando scade, se lo si sa. Serve a una cosa: la generazione usa per primo quello
+    # che sta per scadere. NULL = non lo so, o non scade (il riso, l'olio).
+    expires_on = Column(Date)
 
     __table_args__ = (
         UniqueConstraint("user_id", "ingredient_id", name="uq_pantry_item"),

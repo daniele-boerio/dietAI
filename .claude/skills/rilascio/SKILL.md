@@ -49,6 +49,7 @@ Quelli che cancellano o fondono mostrano l'anteprima e vogliono `--yes`.
 | `merge_ingredients` | dopo aver cambiato una regola di normalizzazione nel codice |
 | `merge_recipes [--yes]` | ricettario con doppioni di prima delle ricette condivise |
 | `recompute_macros [--yes]` | dopo la migrazione 0021: rifà i macro delle ricette vecchie dagli ingredienti |
+| `refit_macros [--yes] [--email ...]` | ritocca le grammature delle ricette da oggi in avanti fuori dal ±10%, senza chiamare il modello |
 | `repair_cereals` | una fusione di ingredienti ha unito troppo (cereali finiti in "pasta") |
 
 Non cancellare mai la riga di un utente "per farla ricreare dal seed": le FK sono in

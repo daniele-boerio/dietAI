@@ -71,3 +71,5 @@ numero scritto male.
 rifà dagli ingredienti senza toccare le grammature (quelle ricette sono già state
 comprate e mangiate); senza `--yes` stampa solo quanto cambierebbe. Cambia anche i
 totali delle settimane passate e l'aderenza: è voluto, dicono il vero.
+
+**E quelle già in programma si ritoccano a mano.** `python -m app.refit_macros` (anteprima senza `--yes`) applica `fit_to_target` alle ricette da oggi in avanti non segnate né saltate (`services/refit.py`): il passato non si riscrive, una ricetta usata anche fuori dal gruppo si copia prima di toccarla, quelle scritte a mano e quelle con ingredienti senza composizione si saltano, e quelle che nemmeno ritoccando tornano nel target si elencano da rigenerare. Guardia in `tests/test_refit.py`.

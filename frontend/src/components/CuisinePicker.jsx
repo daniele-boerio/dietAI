@@ -71,9 +71,15 @@ export default function CuisinePicker({ value, onChange, disabled }) {
 
   // Le chiavi in ordine di catalogo: è l'ordine in cui vanno ricostruite le quote,
   // perché il server le riordina comunque così e i cursori non devono saltare.
+  // Si scorre il catalogo intero e non `scelteInOrdine`: quella è la lista di
+  // *prima* del clic, e la cucina appena aggiunta non c'è — filtrando su di lei
+  // l'aggiunta spariva e il clic si limitava a rimescolare le quote delle altre.
   const inOrdine = (q) =>
     Object.fromEntries(
-      scelteInOrdine.filter((c) => c.key in q).map((c) => [c.key, q[c.key]])
+      groups
+        .flatMap((g) => g.cuisines)
+        .filter((c) => c.key in q)
+        .map((c) => [c.key, q[c.key]])
     );
 
   const filtrati = useMemo(() => {

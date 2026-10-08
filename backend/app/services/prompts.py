@@ -120,7 +120,7 @@ RECIPE_JSON_SHAPE = """{
   ],
   "instructions": "<procedimento numerato, un passo per riga>",
   "nutrition": {"calories": <int>, "protein_g": <float>, "carbs_g": <float>, "fat_g": <float>},
-  "tags": {"cuisine": "<la cucina del piatto, fra quelle richieste nel contesto>", "season": ["<stagioni>"], "type": "<colazione|spuntino|primo|secondo|contorno|piatto unico|dolce>"}
+  "tags": {"cuisine": "<la cucina del piatto, fra quelle richieste nel contesto>", "origin": "<il paese da cui viene il piatto, in italiano, con la regione dopo un punto mediano quando la ricetta è regionale: \"Italia · Sicilia\", \"Giappone\", \"Marocco\", \"Messico · Oaxaca\">", "season": ["<stagioni>"], "type": "<colazione|spuntino|primo|secondo|contorno|piatto unico|dolce>"}
 }"""
 
 

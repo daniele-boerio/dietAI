@@ -150,3 +150,15 @@ vedono due volte, in pastiglia sopra e accese nell'elenco, perché l'elenco scor
 quello che hai spuntato tre righe fa è già fuori campo. E il salvataggio è l'unico
 della pagina che aspetta (`saveTraPoco`, 700ms): le cucine si spuntano a raffica, e
 tre clic sarebbero tre PUT e tre «Preferenze salvate ✓».
+
+**La ricetta dice da che paese viene.** `tags.cuisine` è la chiave del catalogo, cioè
+un aggettivo e a volte un'area intera («balcanica», «mediorientale», «africana
+occidentale»): basta al sorteggio, ma a chi legge la ricetta non dice da dove arriva
+il piatto. Perciò `RECIPE_JSON_SHAPE` chiede anche `tags.origin`, il paese in italiano
+con la regione dopo un punto mediano quando il piatto è regionale («Italia · Sicilia»,
+«Messico · Oaxaca»), e `RecipeView` lo mostra in una pastiglia con la puntina accanto
+al tipo di piatto. Sta nella forma condivisa e non in un prompt solo, così lo scrivono
+generazione, rigenerazione e le due chat; e siccome la chat riscrive i tag interi, una
+ricetta corretta in chat se lo porta dietro. Le ricette di prima non ce l'hanno e non
+si migrano: la pastiglia ripiega sulla cucina del catalogo, che dice la stessa cosa
+con meno precisione. Guardia in `tests/test_cucine.py`.

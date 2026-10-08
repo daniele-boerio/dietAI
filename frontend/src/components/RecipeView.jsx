@@ -1,4 +1,4 @@
-import { Clock, Flame, Replace, UtensilsCrossed } from 'lucide-react';
+import { Clock, Flame, MapPin, Replace, UtensilsCrossed } from 'lucide-react';
 import { formatNumber } from '../api';
 import MacroBar from './MacroBar';
 
@@ -79,6 +79,13 @@ export default function RecipeView({
 
   const elenco = passi(recipe.instructions);
   const minuti = (recipe.prep_time_min || 0) + (recipe.cook_time_min || 0);
+  // Da dove viene il piatto: `tags.origin` lo scrive il modello («Italia · Sicilia»).
+  // Le ricette di prima non ce l'hanno, e per quelle basta la cucina del catalogo
+  // («giapponese» → «Giapponese»), che dice la stessa cosa con un aggettivo.
+  const cucina = typeof recipe.tags?.cuisine === 'string' ? recipe.tags.cuisine : '';
+  const provenienza =
+    (typeof recipe.tags?.origin === 'string' && recipe.tags.origin.trim()) ||
+    (cucina && cucina.charAt(0).toUpperCase() + cucina.slice(1));
 
   return (
     <div className="recipe-sheet card">
@@ -111,6 +118,11 @@ export default function RecipeView({
               </span>
             )}
             {recipe.tags?.type && <span className="badge badge-accent">{recipe.tags.type}</span>}
+            {provenienza && (
+              <span className="badge">
+                <MapPin size={12} /> {provenienza}
+              </span>
+            )}
             {recipe.is_custom && <span className="badge badge-terracotta">Ricetta tua</span>}
           </div>
         </div>

@@ -594,3 +594,22 @@ def test_le_poche_capitano_in_tutti_i_giorni_della_settimana():
         visti |= {i for i, c in enumerate(estratte) if c != "Italiana"}
 
     assert visti == set(range(7)), sorted(visti)
+
+
+def test_la_ricetta_dice_da_che_paese_viene():
+    """Il paese d'origine sta nella forma del JSON che leggono tutti i prompt.
+
+    È `tags.origin`, e la ricetta lo mostra accanto al tipo di piatto: senza la riga
+    nella forma il modello non lo scriverebbe, e la pastiglia ripiegherebbe in
+    silenzio sulla sola cucina del catalogo.
+    """
+    from app.services import prompts
+
+    assert '"origin"' in prompts.RECIPE_JSON_SHAPE
+    for nome in (
+        "WEEK_PLAN_SYSTEM",
+        "SINGLE_MEAL_SYSTEM",
+        "MEAL_CHAT_SYSTEM",
+        "SHOPPING_CHAT_SYSTEM",
+    ):
+        assert '"origin"' in getattr(prompts, nome)

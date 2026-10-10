@@ -619,3 +619,31 @@ def test_cancellare_il_prezzo_toglie_anche_quello_della_riga(client, settimana):
     riga = next(i for c in res.json()["categories"] for i in c["items"] if i["name"] == "pasta")
     assert riga["paid_price"] is None
 
+
+
+def test_lo_stesso_ingrediente_in_due_unita_non_rompe_la_spesa(client, settimana, db):
+    """RIPRODUZIONE: la lista ha una riga per (ingrediente, unità) e la dispensa una per
+    ingrediente. Due righe spuntate dello stesso alimento creavano due scorte e il
+    vincolo uq_pantry_item faceva rispondere 500 a "Ho fatto la spesa"."""
+    from app.models import ShoppingListItem
+
+    pasta = voce(client, "pasta")
+    riga = db.get(ShoppingListItem, pasta["id"])
+    db.add(
+        ShoppingListItem(
+            shopping_list_id=riga.shopping_list_id,
+            ingredient_id=riga.ingredient_id,
+            total_quantity=2,
+            unit="unità",
+            is_checked=True,
+        )
+    )
+    riga.is_checked = True
+    db.commit()
+
+    res = client.post("/api/shopping/current/complete")
+
+    assert res.status_code == 200, res.text
+    # La scorta è una sola e tiene la prima riga, quella in grammi.
+    assert scorta(client, "pasta")["quantity"] == pytest.approx(700)
+    assert scorta(client, "pasta")["unit"] == "g"

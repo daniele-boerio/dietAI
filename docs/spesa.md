@@ -91,6 +91,15 @@ uno risponde 400: confermare a vuoto svuoterebbe la lista senza mettere niente i
 casa), li mette in dispensa nella quantità presa davvero e rifà la lista, che si
 accorcia da sé perché adesso la dispensa copre il piano.
 
+La lista ha una riga per (ingrediente, unità), la dispensa una per ingrediente: le
+uova in grammi e le uova "2 unità" sono due righe da spuntare e una scorta sola. Prima
+`complete_shopping` cercava la scorta con una query per ogni riga, e senza autoflush
+non vedeva quella appena aggiunta dalla riga precedente: due scorte dello stesso
+ingrediente, `uq_pantry_item` violato, e "Ho fatto la spesa" rispondeva 500 per
+intero. Ora le scorte toccate nel giro si tengono in un dizionario; se le due righe
+hanno unità che non si sommano vince la prima. Guardia in `tests/test_dispensa.py`
+(`test_lo_stesso_ingrediente_in_due_unita_non_rompe_la_spesa`).
+
 Il piano resta modificabile sempre: passato, presente e futuro, spesa fatta o no. Se
 cambi una ricetta già comprata l'app **non tocca la dispensa** — quello che è in casa
 resta in casa, e la scorta la corregge chi apre il frigo. È una scelta esplicita:

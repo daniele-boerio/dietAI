@@ -610,27 +610,44 @@ def complete_shopping(db: Session, user_id: int, lst: ShoppingList) -> dict:
     # Quello che è stato spuntato è finito nel carrello, quindi ora è in dispensa —
     # nella quantità che si è presa davvero, non in quella che serviva: è la
     # differenza fra una dispensa che descrive il frigo e una che descrive il piano.
+    #
+    # La lista ha una riga per (ingrediente, unità), la dispensa una per ingrediente:
+    # le uova in grammi per la frittata e "2 unità" per l'insalata sono due righe da
+    # spuntare e una scorta sola. Le righe toccate in questo giro si tengono qui,
+    # perché la sessione non fa autoflush e la query non vedrebbe quella appena
+    # aggiunta: la seconda riga ne creava un doppione e il vincolo uq_pantry_item
+    # faceva fallire tutta la spesa con un 500.
+    touched: dict[int, PantryItem] = {}
     for item in presi:
         taken = item.bought_quantity or item.total_quantity
-        pantry = (
+        pantry = touched.get(item.ingredient_id) or (
             db.query(PantryItem)
             .filter(PantryItem.user_id == user_id, PantryItem.ingredient_id == item.ingredient_id)
             .first()
         )
-        if pantry and pantry.unit == item.unit and pantry.quantity_available:
-            pantry.quantity_available += taken
-        elif pantry:
+        if pantry is None:
+            pantry = PantryItem(
+                user_id=user_id,
+                ingredient_id=item.ingredient_id,
+                quantity_available=taken,
+                unit=item.unit,
+            )
+            db.add(pantry)
+            touched[item.ingredient_id] = pantry
+            continue
+
+        available, pantry_unit = to_base(pantry.quantity_available or 0, pantry.unit or item.unit)
+        if pantry.quantity_available and pantry_unit == item.unit:
+            pantry.quantity_available = available + taken
+            pantry.unit = pantry_unit
+        elif item.ingredient_id not in touched:
+            # Una scorta vecchia in un'unità che non si somma: vince quello appena
+            # comprato, che è il dato fresco.
             pantry.quantity_available = taken
             pantry.unit = item.unit
-        else:
-            db.add(
-                PantryItem(
-                    user_id=user_id,
-                    ingredient_id=item.ingredient_id,
-                    quantity_available=taken,
-                    unit=item.unit,
-                )
-            )
+        # Altrimenti è un'altra riga di questa stessa spesa in un'unità che non si
+        # somma: la scorta tiene la prima, invece di buttarla per la seconda.
+        touched[item.ingredient_id] = pantry
 
     db.commit()
 

@@ -1,5 +1,8 @@
 # ── Stage 1: build ──
-FROM node:20-alpine AS build
+# Node 24, come in sviluppo: il lockfile lo scrive npm 11, e npm 10 (quello di
+# node:20) non lo riconosce allineato — `npm ci` si fermava sulle dipendenze
+# opzionali di vite 8 (esbuild, emnapi). Node 20 è comunque fuori supporto.
+FROM node:24-alpine AS build
 
 WORKDIR /app
 

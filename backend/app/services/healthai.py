@@ -208,6 +208,7 @@ class Giro:
 # il giro intero si mette in pausa invece di pagare un timeout per ogni pasto.
 _non_autorizzato = False
 _pausa_fino: datetime | None = None
+_detto_senza_admin = False  # il giro gira ogni minuto: dirlo una volta basta
 
 
 def _attesa(tentativi: int) -> timedelta:
@@ -261,7 +262,7 @@ def sync(
     `force` rimanda anche i pasti che healthAI ha già e ignora le attese (è
     l'allineamento iniziale, o il dopo un periodo offline): l'upsert non crea doppioni.
     """
-    global _non_autorizzato, _pausa_fino
+    global _non_autorizzato, _pausa_fino, _detto_senza_admin
     giro = Giro()
     if not enabled():
         giro.fermato = "spento"
@@ -278,6 +279,9 @@ def sync(
     admin = admin_user(db)
     if admin is None:
         giro.fermato = "nessun amministratore"
+        if not _detto_senza_admin:
+            _detto_senza_admin = True
+            logger.warning("healthAI: nessun amministratore, non c'è niente da mandare.")
         return giro
     oggi = oggi or _oggi_italiano(ora)
     desiderati = desired_payloads(db, admin.id, oggi, giorni or config.HEALTHAI_DAYS)
@@ -383,9 +387,20 @@ def start_scheduler(session_factory, intervallo: float = 60.0) -> None:
     Non parte se l'integrazione è spenta, né con `DIETAI_SCHEDULER=0` (i test).
     """
     global _avviato
-    if _avviato or not enabled() or os.getenv("DIETAI_SCHEDULER", "1") == "0":
+    if _avviato or os.getenv("DIETAI_SCHEDULER", "1") == "0":
+        return
+    if not enabled():
+        # Detto all'avvio, una volta: spento e acceso non si distinguevano dai log —
+        # un'integrazione che non manda niente sembrava una che manda in silenzio.
+        mancano = [n for n, v in (("HEALTHAI_URL", config.HEALTHAI_URL),
+                                  ("HEALTHAI_TOKEN", config.HEALTHAI_TOKEN)) if not v]
+        logger.info("healthAI spento: manca %s.", " e ".join(mancano))
         return
     _avviato = True
+    logger.info(
+        "healthAI acceso: %s, ogni %.0f s, ultimi %s giorni.",
+        config.HEALTHAI_URL, intervallo, config.HEALTHAI_DAYS,
+    )
 
     def giro():
         while True:

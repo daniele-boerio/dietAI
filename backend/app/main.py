@@ -58,6 +58,18 @@ def _avvia_promemoria() -> None:
     start_scheduler(SessionLocal)
 
 
+# I log dell'app (`app.*`) a livello info, sull'output del container. Uvicorn configura
+# solo i suoi logger: senza questo, per i moduli dell'app valeva il default di Python
+# (solo avvisi ed errori), e un «pasto inviato a healthAI» o un «healthAI spento» non
+# si vedevano mai — funzionante e spento sembravano la stessa cosa.
+_log_app = logging.getLogger("app")
+if not _log_app.handlers:
+    _gestore = logging.StreamHandler()
+    _gestore.setFormatter(logging.Formatter("%(levelname)s:     %(name)s: %(message)s"))
+    _log_app.addHandler(_gestore)
+    _log_app.setLevel(logging.INFO)
+
+
 # Il giro di healthAI: ogni minuto porta i pasti consumati dell'amministratore al server
 # dei suoi dati di salute (vedi `services/healthai.py`). Senza HEALTHAI_URL e
 # HEALTHAI_TOKEN non parte; i test lo spengono come i promemoria.

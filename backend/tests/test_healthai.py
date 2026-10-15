@@ -374,6 +374,28 @@ def test_l_allineamento_rimanda_tutto(client, db, settimana, posta):
     assert len(posta.chiamate) == 2
 
 
+def test_all_avvio_dice_se_e_spento_e_perche(monkeypatch, caplog):
+    """Spento e acceso devono distinguersi dai log: prima, senza variabili, il giro
+    non partiva e non lo diceva nessuno."""
+    monkeypatch.setattr(config, "HEALTHAI_TOKEN", "")
+    monkeypatch.setattr(healthai, "_avviato", False)
+    monkeypatch.setenv("DIETAI_SCHEDULER", "1")
+    with caplog.at_level("INFO"):
+        healthai.start_scheduler(lambda: None)
+    assert "healthAI spento: manca HEALTHAI_TOKEN" in caplog.text
+    assert healthai._avviato is False
+
+
+def test_i_log_dell_app_si_vedono_a_livello_info():
+    """Uvicorn configura solo i suoi logger: quelli dell'app li configura main.py,
+    o «pasto inviato» resta invisibile."""
+    import logging
+
+    import app.main  # noqa: F401 — la configurazione si fa all'import
+
+    assert logging.getLogger("app").getEffectiveLevel() <= logging.INFO
+
+
 def test_il_token_non_finisce_nei_log(client, db, settimana, caplog):
     """L'invio vero, con healthAI che non esiste: il giro non solleva, e nel log c'è
     l'errore ma non il segreto."""

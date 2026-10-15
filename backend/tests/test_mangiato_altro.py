@@ -182,6 +182,20 @@ def test_non_ho_mangiato_niente_solo_su_un_pasto_saltato(client, settimana):
     assert res.status_code == 400
 
 
+def test_la_home_porta_la_stima_sul_pasto_di_oggi(client, settimana):
+    """La home conta la stima al posto del piatto rimandato: per farlo deve averla."""
+    from datetime import date
+
+    cena = pasto(settimana, date.today().weekday(), "Cena")
+    client.put(f"/api/planning/meals/{cena['id']}/followed", json={"is_followed": False})
+    client.put(f"/api/planning/meals/{cena['id']}/eaten", json={"text": "una pizza"})
+
+    oggi = client.get("/api/tracking/dashboard").json()["today"]["meals"]
+    voce = next(m for m in oggi if m["meal_id"] == cena["id"])
+    assert voce["eaten_nutrition"]["calories"] == 850
+    assert voce["deviation_notes"] == "una pizza"
+
+
 def test_il_pasto_di_un_altro_non_si_tocca(client, guest_client, settimana):
     cena = pasto(settimana, 0, "Cena")
     res = guest_client.put(f"/api/planning/meals/{cena['id']}/eaten", json={"text": "x"})

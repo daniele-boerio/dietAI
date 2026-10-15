@@ -18,29 +18,19 @@ import EmptyState from '../components/EmptyState';
 import MacroBar from '../components/MacroBar';
 import { nonScalatiDallaDispensa, scalatiDallaDispensa } from '../lib/pantry';
 import { useTelefono } from '../lib/schermo';
+import { todayTotals } from '../lib/today';
 
 // Quanto si mangia oggi, sommando i piatti in programma. Un pasto rimandato non
 // conta (si cucina un altro giorno) e uno che prepara l'utente conta col suo target:
 // è la stessa aritmetica di `serialize_week`, e senza la seconda metà la giornata
 // sembrerebbe più corta di quello che è.
-function totaliDiOggi(meals) {
-  return meals.reduce(
-    (somma, meal) => {
-      // Segnato lo è anche il pasto rimandato: è una risposta come l'altra.
-      const segnati = somma.segnati + (meal.is_followed === null ? 0 : 1);
-      if (meal.is_skipped) return { ...somma, segnati };
-      const r = meal.recipe;
-      return {
-        calories: somma.calories + (r ? r.calories : meal.self_managed ? meal.target_calories : 0),
-        protein_g: somma.protein_g + (r ? r.protein_g : 0),
-        carbs_g: somma.carbs_g + (r ? r.carbs_g : 0),
-        fat_g: somma.fat_g + (r ? r.fat_g : 0),
-        target: somma.target + meal.target_calories,
-        segnati,
-      };
-    },
-    { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, target: 0, segnati: 0 }
-  );
+// Cosa dice la riga di un pasto «ho mangiato altro»: la stima, se c'è, al posto del
+// piatto rimandato — è quello che conta nel totale qui sopra.
+function altroMangiato(meal) {
+  if (!(meal.is_skipped || meal.is_followed === false)) return null;
+  const stima = meal.eaten_nutrition;
+  if (!stima) return { kcal: null, testo: 'Hai mangiato altro: cosa?' };
+  return { kcal: stima.calories, testo: meal.deviation_notes || 'Hai mangiato altro' };
 }
 
 // Le parole con cui la spia dell'aderenza si spiega passandoci sopra. Il colore da
@@ -68,6 +58,7 @@ function MealRow({ meal }) {
         : meal.self_managed
           ? ChefHat
           : UtensilsCrossed;
+  const altro = altroMangiato(meal);
   return (
     <Link className={`meal-row ${stato}`} to={`/meals/${meal.meal_id}`}>
       <span className={`meal-tondo ${stato} ${meal.self_managed ? 'mine' : ''}`}>
@@ -75,14 +66,21 @@ function MealRow({ meal }) {
       </span>
       <span className="meal-row-testo">
         <span className="meal-slot">
-          {meal.slot_name} · {meal.recipe ? meal.recipe.calories : meal.target_calories} kcal
+          {meal.slot_name} ·{' '}
+          {altro
+            ? altro.kcal != null
+              ? `≈ ${altro.kcal} kcal stimate`
+              : 'non stimato'
+            : `${meal.recipe ? meal.recipe.calories : meal.target_calories} kcal`}
         </span>
         <span className="meal-row-titolo">
-          {meal.recipe
-            ? meal.recipe.title
-            : meal.self_managed
-              ? 'Lo prepari tu'
-              : 'Scegli cosa mangiare'}
+          {altro
+            ? altro.testo
+            : meal.recipe
+              ? meal.recipe.title
+              : meal.self_managed
+                ? 'Lo prepari tu'
+                : 'Scegli cosa mangiare'}
         </span>
       </span>
       <ChevronRight className="meal-row-freccia" />
@@ -162,7 +160,7 @@ export default function DashboardPage() {
   // una spia vuota che una pagina che non si disegna.
   const adherence = data.adherence || { days: [], tracked_days: 0, score_pct: 0 };
   const emptySlots = week.meals_total - week.meals_filled;
-  const totali = totaliDiOggi(today.meals);
+  const totali = todayTotals(today.meals);
   const daPrendere = shopping.total_items - shopping.checked_items;
 
   // Il pasto che viene adesso è l'unico messo in evidenza: è quello per cui si è
@@ -209,7 +207,9 @@ export default function DashboardPage() {
                 <span>
                   / {formatNumber(totali.target)} kcal
                   <br />
-                  in programma
+                  {/* Con una stima dentro il numero non è più solo il piano: è un
+                      misto di piatti e di cose mangiate, e va detto. */}
+                  {totali.stime > 0 ? 'con le stime' : 'in programma'}
                 </span>
               </div>
               <MacroBar
@@ -295,7 +295,12 @@ export default function DashboardPage() {
                       </div>
                       <div className="today-card-foot">
                         <span className="meal-facts">
-                          {meal.recipe.calories} kcal · target {meal.target_calories} ·{' '}
+                          {altroMangiato(meal)
+                            ? altroMangiato(meal).kcal != null
+                              ? `al suo posto ≈ ${altroMangiato(meal).kcal} kcal: ${altroMangiato(meal).testo}`
+                              : 'hai mangiato altro: non stimato'
+                            : `${meal.recipe.calories} kcal`}{' '}
+                          · target {meal.target_calories} ·{' '}
                           {meal.recipe.prep_time_min + meal.recipe.cook_time_min} min
                         </span>
                         <div className="today-card-actions">

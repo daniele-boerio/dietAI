@@ -159,6 +159,12 @@ def dashboard(
                 # "Ho mangiato altro": la ricetta è scritta ma è stata rimandata. La
                 # home la mostra spenta, non tra i piatti di oggi da preparare.
                 "is_skipped": meal.is_skipped,
+                # «Ho mangiato altro: cosa?»: il testo e la stima. Il totale di oggi
+                # conta la stima al posto del piatto rimandato, contro il target pieno
+                # della giornata — prima il pasto usciva da tutte e due le cifre, e
+                # «1400 / 1400» nascondeva la pizza al posto della cena.
+                "deviation_notes": meal.deviation_notes if meal.is_followed is False else None,
+                "eaten_nutrition": meal.eaten_nutrition if meal.is_followed is False else None,
                 # "Lo prepari tu": niente ricetta, ma i macro contano lo stesso nel
                 # totale del giorno — dati per centrati sul target.
                 "self_managed": not slot.auto_generate,

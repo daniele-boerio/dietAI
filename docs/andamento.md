@@ -72,6 +72,13 @@ e grassi. Vale solo
 lì — su un pasto seguito si è mangiato il piatto in programma, su uno non segnato non si
 sa — e cambiare risposta la cancella, perché non descrive più niente.
 
+La home fa lo stesso conto per oggi (`lib/today.js`): un pasto «ho mangiato altro»
+conta la sua stima al posto del piatto rimandato, contro il target **pieno** della
+giornata. Prima quel pasto usciva da tutte e due le cifre, e una pizza al posto della
+cena dava «1400 / 1400», come se fosse andata a puntino; ora dà «2250 / 2000», e il
+numero dice «con le stime» invece di «in programma». Saltato senza stima conta zero,
+ma il target resta, e la riga del pasto dice che la stima manca.
+
 L'andamento ne ricava **quanto si è mangiato davvero** (`eaten_calories` per giorno):
 il piatto per i pasti seguiti, la stima per quelli sostituiti. Ma lo dice solo dei
 giorni di cui si sa tutto (`eaten_complete`), e la media della settimana conta solo

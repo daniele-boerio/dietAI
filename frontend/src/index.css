@@ -2953,6 +2953,23 @@ textarea {
   height: 40px;
 }
 
+/* Il campo della modale «Cosa hai mangiato invece?»: largo quanto la modale, alto
+   abbastanza per il dito. */
+.eaten-dialog-input {
+  width: 100%;
+  min-height: 44px;
+  margin: 4px 0 4px;
+}
+
+/* Tre risposte: sul telefono vanno in colonna, larghe uguali, invece di stringersi
+   in una riga dove «Non ho mangiato niente» andrebbe a capo. */
+@media (max-width: 520px) {
+  .eaten-dialog-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+}
+
 .eaten-estimate {
   margin: 0;
   font-family: var(--font-mono);

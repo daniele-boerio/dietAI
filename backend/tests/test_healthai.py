@@ -149,6 +149,21 @@ def test_ho_mangiato_altro_parte_con_la_stima(client, db, settimana, posta):
     assert body["caffeine_mg"] == 0
 
 
+def test_non_ho_mangiato_niente_parte_a_zero(client, db, settimana, posta):
+    """Un digiuno detto è un dato: healthAI riceve il pasto a 0 kcal, con gli altri
+    valori a zero (saputi), non a null."""
+    cena = pasto(settimana, 0, "Cena")
+    segui(client, cena["id"], False)
+    client.put(f"/api/planning/meals/{cena['id']}/eaten", json={"nothing": True})
+
+    giro(db, posta)
+
+    body = posta.chiamate[0][2]
+    assert body["calories"] == 0
+    assert body["recipe_title"] == "Non ho mangiato niente"
+    assert body["caffeine_mg"] == 0 and body["fiber_g"] == 0
+
+
 def test_un_giorno_futuro_non_parte(client, db, settimana, posta):
     domani = pasto(settimana, 1, "Pranzo")
     segui(client, domani["id"])

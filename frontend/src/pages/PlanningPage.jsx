@@ -13,6 +13,7 @@ import {
 import { api, formatDate } from '../api';
 import { useApp } from '../App';
 import ConfirmDialog from '../components/ConfirmDialog';
+import EatenInsteadDialog from '../components/EatenInsteadDialog';
 import DayDots from '../components/DayDots';
 import EmptyState from '../components/EmptyState';
 import GenerationLog from '../components/GenerationLog';
@@ -72,6 +73,8 @@ export default function PlanningPage() {
   // Separato da `busyMealId`: la card è occupata in tutti e due i casi, ma l'icona
   // che gira è quella della rigenerazione e solo lì ha senso.
   const [followingMealId, setFollowingMealId] = useState(null);
+  // Il pasto appena segnato «ho mangiato altro»: la modale chiede cosa.
+  const [altro, setAltro] = useState(null);
   const [busyDayId, setBusyDayId] = useState(null);
   // Cosa generare non si decide più col pulsante ma nella dialog: `null` = chiusa,
   // altrimenti dice da quale dei due pulsanti si è arrivati (riempire o rifare).
@@ -290,10 +293,17 @@ export default function PlanningPage() {
   // mangiato altro" accoda la ricetta su un'altra casella (o sulla settimana dopo),
   // e quella casella qui è a schermo.
   const setFollowed = async (meal, value) => {
+    // Già «ho mangiato altro»: ripremerlo riapre la domanda invece di rimandarlo al
+    // server, che cancellerebbe la nota scritta.
+    if (value === false && meal.is_followed === false) {
+      setAltro(meal);
+      return;
+    }
     setFollowingMealId(meal.id);
     try {
       const updated = await api.setFollowed(meal.id, value);
       await load({ silent: true });
+      if (value === false) setAltro(updated);
       if (updated.moved_to) {
         addToast(
           `Ricetta rimandata a ${updated.moved_to.day_name.toLowerCase()}` +
@@ -629,6 +639,13 @@ export default function PlanningPage() {
         />
       )}
 
+      {altro && (
+        <EatenInsteadDialog
+          meal={altro}
+          onSaved={() => load({ silent: true })}
+          onClose={() => setAltro(null)}
+        />
+      )}
     </>
   );
 }

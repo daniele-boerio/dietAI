@@ -332,6 +332,9 @@ class WeightEntryIn(BaseModel):
 
 class EatenInsteadRequest(BaseModel):
     text: str | None = Field(default=None, max_length=500)
+    # «Non ho mangiato niente»: una risposta, non un buco. Zero noto, senza chiedere
+    # al modello di stimare il nulla.
+    nothing: bool = False
 
 
 class PushKeys(BaseModel):

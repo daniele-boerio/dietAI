@@ -52,7 +52,15 @@ peso dei target come riga tratteggiata. L'elenco delle pesate a fianco è la sua
 tabellare. Guardie in `tests/test_peso.py`.
 
 **«Ho mangiato altro» dice anche cosa.** Un pasto saltato era un buco nei dati: si
-sapeva che il piano non era stato seguito, non cosa si era mangiato al suo posto. Sul
+sapeva che il piano non era stato seguito, non cosa si era mangiato al suo posto. La
+domanda arriva in una modale appena si preme il pulsante, dalla home, dalla griglia o
+dal pasto (`EatenInsteadDialog`): finché stava solo nel dettaglio del pasto, sotto i
+pulsanti, quasi nessuno la vedeva. «Non ho mangiato niente» è una risposta, non una
+rinuncia: si salva senza chiamare il modello (`nothing` sulla stessa rotta) come uno
+zero saputo — tutti i valori a 0, il giorno torna completo nell'andamento e a
+healthAI arriva un pasto a 0 kcal. «Non lo so» invece la chiude e il pasto resta
+saltato senza stima; ripremere il pulsante su un pasto già saltato la riapre col testo di
+prima, senza rimandare niente al server (che cancellerebbe la nota). Sul
 pasto segnato «ho mangiato altro» ora c'è un campo («una pizza», «panino al bar») e
 `PUT /api/planning/meals/{id}/eaten` lo fa stimare al modello (ruolo `chat`, prompt
 `EATEN_ESTIMATE_SYSTEM`, porzioni tipiche italiane, mai una domanda di chiarimento): il

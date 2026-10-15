@@ -259,10 +259,11 @@ export const api = {
     }),
 
   // «Ho mangiato altro: cosa?» — il testo e la stima del modello. Vuoto cancella.
-  setEatenInstead: (mealId, text) =>
+  // `nothing`: «non ho mangiato niente», zero saputo senza chiamare il modello.
+  setEatenInstead: (mealId, text, nothing = false) =>
     request(`/planning/meals/${mealId}/eaten`, {
       method: 'PUT',
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, nothing }),
     }),
 
   setFollowed: (mealId, is_followed, deviation_notes = null) =>

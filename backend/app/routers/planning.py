@@ -398,7 +398,20 @@ def set_eaten_instead(
             400, "Prima segna il pasto come «ho mangiato altro», poi scrivi cosa."
         )
     testo = (body.text or "").strip()
-    if not testo:
+    if body.nothing:
+        # Saltato davvero: tutto a zero, e uno zero che si sa — nell'andamento il
+        # giorno torna completo, e a healthAI arriva un pasto a 0 kcal, non un buco.
+        # Nessuna chiamata al modello: non c'è niente da stimare.
+        meal.deviation_notes = NIENTE
+        meal.eaten_nutrition = {
+            "calories": 0,
+            "protein_g": 0.0,
+            "carbs_g": 0.0,
+            "fat_g": 0.0,
+            **{campo: 0.0 for campo in macros.CAMPI_DETTAGLIO},
+            "note": None,
+        }
+    elif not testo:
         meal.deviation_notes = None
         meal.eaten_nutrition = None
     else:
@@ -414,6 +427,9 @@ def set_eaten_instead(
         meal.eaten_nutrition = _eaten_estimate(data)
     db.commit()
     return serialize_meal(db, day, meal, slot, full=True)
+
+
+NIENTE = "Non ho mangiato niente"
 
 
 def _eaten_estimate(data) -> dict | None:

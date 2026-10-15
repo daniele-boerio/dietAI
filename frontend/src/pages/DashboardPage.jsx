@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { api, formatDate, formatMoney, formatNumber } from '../api';
 import { useApp } from '../App';
+import EatenInsteadDialog from '../components/EatenInsteadDialog';
 import EmptyState from '../components/EmptyState';
 import MacroBar from '../components/MacroBar';
 import { nonScalatiDallaDispensa, scalatiDallaDispensa } from '../lib/pantry';
@@ -97,6 +98,8 @@ export default function DashboardPage() {
   const telefono = useTelefono();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  // Il pasto appena segnato «ho mangiato altro»: la modale chiede cosa.
+  const [altro, setAltro] = useState(null);
 
   const load = () =>
     api
@@ -110,8 +113,16 @@ export default function DashboardPage() {
   }, []);
 
   const markFollowed = async (mealId, followed) => {
+    // Già «ho mangiato altro»: ripremerlo riapre la domanda invece di rimandarlo al
+    // server, che cancellerebbe la nota scritta.
+    const prima = data?.today?.meals?.find((m) => m.meal_id === mealId);
+    if (followed === false && prima?.is_followed === false) {
+      setAltro({ id: mealId, slot_name: prima.slot_name, deviation_notes: prima.deviation_notes });
+      return;
+    }
     try {
       const updated = await api.setFollowed(mealId, followed);
+      if (followed === false) setAltro(updated);
       // "Saltato" qui rimanda davvero il piatto: va detto dov'è finito.
       if (updated.moved_to) {
         addToast(
@@ -460,6 +471,10 @@ export default function DashboardPage() {
           </div>
         </aside>
       </div>
+
+      {altro && (
+        <EatenInsteadDialog meal={altro} onSaved={() => load()} onClose={() => setAltro(null)} />
+      )}
     </>
   );
 }

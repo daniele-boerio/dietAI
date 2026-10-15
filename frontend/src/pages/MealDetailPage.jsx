@@ -18,6 +18,7 @@ import { api, formatDate } from "../api";
 import { useApp } from "../App";
 import ConfirmDialog from "../components/ConfirmDialog";
 import EatenInstead from "../components/EatenInstead";
+import EatenInsteadDialog from "../components/EatenInsteadDialog";
 import EmptyState from "../components/EmptyState";
 import LoadError from "../components/LoadError";
 import MealChat from "../components/MealChat";
@@ -33,6 +34,8 @@ export default function MealDetailPage() {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  // Il pasto appena segnato «ho mangiato altro»: la modale chiede cosa.
+  const [altro, setAltro] = useState(null);
   const [substituting, setSubstituting] = useState(false);
   const [substitution, setSubstitution] = useState(null);
   const [confirmClear, setConfirmClear] = useState(false);
@@ -135,9 +138,16 @@ export default function MealDetailPage() {
   };
 
   const setFollowed = async (value) => {
+    // Già «ho mangiato altro»: ripremerlo riapre la domanda. Rimandarlo al server
+    // cancellerebbe la nota scritta, e il piatto è già stato rimandato.
+    if (value === false && meal.is_followed === false) {
+      setAltro(meal);
+      return;
+    }
     try {
       const updated = await api.setFollowed(mealId, value);
       setMeal(updated);
+      if (value === false) setAltro(updated);
       // "Ho mangiato altro" non è solo un appunto: il piatto si sposta, e dove è
       // finito va detto subito o l'utente lo cerca dov'era.
       if (updated.moved_to) {
@@ -527,6 +537,10 @@ export default function MealDetailPage() {
           onConfirm={clearMeal}
           onCancel={() => setConfirmClear(false)}
         />
+      )}
+
+      {altro && (
+        <EatenInsteadDialog meal={altro} onSaved={setMeal} onClose={() => setAltro(null)} />
       )}
 
       {generator && (

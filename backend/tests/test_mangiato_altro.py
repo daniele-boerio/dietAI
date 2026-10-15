@@ -152,6 +152,36 @@ def test_il_prompt_della_stima_spiega_alcol_e_zero():
     assert "caffeine_mg" in prompts.EATEN_ESTIMATE_SYSTEM
 
 
+def test_non_ho_mangiato_niente_e_uno_zero_saputo(client, settimana, monkeypatch):
+    """Saltato davvero: tutto a zero, senza chiamare il modello, e il giorno torna
+    completo — uno zero che si sa non è un buco di dati."""
+    def vietato(*a, **k):
+        raise AssertionError("niente da stimare: il modello non va chiamato")
+
+    monkeypatch.setattr(planning_router, "get_client", vietato)
+    for nome in ("Colazione", "Pranzo"):
+        m = pasto(settimana, 0, nome)
+        client.put(f"/api/planning/meals/{m['id']}/followed", json={"is_followed": True})
+    cena = pasto(settimana, 0, "Cena")
+    client.put(f"/api/planning/meals/{cena['id']}/followed", json={"is_followed": False})
+
+    res = client.put(f"/api/planning/meals/{cena['id']}/eaten", json={"nothing": True})
+
+    assert res.status_code == 200, res.text
+    assert res.json()["deviation_notes"] == "Non ho mangiato niente"
+    stima = res.json()["eaten_nutrition"]
+    assert stima["calories"] == 0 and stima["fiber_g"] == 0 and stima["alcohol_g"] == 0
+    lunedi = client.get("/api/tracking/weekly").json()["days"][0]["totals"]
+    assert lunedi["eaten_complete"] is True
+    assert lunedi["eaten_calories"] == 400 + 700
+
+
+def test_non_ho_mangiato_niente_solo_su_un_pasto_saltato(client, settimana):
+    cena = pasto(settimana, 0, "Cena")
+    res = client.put(f"/api/planning/meals/{cena['id']}/eaten", json={"nothing": True})
+    assert res.status_code == 400
+
+
 def test_il_pasto_di_un_altro_non_si_tocca(client, guest_client, settimana):
     cena = pasto(settimana, 0, "Cena")
     res = guest_client.put(f"/api/planning/meals/{cena['id']}/eaten", json={"text": "x"})

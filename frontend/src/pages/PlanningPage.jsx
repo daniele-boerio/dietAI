@@ -20,6 +20,7 @@ import GenerationLog from '../components/GenerationLog';
 import LoadError from '../components/LoadError';
 import WeekGenerateDialog from '../components/WeekGenerateDialog';
 import WeekGrid from '../components/WeekGrid';
+import { daProporre } from '../lib/generation';
 import { nonScalatiDallaDispensa, scalatiDallaDispensa } from '../lib/pantry';
 
 const GIORNO_MS = 86400000;
@@ -363,6 +364,7 @@ export default function PlanningPage() {
   if (!week) return <LoadError message={error} onRetry={load} />;
 
   const emptySlots = week.meals_total - week.meals_filled;
+  const daRiempire = daProporre(week);
   // Le giornate saltate: le loro ricette si sono accodate altrove, e va detto o la
   // settimana sembra rimescolata senza motivo.
   const skipped = week.days.filter((d) => d.is_skipped);
@@ -440,9 +442,11 @@ export default function PlanningPage() {
               >
                 {busy ? <span className="spinner-inline" /> : <Sparkles size={16} />}
                 <span className="solo-largo">
-                  {emptySlots === week.meals_total
+                  {/* Il numero è quello che la dialog proporrà aprendosi, non i vuoti
+                      della settimana: quelli dei giorni passati non si generano. */}
+                  {daRiempire === week.meals_total
                     ? 'Genera la settimana'
-                    : `Riempi i ${emptySlots} vuoti`}
+                    : `Genera ${daRiempire} ${daRiempire === 1 ? 'pasto' : 'pasti'}`}
                 </span>
                 <span className="solo-stretto">Genera</span>
               </button>

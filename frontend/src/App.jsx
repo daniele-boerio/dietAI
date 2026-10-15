@@ -88,6 +88,9 @@ function AuthenticatedApp() {
   if (needsOnboarding) {
     return (
       <AppContext.Provider value={ctx}>
+        {/* Il login non naviga: nell'app ci pensa la rotta `*`, ma qui non ci sono
+            rotte e l'onboarding restava sull'indirizzo `/login`. */}
+        {pathname === '/login' && <Navigate to="/" replace />}
         <OnboardingPage />
         <Toast toasts={toasts} />
       </AppContext.Provider>

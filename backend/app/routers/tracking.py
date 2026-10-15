@@ -129,6 +129,28 @@ def list_weeks(
     ]
 
 
+def _da_generare_da_oggi(week_data: dict, today: date) -> int:
+    """Le caselle vuote che la dialog di generazione propone: da oggi in avanti.
+
+    Il pulsante della home diceva `meals_total - meals_filled`, cioè contava anche i
+    pasti vuoti dei giorni già passati: «Genera 12 pasti», e la dialog che apriva ne
+    proponeva 9, perché riempire un pasto passato è una chiamata pagata per niente.
+    Le condizioni sono quelle di `generabile` in `lib/generation.js`.
+    """
+    oggi = today.isoformat()
+    return sum(
+        1
+        for d in week_data["days"]
+        if d["date"] >= oggi and not d["is_skipped"]
+        for m in d["meals"]
+        if not m["is_skipped"]
+        and not m["self_managed"]
+        and not m["is_recurring"]
+        and m["source"] != "user_custom"
+        and not m["recipe"]
+    )
+
+
 @router.get("/dashboard")
 def dashboard(
     user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
@@ -215,6 +237,7 @@ def dashboard(
             "status": week.status,
             "meals_total": week_data["meals_total"],
             "meals_filled": week_data["meals_filled"],
+            "meals_to_generate": _da_generare_da_oggi(week_data, today),
         },
         "shopping": {
             "completed_at": lst.completed_at.isoformat() if lst.completed_at else None,

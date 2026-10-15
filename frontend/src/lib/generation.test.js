@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { contaSelezione, daGenerare, giorniPredefiniti, oggiIso } from './generation';
+import { contaSelezione, daGenerare, daProporre, giorniPredefiniti, oggiIso } from './generation';
 
 // Il numero scritto sul pulsante è quello che si sta per pagare: qui si controlla che
 // conti le stesse caselle che conterebbe `generate_week` sul server.
@@ -79,6 +79,16 @@ describe('la selezione', () => {
     expect(contaSelezione(celle, [0, 1, 2, 3, 4, 5, 6], [2])).toBe(7);
     expect(contaSelezione(celle, [], [1, 2])).toBe(0);
     expect(contaSelezione(celle, [0], [])).toBe(0);
+  });
+});
+
+describe('il numero sul pulsante che apre la dialog', () => {
+  it('conta da oggi in avanti, come la dialog: giovedì restano 12, non 21', () => {
+    expect(daProporre(settimana(), { oggi: '2026-01-08' })).toBe(12);
+  });
+
+  it('una settimana tutta alle spalle conta quello che la dialog accende', () => {
+    expect(daProporre(settimana(), { oggi: '2026-03-01' })).toBe(21);
   });
 });
 

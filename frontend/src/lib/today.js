@@ -13,6 +13,10 @@
 
 const VUOTO = { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 };
 
+// Il pasto saltato con «non ho mangiato niente»: il backend lo salva come una stima
+// tutta a zero, senza chiamare il modello.
+export const niente = (meal) => meal.eaten_nutrition?.calories === 0;
+
 // Quello che un pasto porta al totale di oggi, e se è una stima.
 export function mealContribution(meal) {
   if (meal.is_skipped || meal.is_followed === false) {
@@ -23,7 +27,10 @@ export function mealContribution(meal) {
       protein_g: stima.protein_g || 0,
       carbs_g: stima.carbs_g || 0,
       fat_g: stima.fat_g || 0,
-      stimato: true,
+      // Uno zero non è una stima: è «non ho mangiato niente», un fatto. Contato come
+      // stima, la home scriveva «≈ 0 kcal stimate» e «con le stime» su un totale in
+      // cui di stimato non c'era niente.
+      stimato: !niente(meal),
       mancante: false,
     };
   }

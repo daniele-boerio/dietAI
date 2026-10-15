@@ -91,3 +91,13 @@ export function giorniPredefiniti(giorni) {
   const futuri = conRoba.filter((g) => !g.passato);
   return (futuri.length ? futuri : conRoba).map((g) => g.dow);
 }
+
+/**
+ * Quanti pasti la dialog propone appena aperta: il numero da scrivere sul pulsante
+ * che la apre. `meals_total - meals_filled` contava anche i vuoti dei giorni passati,
+ * e «Riempi i 12 vuoti» apriva una dialog che ne generava 9.
+ */
+export function daProporre(week, opzioni) {
+  const { celle, giorni, pasti } = daGenerare(week, opzioni);
+  return contaSelezione(celle, giorniPredefiniti(giorni), pasti.map((p) => p.id));
+}

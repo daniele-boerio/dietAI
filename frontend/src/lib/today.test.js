@@ -43,6 +43,7 @@ describe('il totale di oggi', () => {
     expect(t.calories).toBe(1400);
     expect(t.target).toBe(2000);
     expect(t.mancanti).toBe(0);
+    expect(t.stime).toBe(0); // uno zero saputo non è una stima
   });
 
   it('saltato senza stima: zero, target pieno, e lo dice', () => {

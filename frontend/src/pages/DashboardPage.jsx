@@ -18,7 +18,7 @@ import EmptyState from '../components/EmptyState';
 import MacroBar from '../components/MacroBar';
 import { nonScalatiDallaDispensa, scalatiDallaDispensa } from '../lib/pantry';
 import { useTelefono } from '../lib/schermo';
-import { todayTotals } from '../lib/today';
+import { niente, todayTotals } from '../lib/today';
 
 // Quanto si mangia oggi, sommando i piatti in programma. Un pasto rimandato non
 // conta (si cucina un altro giorno) e uno che prepara l'utente conta col suo target:
@@ -30,7 +30,15 @@ function altroMangiato(meal) {
   if (!(meal.is_skipped || meal.is_followed === false)) return null;
   const stima = meal.eaten_nutrition;
   if (!stima) return { kcal: null, testo: 'Hai mangiato altro: cosa?' };
+  // «Non ho mangiato niente» è uno zero saputo, non una stima: niente «≈».
+  if (niente(meal)) return { kcal: 0, niente: true, testo: 'Non hai mangiato niente' };
   return { kcal: stima.calories, testo: meal.deviation_notes || 'Hai mangiato altro' };
+}
+
+// Le calorie di un pasto «ho mangiato altro», come le dice la riga.
+function kcalAltro(altro) {
+  if (altro.kcal == null) return 'non stimato';
+  return altro.niente ? '0 kcal' : `≈ ${altro.kcal} kcal stimate`;
 }
 
 // Le parole con cui la spia dell'aderenza si spiega passandoci sopra. Il colore da
@@ -68,9 +76,7 @@ function MealRow({ meal }) {
         <span className="meal-slot">
           {meal.slot_name} ·{' '}
           {altro
-            ? altro.kcal != null
-              ? `≈ ${altro.kcal} kcal stimate`
-              : 'non stimato'
+            ? kcalAltro(altro)
             : `${meal.recipe ? meal.recipe.calories : meal.target_calories} kcal`}
         </span>
         <span className="meal-row-titolo">
@@ -159,7 +165,9 @@ export default function DashboardPage() {
   // Il backend può non averla (una risposta più vecchia di questa schermata): meglio
   // una spia vuota che una pagina che non si disegna.
   const adherence = data.adherence || { days: [], tracked_days: 0, score_pct: 0 };
-  const emptySlots = week.meals_total - week.meals_filled;
+  // Le vuote da oggi in avanti, quelle che la dialog proporrà: contando anche i
+  // giorni passati il pulsante prometteva più pasti di quanti se ne generano.
+  const emptySlots = week.meals_to_generate ?? week.meals_total - week.meals_filled;
   const totali = todayTotals(today.meals);
   const daPrendere = shopping.total_items - shopping.checked_items;
 
@@ -296,9 +304,11 @@ export default function DashboardPage() {
                       <div className="today-card-foot">
                         <span className="meal-facts">
                           {altroMangiato(meal)
-                            ? altroMangiato(meal).kcal != null
-                              ? `al suo posto ≈ ${altroMangiato(meal).kcal} kcal: ${altroMangiato(meal).testo}`
-                              : 'hai mangiato altro: non stimato'
+                            ? altroMangiato(meal).niente
+                              ? 'non hai mangiato niente · 0 kcal'
+                              : altroMangiato(meal).kcal != null
+                                ? `al suo posto ≈ ${altroMangiato(meal).kcal} kcal: ${altroMangiato(meal).testo}`
+                                : 'hai mangiato altro: non stimato'
                             : `${meal.recipe.calories} kcal`}{' '}
                           · target {meal.target_calories} ·{' '}
                           {meal.recipe.prep_time_min + meal.recipe.cook_time_min} min

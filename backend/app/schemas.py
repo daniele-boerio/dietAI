@@ -204,6 +204,13 @@ class RecipeCreate(BaseModel):
     protein_g: float = Field(ge=0, le=500)
     carbs_g: float = Field(ge=0, le=1000)
     fat_g: float = Field(ge=0, le=500)
+    # Facoltativi: chi scrive una ricetta a mano spesso sa i macro e non le fibre.
+    # Vuoto vuol dire "non lo so", non zero.
+    fiber_g: float | None = Field(default=None, ge=0, le=500)
+    sugar_g: float | None = Field(default=None, ge=0, le=1000)
+    saturated_fat_g: float | None = Field(default=None, ge=0, le=500)
+    alcohol_g: float | None = Field(default=None, ge=0, le=500)
+    caffeine_mg: float | None = Field(default=None, ge=0, le=2000)
     ingredients: list[RecipeIngredientInput] = Field(default_factory=list)
     tags: dict | None = None
 

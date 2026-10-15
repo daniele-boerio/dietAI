@@ -58,6 +58,16 @@ def _avvia_promemoria() -> None:
     start_scheduler(SessionLocal)
 
 
+# Il giro di healthAI: ogni minuto porta i pasti consumati dell'amministratore al server
+# dei suoi dati di salute (vedi `services/healthai.py`). Senza HEALTHAI_URL e
+# HEALTHAI_TOKEN non parte; i test lo spengono come i promemoria.
+@app.on_event("startup")
+def _avvia_healthai() -> None:
+    from .services.healthai import start_scheduler as start_healthai
+
+    start_healthai(SessionLocal)
+
+
 # Tutte le rotte sono `def`, non `async def`: il lavoro dell'app è sincrono e
 # bloccante (SQLAlchemy, chiamate al modello che durano minuti), e su una rotta
 # async bloccherebbe l'intero event loop. Così FastAPI le manda in un threadpool.

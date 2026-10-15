@@ -99,6 +99,59 @@ def test_un_giorno_a_meta_non_ha_un_totale(client, settimana):
     assert tracking["weekly_summary"]["avg_daily_calories_eaten"] is None
 
 
+def test_senza_gli_altri_valori_restano_non_saputi(client, settimana):
+    """Il modello finto stima solo calorie e macro: fibre e il resto sono None,
+    "non lo so", e non zero, che vorrebbe dire "non ce n'era"."""
+    cena = pasto(settimana, 0, "Cena")
+    client.put(f"/api/planning/meals/{cena['id']}/followed", json={"is_followed": False})
+    stima = client.put(
+        f"/api/planning/meals/{cena['id']}/eaten", json={"text": "una pizza"}
+    ).json()["eaten_nutrition"]
+    for campo in ("fiber_g", "sugar_g", "saturated_fat_g", "alcohol_g", "caffeine_mg"):
+        assert stima[campo] is None, campo
+
+
+def test_la_stima_porta_alcol_caffeina_e_il_resto(client, diet, monkeypatch):
+    class ModelloDellaBirra(FakeModel):
+        def generate_json(self, system, prompt, **kwargs):
+            if "COSA HA MANGIATO INVECE" in prompt:
+                # Zuccheri oltre i carboidrati e saturi oltre i grassi: un errore del
+                # modello, che il tetto corregge.
+                return {"calories": 1012, "protein_g": 32, "carbs_g": 120, "fat_g": 30,
+                        "fiber_g": 6.04, "sugar_g": 150, "saturated_fat_g": 45,
+                        "alcohol_g": 15.8, "caffeine_mg": 65.4, "note": "pizza, birra, caffè"}
+            return super().generate_json(system, prompt, **kwargs)
+
+    finto = lambda db, user, role: ModelloDellaBirra(user)  # noqa: E731
+    monkeypatch.setattr(planner, "get_client", finto)
+    monkeypatch.setattr(planning_router, "get_client", finto)
+    client.put("/api/auth/api-key", json={"api_key": "sk-or-chiave-finta-per-i-test"})
+    week = client.get("/api/planning/weeks/current").json()
+    settimana = client.post(f"/api/planning/weeks/{week['id']}/generate").json()
+    cena = pasto(settimana, 0, "Cena")
+    client.put(f"/api/planning/meals/{cena['id']}/followed", json={"is_followed": False})
+
+    stima = client.put(
+        f"/api/planning/meals/{cena['id']}/eaten",
+        json={"text": "pizza, una birra media e un caffè"},
+    ).json()["eaten_nutrition"]
+
+    assert stima["alcohol_g"] == 15.8
+    assert stima["caffeine_mg"] == 65  # i mg all'intero
+    assert stima["fiber_g"] == 6.0
+    assert stima["sugar_g"] == 120  # mai più dei carboidrati
+    assert stima["saturated_fat_g"] == 30  # mai più dei grassi
+
+
+def test_il_prompt_della_stima_spiega_alcol_e_zero():
+    """Guardia sulle regole che healthAI chiede: l'etanolo e non la bevanda, 0 ≠ null."""
+    from app.services import prompts
+
+    assert "ETANOLO" in prompts.EATEN_ESTIMATE_SYSTEM
+    assert "0 e null non sono la stessa cosa" in prompts.EATEN_ESTIMATE_SYSTEM
+    assert "caffeine_mg" in prompts.EATEN_ESTIMATE_SYSTEM
+
+
 def test_il_pasto_di_un_altro_non_si_tocca(client, guest_client, settimana):
     cena = pasto(settimana, 0, "Cena")
     res = guest_client.put(f"/api/planning/meals/{cena['id']}/eaten", json={"text": "x"})

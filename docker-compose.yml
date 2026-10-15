@@ -45,6 +45,13 @@ services:
       - AI_MODEL_PLANNING=${AI_MODEL_PLANNING:-}
       - AI_MODEL_CHAT=${AI_MODEL_CHAT:-}
       - AI_MODEL_DIET=${AI_MODEL_DIET:-}
+      # healthAI (i dati di salute dell'amministratore): riceve i pasti consumati.
+      # Vuote = integrazione spenta. Se healthAI sta sulla stessa rete Docker di
+      # Coolify basta il nome del servizio (http://<servizio>:8000), altrimenti il
+      # suo URL pubblico https.
+      - HEALTHAI_URL=${HEALTHAI_URL:-}
+      - HEALTHAI_TOKEN=${HEALTHAI_TOKEN:-}
+      - HEALTHAI_DAYS=${HEALTHAI_DAYS:-90}
     healthcheck:
       test:
         [

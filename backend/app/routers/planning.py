@@ -19,7 +19,7 @@ from ..schemas import (
     RegenerateMealRequest,
     SkipDayRequest,
 )
-from ..services import planner, prompts
+from ..services import macros, planner, prompts
 from ..services.ai_client import get_client
 from ..services.planner import (
     clear_meal_cell,
@@ -41,7 +41,7 @@ from ..services.planner import (
     stop_recurring_forward,
     unskip_meal,
 )
-from ..services.recipes import create_recipe
+from ..services.recipes import create_recipe, declared_details
 from ..services.shopping import (
     consume_from_pantry,
     rebuild_shopping_list,
@@ -407,7 +407,7 @@ def set_eaten_instead(
         data = client.generate_json(
             prompts.EATEN_ESTIMATE_SYSTEM,
             prompts.render(prompts.EATEN_ESTIMATE_PROMPT, slot_name=slot.name, text=testo),
-            max_tokens=600,
+            max_tokens=800,
             thinking=False,
         )
         meal.deviation_notes = testo
@@ -429,6 +429,11 @@ def _eaten_estimate(data) -> dict | None:
     out["calories"] = int(round(out["calories"]))
     for key in ("protein_g", "carbs_g", "fat_g"):
         out[key] = round(out[key], 1)
+    # Gli altri valori sono facoltativi uno per uno: un None resta None ("non lo so"),
+    # uno zero resta zero ("non ce n'è") — healthAI li legge in due modi diversi.
+    out.update(
+        macros.coherent_details(declared_details(data), out["carbs_g"], out["fat_g"])
+    )
     note = data.get("note")
     out["note"] = str(note)[:200] if note else None
     return out

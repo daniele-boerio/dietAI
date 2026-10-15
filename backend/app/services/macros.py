@@ -24,15 +24,57 @@ come nell'editor della dieta.
 """
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from sqlalchemy.orm import Session
 
 from ..models import Ingredient
-from ..utils.composition import COMPOSITION, DENSITY, GRAMS_PER_UNIT
+from ..utils.composition import (
+    ALCOHOL,
+    CAFFEINE_MG,
+    COMPOSITION,
+    DENSITY,
+    DETAILS,
+    GRAMS_PER_UNIT,
+)
 from ..utils.units import normalize_unit, to_base
 
 logger = logging.getLogger(__name__)
+
+# Gli altri valori: (campo della ricetta, campo dell'anagrafica per 100 g). Non entrano
+# nelle calorie né nel ritocco — le calorie sono fatte dei tre macro, e l'alcol in una
+# ricetta è il vino sfumato. Ognuno ha il suo conto: un ingrediente senza fibre lascia
+# aperte le fibre della ricetta, non i suoi zuccheri.
+DETTAGLI: tuple[tuple[str, str], ...] = (
+    ("fiber_g", "fiber_100g"),
+    ("sugar_g", "sugar_100g"),
+    ("saturated_fat_g", "saturated_fat_100g"),
+    ("alcohol_g", "alcohol_100g"),
+    ("caffeine_mg", "caffeine_mg_100g"),
+)
+CAMPI_DETTAGLIO = tuple(campo for campo, _ in DETTAGLI)
+
+
+def round_detail(campo: str, valore: float | None) -> float | None:
+    """Come si scrive un valore: mg all'intero, grammi a un decimale."""
+    if valore is None:
+        return None
+    return float(round(valore)) if campo == "caffeine_mg" else round(valore, 1)
+
+
+def coherent_details(details: dict, carbs_g: float | None, fat_g: float | None) -> dict:
+    """Gli zuccheri sono parte dei carboidrati e i saturi dei grassi: mai di più.
+
+    Un modello che scrive 30 g di zuccheri sotto 20 di carboidrati ha sbagliato uno
+    dei due; il tetto è il numero che si conosce meglio. Le fibre no: i carboidrati
+    qui sono quelli disponibili delle tabelle CREA, senza fibra, e su una verdura le
+    fibre li superano davvero.
+    """
+    out = dict(details)
+    for campo, tetto in (("sugar_g", carbs_g), ("saturated_fat_g", fat_g)):
+        if out.get(campo) is not None and tetto is not None and out[campo] > tetto:
+            out[campo] = round(tetto, 1)
+    return out
 
 # I test lo spengono (vedi `conftest.py`): i modelli finti scrivono numeri tondi che
 # non tornano con le grammature, e ricalcolarli cambierebbe ogni conto della suite.
@@ -90,6 +132,12 @@ def apply_catalog_composition(ingredient: Ingredient) -> bool:
     ingredient.protein_100g = protein
     ingredient.carbs_100g = carbs
     ingredient.fat_100g = fat
+    fiber, sugar, saturated = DETAILS[ingredient.name]
+    ingredient.fiber_100g = fiber
+    ingredient.sugar_100g = sugar
+    ingredient.saturated_fat_100g = saturated
+    ingredient.alcohol_100g = ALCOHOL.get(ingredient.name, 0.0)
+    ingredient.caffeine_mg_100g = CAFFEINE_MG.get(ingredient.name, 0.0)
     ingredient.grams_per_unit = GRAMS_PER_UNIT.get(ingredient.name)
     ingredient.density = DENSITY.get(ingredient.name)
     ingredient.composition_source = "catalogo"
@@ -102,6 +150,12 @@ def has_composition(ingredient: Ingredient | None) -> bool:
         ingredient.protein_100g,
         ingredient.carbs_100g,
         ingredient.fat_100g,
+    )
+
+
+def has_details(ingredient: Ingredient | None) -> bool:
+    return ingredient is not None and all(
+        getattr(ingredient, col) is not None for _, col in DETTAGLI
     )
 
 
@@ -128,14 +182,19 @@ class Totali:
     protein: float = 0.0
     carbs: float = 0.0
     fat: float = 0.0
+    # Gli altri valori, per campo della ricetta: None = un ingrediente non lo sa.
+    details: dict = field(default_factory=dict)
 
     def as_nutrition(self) -> dict:
-        return {
+        out = {
             "calories": int(round(self.kcal)),
             "protein_g": round(self.protein, 1),
             "carbs_g": round(self.carbs, 1),
             "fat_g": round(self.fat, 1),
         }
+        for campo in CAMPI_DETTAGLIO:
+            out[campo] = round_detail(campo, self.details.get(campo))
+        return out
 
 
 @dataclass
@@ -173,13 +232,21 @@ def _righe(db: Session, items: list[dict]) -> tuple[list[_Riga], list[str]]:
 
 
 def _somma(righe: list[_Riga]) -> Totali:
-    t = Totali()
+    t = Totali(details={campo: 0.0 for campo in CAMPI_DETTAGLIO})
     for r in righe:
         p, c, f = r.macro
         t.kcal += r.kcal
         t.protein += p
         t.carbs += c
         t.fat += f
+        if r.grams <= 0:
+            continue  # il sale "q.b." non porta niente, nemmeno un "non si sa"
+        for campo, col in DETTAGLI:
+            per_100 = getattr(r.ingredient, col)
+            if per_100 is None or t.details[campo] is None:
+                t.details[campo] = None
+            else:
+                t.details[campo] += r.grams / 100 * per_100
     return t
 
 
@@ -369,10 +436,35 @@ def fit_to_target(db: Session, items: list[dict], target: Target) -> list[dict]:
 
 
 def missing_composition(db: Session, ingredient_ids: list[int]) -> list[Ingredient]:
+    """I nomi a cui manca qualcosa: la composizione, o anche solo gli altri valori.
+
+    I secondi sono quelli imparati prima che si chiedessero fibre e compagni: il
+    modello li completa alla prima generazione che li usa, e i macro che avevano
+    restano quelli (vedi `ensure_composition`).
+    """
     if not ATTIVO or not ingredient_ids:
         return []
     rows = db.query(Ingredient).filter(Ingredient.id.in_(set(ingredient_ids))).all()
-    return [i for i in rows if not has_composition(i)]
+    return [i for i in rows if not has_composition(i) or _mai_chiesti(i)]
+
+
+def _mai_chiesti(ingredient: Ingredient) -> bool:
+    """Nessuno degli altri valori: non sono mai stati chiesti.
+
+    Basta uno per dire che la domanda è già stata fatta: se il modello ha risposto
+    alle fibre e non alla caffeina, chiederglielo a ogni generazione non cambierebbe
+    la risposta, e costerebbe una chiamata ogni volta.
+    """
+    return all(getattr(ingredient, col) is None for _, col in DETTAGLI)
+
+
+def _dettaglio(voce: dict, campo: str) -> float | None:
+    """Un valore della stima: non negativo, o None se il modello non lo sa."""
+    try:
+        valore = float(voce.get(campo))
+    except (TypeError, ValueError):
+        return None
+    return valore if valore >= 0 else None
 
 
 def ensure_composition(db: Session, client, ingredient_ids: list[int]) -> int:
@@ -408,6 +500,16 @@ def ensure_composition(db: Session, client, ingredient_ids: list[int]) -> int:
             continue
         ingredient = per_nome.get(str(voce.get("name", "")).strip().lower())
         if ingredient is None:
+            continue
+        # Gli altri valori, solo dove mancano: quelli del catalogo o scritti a mano
+        # valgono più di una stima.
+        for campo, col in DETTAGLI:
+            if getattr(ingredient, col) is None:
+                setattr(ingredient, col, _dettaglio(voce, campo))
+        if has_composition(ingredient):
+            # Già noto (catalogo, mano, o imparato prima): mancavano solo gli altri
+            # valori, e i macro restano quelli su cui poggiano le ricette di ieri.
+            imparati += 1
             continue
         try:
             valori = [float(voce[k]) for k in ("kcal", "protein_g", "carbs_g", "fat_g")]

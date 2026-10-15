@@ -66,10 +66,39 @@ tabella: per ogni voce kcal ≈ 4·P + 4·C + 9·G (tranne alcol, aceti e spezie
 dove alcol, acido acetico e fibra non stanno nei tre macro), che è la guardia contro un
 numero scritto male.
 
+**Il resto dell'etichetta si conta allo stesso modo.** Calorie e tre macro bastavano
+alla dieta, non a dire cosa si è mangiato: healthAI (vedi `docs/healthai.md`) vuole
+anche fibre, zuccheri, grassi saturi, alcol (grammi di etanolo, non della bevanda) e
+caffeina. Arrivano per 100 g sull'anagrafica (`fiber_100g` e compagni: il catalogo li
+porta in `utils/composition.DETAILS`, `ALCOHOL`, `CAFFEINE_MG`, i nomi nuovi li
+ricevono dal modello insieme ai macro) e per porzione sulla ricetta (`Recipe.fiber_g`
+e compagni), con le regole dei macro: calcolati dagli ingredienti, dichiarati dal
+modello o dall'utente dove il conto non si chiude. Con due differenze. Si contano
+**valore per valore**: un ingrediente senza fibre lascia aperte le fibre della
+ricetta, non i suoi zuccheri — perdere tutto per un valore che manca vorrebbe dire non
+avere quasi mai niente, perché i nomi imparati dal modello prima che glieli si
+chiedesse non li hanno. E **NULL non è zero**: zero = non ce n'è (il catalogo è stato
+guardato voce per voce, e il vino è l'unico che porta alcol); NULL = non si sa, e a
+healthAI arriva come «non so», non come «niente caffè». Zuccheri e saturi sono una
+parte di carboidrati e grassi e non li superano mai (`coherent_details` li porta al
+tetto, `test_macro_calcolati` lo pretende dal catalogo); le fibre sì, perché i
+carboidrati delle tabelle CREA sono quelli disponibili, senza fibra — sui porcini
+1 g di carboidrati, 2,5 di fibre. Non entrano nelle calorie né nel ritocco delle
+grammature. Un nome imparato prima ha i macro e nessuno degli altri valori: alla prima
+generazione che lo usa il modello li completa (`missing_composition` lo considera
+incompleto solo se non ne ha **nessuno**, così una risposta parziale non si richiede a
+ogni generazione), e i macro che aveva restano quelli. La sostituzione di un
+ingrediente ora ricalcola anche i macro, come la chat: prima teneva quelli che il
+modello scriveva in `updated_nutrition`, sbagliando la somma come ogni volta.
+
 **L'archivio vecchio si ricalcola a mano.** Le ricette di prima hanno
 `nutrition_source` NULL e i numeri dichiarati. `python -m app.recompute_macros` li
 rifà dagli ingredienti senza toccare le grammature (quelle ricette sono già state
-comprate e mangiate); senza `--yes` stampa solo quanto cambierebbe. Cambia anche i
+comprate e mangiate); senza `--yes` stampa solo quanto cambierebbe. Rifà anche gli
+altri valori; con `--ai --yes` prima fa completare al modello (una chiamata ogni 40
+nomi, chiave e modello dell'amministratore) quelli che mancano all'anagrafica. Dopo il
+deploy della migrazione 0030: il seed riempie il catalogo da solo, poi
+`python -m app.recompute_macros --ai --yes` per l'archivio. Cambia anche i
 totali delle settimane passate e l'aderenza: è voluto, dicono il vero.
 
 **E quelle già in programma si ritoccano a mano.** `python -m app.refit_macros` (anteprima senza `--yes`) applica `fit_to_target` alle ricette da oggi in avanti non segnate né saltate (`services/refit.py`): il passato non si riscrive, una ricetta usata anche fuori dal gruppo si copia prima di toccarla, quelle scritte a mano e quelle con ingredienti senza composizione si saltano, e quelle che nemmeno ritoccando tornano nel target si elencano da rigenerare. Guardia in `tests/test_refit.py`.

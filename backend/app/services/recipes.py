@@ -250,6 +250,7 @@ def create_recipe(
     giorno.
     """
     nutrition = _dict(data.get("nutrition"))
+    details = declared_details(nutrition, data)
     items = _resolve(db, _clean_ingredients(data.get("ingredients")))
 
     title = _text(data.get("title"))[:200] or "Ricetta senza nome"
@@ -270,6 +271,12 @@ def create_recipe(
             n = calcolati.as_nutrition()
             calories, protein_g = n["calories"], n["protein_g"]
             carbs_g, fat_g = n["carbs_g"], n["fat_g"]
+            # Un valore che il conto non chiude (un ingrediente che non lo sa) resta
+            # quello dichiarato: è la regola dei macro, valore per valore.
+            details = {
+                k: n[k] if n[k] is not None else details[k] for k in macros.CAMPI_DETTAGLIO
+            }
+    details = macros.coherent_details(details, carbs_g, fat_g)
 
     twin = find_twin(
         db,
@@ -296,6 +303,7 @@ def create_recipe(
         protein_g=protein_g,
         carbs_g=carbs_g,
         fat_g=fat_g,
+        **details,
         tags=data.get("tags"),
         is_custom=is_custom,
         generation_prompt=generation_prompt,
@@ -393,9 +401,41 @@ def update_recipe_from_ai(db: Session, recipe: Recipe, data: dict) -> None:
         recipe.protein_g = _num(nutrition.get("protein_g"), recipe.protein_g)
         recipe.carbs_g = _num(nutrition.get("carbs_g"), recipe.carbs_g)
         recipe.fat_g = _num(nutrition.get("fat_g"), recipe.fat_g)
+        set_declared_details(recipe, nutrition)
     if data.get("ingredients"):
         replace_ingredients(db, recipe, data["ingredients"])
     recompute_nutrition(db, recipe)
+
+
+def declared_details(nutrition: dict, data: dict | None = None) -> dict:
+    """Gli altri valori dichiarati (dal modello o dall'utente): None dove non ci sono.
+
+    Come i macro, possono stare in `nutrition` (AI) o al primo livello (form utente).
+    """
+    data = data or {}
+    out = {}
+    for campo in macros.CAMPI_DETTAGLIO:
+        valore = nutrition.get(campo, data.get(campo))
+        try:
+            valore = float(valore) if valore is not None else None
+        except (TypeError, ValueError):
+            valore = None
+        out[campo] = macros.round_detail(campo, valore) if valore is not None and valore >= 0 else None
+    return out
+
+
+def set_declared_details(recipe: Recipe, nutrition: dict) -> None:
+    """Applica gli altri valori di una risposta del modello che cambia la ricetta.
+
+    Una modifica che rimanda solo i macro lascia gli altri valori a None invece che
+    a quelli di prima: descrivevano un altro piatto. Il ricalcolo che segue li rifà
+    dagli ingredienti dove si può.
+    """
+    details = macros.coherent_details(
+        declared_details(nutrition), recipe.carbs_g, recipe.fat_g
+    )
+    for campo, valore in details.items():
+        setattr(recipe, campo, valore)
 
 
 def recompute_nutrition(db: Session, recipe: Recipe) -> bool:
@@ -420,6 +460,13 @@ def recompute_nutrition(db: Session, recipe: Recipe) -> bool:
     recipe.protein_g = n["protein_g"]
     recipe.carbs_g = n["carbs_g"]
     recipe.fat_g = n["fat_g"]
+    for campo in macros.CAMPI_DETTAGLIO:
+        if n[campo] is not None:
+            setattr(recipe, campo, n[campo])
+    for campo, valore in macros.coherent_details(
+        {c: getattr(recipe, c) for c in macros.CAMPI_DETTAGLIO}, recipe.carbs_g, recipe.fat_g
+    ).items():
+        setattr(recipe, campo, valore)
     recipe.nutrition_source = "calcolata"
     return True
 
@@ -515,6 +562,7 @@ def copy_recipe(db: Session, recipe: Recipe) -> Recipe:
         protein_g=recipe.protein_g,
         carbs_g=recipe.carbs_g,
         fat_g=recipe.fat_g,
+        **{campo: getattr(recipe, campo) for campo in macros.CAMPI_DETTAGLIO},
         tags=recipe.tags,
         is_favorite=recipe.is_favorite,
         is_custom=recipe.is_custom,
@@ -639,6 +687,7 @@ def serialize_recipe(db: Session, recipe: Recipe | None, *, full: bool = True) -
         "protein_g": recipe.protein_g,
         "carbs_g": recipe.carbs_g,
         "fat_g": recipe.fat_g,
+        **{campo: getattr(recipe, campo) for campo in macros.CAMPI_DETTAGLIO},
         "tags": recipe.tags,
         "rating": recipe.rating,
         "is_favorite": recipe.is_favorite,
@@ -670,6 +719,11 @@ def recipe_for_prompt(db: Session, recipe: Recipe) -> dict:
             "protein_g": recipe.protein_g,
             "carbs_g": recipe.carbs_g,
             "fat_g": recipe.fat_g,
+            **{
+                campo: getattr(recipe, campo)
+                for campo in macros.CAMPI_DETTAGLIO
+                if getattr(recipe, campo) is not None
+            },
         },
         "tags": recipe.tags,
     }

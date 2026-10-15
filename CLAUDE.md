@@ -51,7 +51,7 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
 │       ├── main.py             # app FastAPI, CORS, include_router
 │       ├── config.py           # env var + load_dotenv()
 │       ├── database.py         # engine, SessionLocal, get_db
-│       ├── models.py           # tutte le tabelle (17)
+│       ├── models.py           # tutte le tabelle (23)
 │       ├── schemas.py          # Pydantic (input; le risposte sono dict espliciti)
 │       ├── auth.py             # hashing, JWT, cookie, get_current_user
 │       ├── crypto.py           # Fernet per la API key del provider
@@ -63,6 +63,7 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
 │       ├── merge_ingredients.py # `python -m app.merge_ingredients`: fonde i doppioni di anagrafica
 │       ├── merge_recipes.py    # `python -m app.merge_recipes`: fonde le ricette identiche
 │       ├── recompute_macros.py # `python -m app.recompute_macros`: ricalcola i macro dell'archivio
+│       ├── healthai_sync.py    # `python -m app.healthai_sync`: rimanda a healthAI i pasti consumati
 │       ├── routers/            # auth, admin, diet, config, planning, recipes, chat, shopping, tracking, push
 │       ├── services/
 │       │   ├── accounts.py     # chi è l'amministratore, creazione di un account
@@ -78,6 +79,7 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
 │       │   ├── push.py         # notifiche push e promemoria serale (thread ogni minuto)
 │       │   ├── weight.py       # storico del peso, proposta di ricalcolo
 │       │   ├── usage.py        # registro delle chiamate AI e conto per utente
+│       │   ├── healthai.py     # pasti consumati → healthAI (thread ogni minuto, confronto di stati)
 │       │   └── tracking.py     # pianificato vs target
 │       └── utils/
 │           ├── units.py        # conversione unità (g/ml/unità)
@@ -93,6 +95,7 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
     ├── index.css               # design system completo (variabili CSS, tema scuro/chiaro)
     ├── lib/macros.js           # ripartizione calorie/macro tra i pasti (+ test)
     ├── lib/generation.js       # cosa c'è da generare in settimana: la conta della dialog (+ test)
+    ├── lib/nutrients.js        # fibre, zuccheri, saturi, alcol, caffeina: la riga sotto i macro (+ test)
     ├── components/             # WeekGrid, WeekGenerateDialog, MealCard, DayDots, MealChat, RecipeView, MacroBar,
     │                           # Questionnaire (dieta calcolata, onboarding + /diet)...
     └── pages/                  # Dashboard, Planning, MealDetail, Shopping, Pantry,
@@ -115,6 +118,7 @@ il ragionamento.
 | Piano: settimane, caselle, saltati, fissi, ricette condivise | `docs/piano.md` |
 | Spesa, prezzi, reparti, dispensa | `docs/spesa.md` |
 | Andamento e aderenza | `docs/andamento.md` |
+| healthAI: invio dei pasti consumati | `docs/healthai.md` |
 | Generazione, modelli, ragionamento, stato | `docs/generazione.md` |
 | Macro delle ricette: calcolo e ritocco | `docs/macro.md` |
 | Chat e regole libere | `docs/chat.md` |
@@ -222,6 +226,18 @@ paragrafo nel documento, scrivendo anche cosa non andava con la versione di prim
 - Fuori dal ±10% si ritoccano le grammature delle tre leve (proteine, carboidrati,
   grassi), mai le altre righe, mai oltre i limiti. Le ricette dell'utente non si toccano.
 - La suite gira coi macro dichiarati (`macro_dichiarati` in `conftest.py`).
+- Fibre, zuccheri, saturi, alcol (g di etanolo) e caffeina seguono le stesse regole,
+  ma **valore per valore** e con **NULL ≠ 0** (non si sa / non ce n'è). Zuccheri e
+  saturi mai oltre carboidrati e grassi (`coherent_details`); le fibre sì (CREA).
+
+**healthAI** (`docs/healthai.md`)
+- I pasti consumati dell'**amministratore** vanno a healthAI: non con un invio per
+  rotta ma con un giro che confronta lo stato di ogni pasto con `HealthSync.sent_hash`
+  (`services/healthai.sync`, thread ogni minuto). Nessuna rotta deve ricordarsene.
+- «Consumato» = come l'andamento: seguito → la ricetta (o i target se «lo faccio io»),
+  «ho mangiato altro» → la stima. Un pasto senza dati non si manda. Valori per una
+  persona. 401/422 non si ritentano, rete e 5xx sì con attesa; l'utente non vede mai
+  un errore di healthAI. Senza `HEALTHAI_URL`/`HEALTHAI_TOKEN` è spento.
 
 **Chat** (`docs/chat.md`)
 - La ricetta va dopo il marcatore (`[RECIPE_UPDATE]`, `[RECIPES_UPDATE]`), il messaggio
@@ -313,7 +329,8 @@ con la chiave dell'admin, e il percorso comincia dalla dieta.
 
 Push sul branch principale → Coolify ricostruisce via Docker Compose. Variabili da
 impostare: `DB_*`, `SECRET_KEY`, `ENCRYPTION_KEY`, `SEED_USER_EMAIL`,
-`SEED_USER_PASSWORD`, `COOKIE_SECURE=true`. Solo il frontend ha un dominio pubblico.
+`SEED_USER_PASSWORD`, `COOKIE_SECURE=true`; per healthAI `HEALTHAI_URL` e
+`HEALTHAI_TOKEN` (facoltative). Solo il frontend ha un dominio pubblico.
 
 ⚠️ `ENCRYPTION_KEY` non va più cambiata dopo il primo avvio: la API key salvata
 diventerebbe indecifrabile e andrebbe reinserita.

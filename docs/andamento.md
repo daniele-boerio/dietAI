@@ -56,7 +56,11 @@ sapeva che il piano non era stato seguito, non cosa si era mangiato al suo posto
 pasto segnato «ho mangiato altro» ora c'è un campo («una pizza», «panino al bar») e
 `PUT /api/planning/meals/{id}/eaten` lo fa stimare al modello (ruolo `chat`, prompt
 `EATEN_ESTIMATE_SYSTEM`, porzioni tipiche italiane, mai una domanda di chiarimento): il
-testo resta in `deviation_notes`, la stima in `PlannedMeal.eaten_nutrition`. Vale solo
+testo resta in `deviation_notes`, la stima in `PlannedMeal.eaten_nutrition`. La stima
+porta anche fibre, zuccheri, saturi, alcol e caffeina, con le regole che healthAI
+chiede (`docs/healthai.md`): l'alcol in grammi di etanolo, valori di riferimento per
+la caffeina, zero e null che restano diversi, zuccheri e saturi mai oltre carboidrati
+e grassi. Vale solo
 lì — su un pasto seguito si è mangiato il piatto in programma, su uno non segnato non si
 sa — e cambiare risposta la cancella, perché non descrive più niente.
 

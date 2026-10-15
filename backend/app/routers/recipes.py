@@ -11,7 +11,7 @@ from ..database import get_db
 from ..models import DayPlan, Ingredient, PlannedMeal, Recipe, RecipeIngredient, User, WeekPlan
 from ..rate_limit import AI_LIMIT, limiter
 from ..schemas import FavoriteRequest, RatingRequest, RecipeCreate, SubstituteRequest
-from ..services import prompts
+from ..services import macros, prompts
 from ..services.ai_client import AIError, get_client
 from ..services.ingredients import get_or_create_ingredient, normalize_name
 from ..services.planner import DAY_NAMES, build_context
@@ -20,7 +20,9 @@ from ..services.recipes import (
     fork_recipe_for_meal,
     ingredients_of,
     recipe_for_prompt,
+    recompute_nutrition,
     serialize_recipe,
+    set_declared_details,
     settle_recipe,
 )
 from ..services.shopping import rebuild_shopping_list
@@ -251,6 +253,10 @@ def substitute_ingredient(
         recipe.protein_g = float(nutrition.get("protein_g", recipe.protein_g))
         recipe.carbs_g = float(nutrition.get("carbs_g", recipe.carbs_g))
         recipe.fat_g = float(nutrition.get("fat_g", recipe.fat_g))
+        set_declared_details(recipe, nutrition)
+    # I numeri del modello valgono solo se non si possono calcolare, come per una
+    # ricetta che nasce: l'ingrediente nuovo cambia anche fibre, zuccheri e il resto.
+    recompute_nutrition(db, recipe)
 
     # Se il piatto è appena diventato uguale a un altro che l'utente ha già, si torna a
     # una riga sola invece di lasciarne due identiche in ricettario.
@@ -273,6 +279,7 @@ def substitute_ingredient(
             "protein_g": recipe.protein_g,
             "carbs_g": recipe.carbs_g,
             "fat_g": recipe.fat_g,
+            **{campo: getattr(recipe, campo) for campo in macros.CAMPI_DETTAGLIO},
         },
         "explanation": data.get("explanation"),
         "ingredients": ingredients_of(db, recipe.id),

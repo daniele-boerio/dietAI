@@ -2599,6 +2599,15 @@ textarea {
   margin-top: 16px;
 }
 
+/* Fibre, zuccheri, saturi (e alcol, caffeina quando ci sono): la riga sotto la barra
+   dei macro, più leggibile della nota sulla provenienza che la segue. */
+.nutrition-extra {
+  margin: 8px 0 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
 .nutrition-source {
   margin: 6px 0 0;
   font-family: var(--font-mono);

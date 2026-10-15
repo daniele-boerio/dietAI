@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import { api, formatNumber } from '../api';
 import { useApp } from '../App';
+import { otherNutrientsLine } from '../lib/nutrients';
 
 // «Ho mangiato altro: cosa?». Senza, un pasto saltato è un buco nei dati: si sa che il
 // piano non è stato seguito, non cosa si è mangiato al suo posto. Si scrive a parole
@@ -57,6 +58,7 @@ export default function EatenInstead({ meal, onSaved }) {
         <p className="eaten-estimate">
           ≈ {stima.calories} kcal · P {formatNumber(stima.protein_g, 0)} · C{' '}
           {formatNumber(stima.carbs_g, 0)} · G {formatNumber(stima.fat_g, 0)}
+          {otherNutrientsLine(stima) && <> · {otherNutrientsLine(stima)}</>}
           {stima.note ? <span> — stima: {stima.note}</span> : null}
         </p>
       )}

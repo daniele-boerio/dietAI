@@ -13,7 +13,14 @@ import pytest
 from app.models import Ingredient, Recipe
 from app.services import macros, planner
 from app.services.ingredients import get_or_create_ingredient
-from app.utils.composition import COMPOSITION, DENSITY, GRAMS_PER_UNIT
+from app.utils.composition import (
+    ALCOHOL,
+    CAFFEINE_MG,
+    COMPOSITION,
+    DENSITY,
+    DETAILS,
+    GRAMS_PER_UNIT,
+)
 from app.utils.pricing import INGREDIENT_CATALOG
 from tests.test_flow import FakeModel
 
@@ -66,7 +73,71 @@ def test_le_calorie_tornano_coi_macro(nome):
     assert abs(kcal - atwater) <= max(15, 0.25 * kcal), (kcal, atwater)
 
 
+def test_ogni_voce_del_catalogo_ha_gli_altri_valori():
+    """Fibre, zuccheri e saturi per tutte; alcol e caffeina solo dove ci sono, e
+    l'assenza vale zero. Una voce senza dettagli lascerebbe aperti quei valori in
+    ogni ricetta che la usa."""
+    assert set(DETAILS) == set(COMPOSITION)
+    assert set(ALCOHOL) <= set(COMPOSITION)
+    assert set(CAFFEINE_MG) <= set(COMPOSITION)
+
+
+@pytest.mark.parametrize("nome", sorted(COMPOSITION))
+def test_zuccheri_e_saturi_stanno_dentro_carboidrati_e_grassi(nome):
+    """Sono una parte di quei numeri, mai di più: è la guardia contro una colonna
+    scambiata con un'altra. Le fibre no: i carboidrati CREA non le contano."""
+    _, _, carbs, fat = COMPOSITION[nome]
+    _, sugar, saturated = DETAILS[nome]
+    assert sugar <= carbs, (sugar, carbs)
+    assert saturated <= fat, (saturated, fat)
+
+
+@pytest.mark.parametrize("nome", sorted(ALCOHOL))
+def test_con_l_alcol_le_calorie_tornano(nome):
+    """kcal ≈ 4·P + 4·C + 9·G + 7·alcol: il vino fuori Atwater torna dentro."""
+    kcal, p, c, f = COMPOSITION[nome]
+    atwater = 4 * p + 4 * c + 9 * f + 7 * ALCOHOL[nome]
+    assert abs(kcal - atwater) <= max(15, 0.25 * kcal), (kcal, atwater)
+
+
 # ── Il conto ───────────────────────────────────────────────────────────────────
+
+
+def test_gli_altri_valori_si_sommano_come_i_macro(db):
+    n = macros.compute(
+        db, righe(db, ("pasta", 100, "g"), ("olio extravergine d'oliva", 1, "cucchiai"))
+    ).as_nutrition()
+
+    assert n["fiber_g"] == 2.7
+    # 0,3 della pasta + 13,8 g d'olio × 14,5% = 2,3 g di saturi.
+    assert n["saturated_fat_g"] == pytest.approx(0.3 + 13.8 * 0.145, abs=0.1)
+    # Non ce n'è: zero, che non è "non si sa".
+    assert n["alcohol_g"] == 0
+    assert n["caffeine_mg"] == 0
+
+
+def test_un_valore_che_un_ingrediente_non_sa_resta_aperto(db):
+    """Il conto si fa valore per valore: senza le fibre del tempeh le fibre della
+    ricetta non si sanno, le calorie e gli zuccheri sì."""
+    items = righe(db, ("pasta", 80, "g"), ("tempeh", 100, "g"))
+    tempeh = db.get(Ingredient, items[1]["ingredient_id"])
+    tempeh.kcal_100g, tempeh.protein_100g, tempeh.carbs_100g, tempeh.fat_100g = 192, 20.3, 7.6, 10.8
+    tempeh.sugar_100g, tempeh.saturated_fat_100g = 0.5, 2.2
+    tempeh.alcohol_100g = tempeh.caffeine_mg_100g = 0.0
+    db.flush()
+
+    n = macros.compute(db, items).as_nutrition()
+
+    assert n["fiber_g"] is None
+    assert n["sugar_g"] == pytest.approx(0.8 * 3.5 + 0.5, abs=0.1)
+    assert n["calories"] == round(0.8 * 356 + 192)
+
+
+def test_il_sale_q_b_non_lascia_aperto_niente(db):
+    sale = get_or_create_ingredient(db, "sale")
+    sale.fiber_100g = None  # anche se non si sapesse: pesa zero
+    n = macros.compute(db, righe(db, ("pasta", 100, "g"), ("sale", 1, "q.b."))).as_nutrition()
+    assert n["fiber_g"] == 2.7
 
 
 def test_la_somma_la_fa_python(db):
@@ -171,6 +242,33 @@ def test_le_ricette_scritte_a_mano_tengono_i_loro_numeri(client):
     assert res.status_code in (200, 201), res.text
     assert res.json()["calories"] == 500
     assert res.json()["nutrition_source"] == "utente"
+    # Gli altri valori non li ha scritti: non si sanno, e non diventano zero.
+    assert res.json()["fiber_g"] is None
+
+
+def test_la_ricetta_scritta_a_mano_tiene_anche_gli_altri_valori(client):
+    res = client.post(
+        "/api/recipes",
+        json={
+            "title": "Il mio porridge", "instructions": "Cuoci.",
+            "calories": 350, "protein_g": 12, "carbs_g": 55, "fat_g": 8,
+            "fiber_g": 7.5, "sugar_g": 12, "saturated_fat_g": 1.5,
+            "alcohol_g": 0, "caffeine_mg": 0,
+        },
+    )
+    assert res.status_code in (200, 201), res.text
+    r = res.json()
+    assert (r["fiber_g"], r["sugar_g"], r["saturated_fat_g"]) == (7.5, 12, 1.5)
+    assert r["alcohol_g"] == 0 and r["caffeine_mg"] == 0
+
+
+def test_la_ricetta_generata_ha_gli_altri_valori(client, generata):
+    pranzo = next(m for m in generata["days"][0]["meals"] if m["slot_name"] == "Pranzo")
+    ricetta = client.get(f"/api/planning/meals/{pranzo['id']}").json()["recipe"]
+    # Gli ingredienti del modello finto sono tutti del catalogo: si sanno tutti.
+    for campo in macros.CAMPI_DETTAGLIO:
+        assert ricetta[campo] is not None, campo
+    assert ricetta["sugar_g"] <= ricetta["carbs_g"]
 
 
 class ModelloCheConosce:
@@ -184,7 +282,8 @@ class ModelloCheConosce:
         return {
             "items": [
                 {"name": "tempeh", "kcal": 192, "protein_g": 20.3, "carbs_g": 7.6,
-                 "fat_g": 10.8, "grams_per_unit": None, "density": None}
+                 "fat_g": 10.8, "fiber_g": 5.0, "sugar_g": 0.5, "saturated_fat_g": 2.2,
+                 "alcohol_g": 0, "caffeine_mg": 0, "grams_per_unit": None, "density": None}
             ]
         }
 

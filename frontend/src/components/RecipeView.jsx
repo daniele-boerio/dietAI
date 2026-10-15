@@ -1,6 +1,7 @@
 import { Clock, Flame, MapPin, Replace, UtensilsCrossed } from 'lucide-react';
 import { formatNumber } from '../api';
 import MacroBar from './MacroBar';
+import { otherNutrientsLine } from '../lib/nutrients';
 
 const DIFFICULTY = { easy: 'Facile', medium: 'Media', hard: 'Impegnativa' };
 
@@ -152,6 +153,13 @@ export default function RecipeView({
         </div>
 
         <MacroBar protein={recipe.protein_g} carbs={recipe.carbs_g} fat={recipe.fat_g} />
+
+        {/* Il resto dell'etichetta, in una riga: non sono numeri della dieta (non
+            hanno target), ma dicono cosa c'è nel piatto. Un valore che non si sa non
+            c'è, invece di diventare uno zero. */}
+        {otherNutrientsLine(recipe) && (
+          <p className="nutrition-extra">{otherNutrientsLine(recipe)}</p>
+        )}
 
         {/* Da dove vengono i numeri qui sopra. Calcolati vuol dire sommati dagli
             ingredienti; dichiarati vuol dire che un ingrediente non aveva composizione

@@ -119,7 +119,7 @@ RECIPE_JSON_SHAPE = """{
     {"name": "<ingrediente>", "quantity": <float>, "unit": "g|ml|unità|cucchiai|cucchiaini|spicchi|fette", "notes": "<facoltativo>"}
   ],
   "instructions": "<procedimento numerato, un passo per riga>",
-  "nutrition": {"calories": <int>, "protein_g": <float>, "carbs_g": <float>, "fat_g": <float>},
+  "nutrition": {"calories": <int>, "protein_g": <float>, "carbs_g": <float>, "fat_g": <float>, "fiber_g": <float>, "sugar_g": <float>, "saturated_fat_g": <float>, "alcohol_g": <float, grammi di etanolo: 0 se non c'è>, "caffeine_mg": <int: 0 se non c'è>},
   "tags": {"cuisine": "<la cucina del piatto, fra quelle richieste nel contesto>", "origin": "<il paese da cui viene il piatto, in italiano, con la regione dopo un punto mediano quando la ricetta è regionale: \"Italia · Sicilia\", \"Giappone\", \"Marocco\", \"Messico · Oaxaca\">", "season": ["<stagioni>"], "type": "<colazione|spuntino|primo|secondo|contorno|piatto unico|dolce>"}
 }"""
 
@@ -290,13 +290,15 @@ COMPOSITION_SYSTEM = """Sei un nutrizionista italiano. Per ogni alimento elencat
 
 Per ogni alimento:
 - kcal, protein_g, carbs_g, fat_g per 100 g;
+- fiber_g, sugar_g (zuccheri totali, parte dei carboidrati), saturated_fat_g (parte dei grassi) per 100 g;
+- alcohol_g: grammi di etanolo per 100 g (vino al 12% ≈ 9,5), 0 se non ne contiene; caffeine_mg per 100 g, 0 se non ne contiene. 0 vuol dire "non c'è", null "non lo so": usa null solo se davvero non sai stimarlo;
 - grams_per_unit: quanto pesa in media un pezzo, se è una cosa che si conta a pezzi (un uovo, un limone, una fetta, un vasetto); altrimenti null;
 - density: grammi per millilitro, se è un liquido o una salsa; altrimenti null.
 
 Usa il nome ESATTAMENTE come ti viene dato. Se un nome è ambiguo, scegli il prodotto più comune in Italia.
 
 FORMATO OUTPUT (JSON rigoroso, nessun testo aggiuntivo):
-{"items": [{"name": "<nome>", "kcal": <float>, "protein_g": <float>, "carbs_g": <float>, "fat_g": <float>, "grams_per_unit": <float|null>, "density": <float|null>}]}"""
+{"items": [{"name": "<nome>", "kcal": <float>, "protein_g": <float>, "carbs_g": <float>, "fat_g": <float>, "fiber_g": <float>, "sugar_g": <float>, "saturated_fat_g": <float>, "alcohol_g": <float>, "caffeine_mg": <float>, "grams_per_unit": <float|null>, "density": <float|null>}]}"""
 
 COMPOSITION_PROMPT = """ALIMENTI:
 {names}"""
@@ -327,10 +329,18 @@ Leggi lo scontrino nella foto e abbina le righe."""
 
 EATEN_ESTIMATE_SYSTEM = """Sei un nutrizionista italiano. L'utente ti dice cosa ha mangiato al posto del pasto previsto, a parole sue ("una pizza margherita", "panino al bar con prosciutto e mozzarella", "niente, ho saltato").
 
-Stima calorie e macro di quello che ha mangiato, per una persona, con le porzioni tipiche in Italia (una pizza intera da pizzeria, un panino da bar, un piatto di pasta da trattoria) a meno che non dica lui le quantità. Se dice di non aver mangiato niente, tutto a zero. Meglio una stima ragionevole che nessuna: non chiedere chiarimenti.
+Stima calorie e valori nutrizionali di quello che ha mangiato, bevande comprese, per una persona, con le porzioni tipiche in Italia (una pizza intera da pizzeria, un panino da bar, un piatto di pasta da trattoria, un calice di vino da 150 ml, una birra media da 400 ml) a meno che non dica lui le quantità. Se dice di non aver mangiato niente, tutto a zero. Meglio una stima ragionevole che nessuna: non chiedere chiarimenti.
+
+Come contare:
+- 0 e null non sono la stessa cosa: 0 = l'hai stimato e non ce n'è (un pasto senza alcol, senza caffè); null = non sai stimarlo. Usa null solo se la stima davvero non è possibile.
+- alcohol_g sono grammi di ETANOLO, non della bevanda: ml × gradazione × 0,789. Un calice di vino da 150 ml al 12% ≈ 14 g; una birra media da 400 ml al 5% ≈ 16 g.
+- caffeine_mg, valori di riferimento: espresso ~65 mg, caffè americano o moka (tazza) ~90-100 mg, tè nero ~45 mg, tè verde ~30 mg, cola 330 ml ~35 mg, energy drink 250 ml ~80 mg, cioccolato fondente 20 g ~15 mg.
+- sugar_g sono gli zuccheri totali (naturali e aggiunti) e sono parte di carbs_g; saturated_fat_g è parte di fat_g. Quindi sugar_g ≤ carbs_g, fiber_g ≤ carbs_g, saturated_fat_g ≤ fat_g.
+- calories ≈ 4 × protein_g + 4 × carbs_g + 9 × fat_g + 7 × alcohol_g.
+- Grammi a un decimale, kcal e mg interi.
 
 FORMATO OUTPUT (JSON rigoroso, nessun testo aggiuntivo):
-{"calories": <int>, "protein_g": <float>, "carbs_g": <float>, "fat_g": <float>, "note": "<una riga: cosa hai assunto per la stima, es. 'pizza margherita intera, circa 350 g'>"}"""
+{"calories": <int>, "protein_g": <float>, "carbs_g": <float>, "fat_g": <float>, "fiber_g": <float|null>, "sugar_g": <float|null>, "saturated_fat_g": <float|null>, "alcohol_g": <float|null>, "caffeine_mg": <int|null>, "note": "<una riga: cosa hai assunto per la stima, es. 'pizza margherita intera, circa 350 g, e una birra media'>"}"""
 
 EATEN_ESTIMATE_PROMPT = """PASTO PREVISTO: {slot_name}
 COSA HA MANGIATO INVECE: {text}"""
@@ -350,7 +360,7 @@ FORMATO OUTPUT (JSON rigoroso):
 {
   "original": {"name": str, "quantity": <float>, "unit": str},
   "substitute": {"name": str, "quantity": <float>, "unit": str},
-  "updated_nutrition": {"calories": <int>, "protein_g": <float>, "carbs_g": <float>, "fat_g": <float>},
+  "updated_nutrition": {"calories": <int>, "protein_g": <float>, "carbs_g": <float>, "fat_g": <float>, "fiber_g": <float>, "sugar_g": <float>, "saturated_fat_g": <float>, "alcohol_g": <float>, "caffeine_mg": <int>},
   "explanation": "<perché questa sostituzione funziona, una o due righe>"
 }
 

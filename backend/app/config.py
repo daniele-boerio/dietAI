@@ -57,6 +57,15 @@ COOKIE_DOMAIN = os.getenv("COOKIE_DOMAIN") or None
 # Senza, la API key dell'utente non è salvabile: gli endpoint che la usano rispondono 503.
 ENCRYPTION_KEY = _clean(os.getenv("ENCRYPTION_KEY"))
 
+# --- healthAI ---
+# Il server dei dati di salute dell'amministratore: riceve i pasti che segna come
+# consumati (vedi `services/healthai.py`). Senza una delle due l'integrazione è
+# spenta, senza errori. Il token è un segreto: resta qui, mai nei log né nelle risposte.
+HEALTHAI_URL = _clean(os.getenv("HEALTHAI_URL")).rstrip("/")
+HEALTHAI_TOKEN = _clean(os.getenv("HEALTHAI_TOKEN"))
+# Quanto indietro guarda il giro: i pasti più vecchi non si mandano né si toccano più.
+HEALTHAI_DAYS = int(os.getenv("HEALTHAI_DAYS", 90))
+
 # --- Utente seed ---
 # L'app è single-user: l'utente non si registra, viene creato da `python -m app.seed`.
 SEED_USER_EMAIL = os.getenv("SEED_USER_EMAIL", "utente@dietai.local")

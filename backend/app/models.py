@@ -197,6 +197,16 @@ class Ingredient(Base):
     protein_100g = Column(Float)
     carbs_100g = Column(Float)
     fat_100g = Column(Float)
+    # Il resto dell'etichetta, per 100 g: fibre, zuccheri e saturi (parte dei
+    # carboidrati e dei grassi qui sopra), alcol come grammi di etanolo, caffeina in
+    # mg. Non entrano nelle calorie né nel ritocco: servono a dire cosa si è mangiato
+    # (healthAI). 0 = non ce n'è; NULL = non si sa, e la ricetta che lo usa non
+    # dichiara quel valore.
+    fiber_100g = Column(Float)
+    sugar_100g = Column(Float)
+    saturated_fat_100g = Column(Float)
+    alcohol_100g = Column(Float)
+    caffeine_mg_100g = Column(Float)
     # Quanto pesa un pezzo (per "2 uova", "mezzo limone") e quanti grammi fa un
     # millilitro (per "1 cucchiaio d'olio"). NULL = non convertibile / 1.
     grams_per_unit = Column(Float)
@@ -276,6 +286,14 @@ class Recipe(Base):
     protein_g = Column(Float, nullable=False)
     carbs_g = Column(Float, nullable=False)
     fat_g = Column(Float, nullable=False)
+    # Gli altri valori, per una porzione, con le stesse regole dei macro: calcolati
+    # dagli ingredienti quando si può, dichiarati dal modello o dall'utente se no.
+    # NULL = non si sa (non "zero"): un ingrediente senza quel valore lo lascia aperto.
+    fiber_g = Column(Float)
+    sugar_g = Column(Float)
+    saturated_fat_g = Column(Float)
+    alcohol_g = Column(Float)  # grammi di etanolo, non della bevanda
+    caffeine_mg = Column(Float)
     # {"cuisine": "italiana", "season": ["estate"], "type": "primo"}
     tags = Column(JSONType)
     rating = Column(Integer)  # 1-5, NULL = non votata
@@ -661,6 +679,38 @@ class PushSubscription(Base):
     p256dh = Column(String, nullable=False)
     auth = Column(String, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class HealthSync(Base):
+    """Cosa sa healthAI di un pasto: l'ultimo invio riuscito e quello che non è passato.
+
+    Non è una coda di azioni: è lo stato. Il giro (`services/healthai.py`) confronta
+    quello che il pasto dice oggi con `sent_hash` e manda solo la differenza — POST se
+    il pasto è consumato, DELETE se non lo è più o non c'è più. Così conta sempre
+    l'ultima azione: un POST vecchio non può arrivare dopo una DELETE, perché il POST
+    vecchio non esiste più, esiste solo lo stato di adesso.
+
+    `meal_id` non è una FK: la riga deve sopravvivere al pasto cancellato, perché è
+    lei a ricordare che su healthAI c'è ancora qualcosa da togliere.
+    """
+
+    __tablename__ = "health_sync"
+
+    meal_id = Column(Integer, primary_key=True, autoincrement=False)
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # L'impronta del payload che healthAI ha: NULL = lì non c'è niente.
+    sent_hash = Column(String)
+    # Quello che non è riuscito a passare: l'impronta di un POST, o "DELETE". Coi
+    # tentativi e quando riprovare; `next_attempt_at` NULL su un fallimento = non si
+    # riprova (401/422, o 24 ore di errori) finché il pasto non cambia.
+    failed_hash = Column(String)
+    attempts = Column(Integer, nullable=False, default=0, server_default="0")
+    first_failed_at = Column(DateTime(timezone=True))
+    next_attempt_at = Column(DateTime(timezone=True))
+    last_error = Column(Text)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
 # ─────────────────────────── Lista della spesa ───────────────────────────

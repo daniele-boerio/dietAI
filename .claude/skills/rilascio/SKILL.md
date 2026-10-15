@@ -48,7 +48,8 @@ Quelli che cancellano o fondono mostrano l'anteprima e vogliono `--yes`.
 | `delete_user --email ... [--yes]` | cancellare un **altro amministratore** (gli utenti normali si cancellano da Impostazioni → Utenti) |
 | `merge_ingredients` | dopo aver cambiato una regola di normalizzazione nel codice |
 | `merge_recipes [--yes]` | ricettario con doppioni di prima delle ricette condivise |
-| `recompute_macros [--yes]` | dopo la migrazione 0021: rifà i macro delle ricette vecchie dagli ingredienti |
+| `recompute_macros [--yes] [--ai]` | dopo la migrazione 0021: rifà i macro delle ricette vecchie dagli ingredienti; dopo la 0030 con `--ai --yes` anche fibre, zuccheri, saturi, alcol e caffeina |
+| `healthai_sync [--days N] [--yes]` | primo collegamento a healthAI, o dopo che ha perso i dati: rimanda i pasti consumati degli ultimi 90 giorni |
 | `refit_macros [--yes] [--email ...]` | ritocca le grammature delle ricette da oggi in avanti fuori dal ±10%, senza chiamare il modello |
 | `repair_cereals` | una fusione di ingredienti ha unito troppo (cereali finiti in "pasta") |
 

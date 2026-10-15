@@ -18,6 +18,21 @@ arriverebbe come un digiuno. I valori sono per la porzione di una persona:
 ferma a oggi, ora italiana — un pasto di domani segnato per sbaglio non è stato
 mangiato.
 
+**Le ricette scritte a mano partono coi valori calcolati.** In DietAI una ricetta
+scritta dall'utente tiene i suoi numeri (`docs/macro.md`): il calcolo difende da una
+somma sbagliata del modello, non discute quelle di chi la ricetta l'ha pesata. Ma a
+healthAI, che incrocia quello che si è mangiato con sonno e allenamenti, l'utente
+vuole il conto fatto sugli ingredienti, come per le ricette generate — spesso è una
+ricetta messa in un pasto «lo faccio io» solo perché entri nella spesa, coi macro
+scritti a occhio. Quindi `_valori_ricetta` rifà il conto **solo per il payload**: la
+ricetta in DietAI non si tocca, né nella pagina né nell'andamento. Un ingrediente
+senza composizione la riceve dal modello (`ensure_composition`, chiave e modello
+dell'amministratore, una volta per processo: un nome che il modello non sa non si
+richiede a ogni giro), e resta in anagrafica come dopo una generazione. Se il conto
+non si chiude lo stesso partono i numeri dell'utente; un valore che il conto lascia
+aperto prende il suo. Le ricette generate non passano da qui: i loro numeri sono già
+quelli calcolati.
+
 **Solo l'amministratore.** healthAI è suo: i pasti di un ospite finirebbero nei dati
 di salute di un altro. Guardia in `test_i_pasti_dell_ospite_non_partono`.
 

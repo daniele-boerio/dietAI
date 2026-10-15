@@ -238,6 +238,9 @@ paragrafo nel documento, scrivendo anche cosa non andava con la versione di prim
   «ho mangiato altro» → la stima. Un pasto senza dati non si manda. Valori per una
   persona. 401/422 non si ritentano, rete e 5xx sì con attesa; l'utente non vede mai
   un errore di healthAI. Senza `HEALTHAI_URL`/`HEALTHAI_TOKEN` è spento.
+- Una ricetta scritta a mano tiene i suoi numeri in DietAI, ma a healthAI parte col
+  conto sugli ingredienti (`_valori_ricetta`, solo nel payload); se non si chiude,
+  coi numeri dell'utente.
 
 **Chat** (`docs/chat.md`)
 - La ricetta va dopo il marcatore (`[RECIPE_UPDATE]`, `[RECIPES_UPDATE]`), il messaggio

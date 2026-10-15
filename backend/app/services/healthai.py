@@ -50,8 +50,18 @@ import httpx
 from sqlalchemy.orm import Session
 
 from .. import config
-from ..models import DayPlan, HealthSync, MealSlot, PlannedMeal, Recipe, WeekPlan
+from ..models import (
+    DayPlan,
+    HealthSync,
+    MealSlot,
+    PlannedMeal,
+    Recipe,
+    RecipeIngredient,
+    WeekPlan,
+)
+from . import macros
 from .accounts import admin_user
+from .ai_client import get_client
 from .macros import CAMPI_DETTAGLIO, round_detail
 
 logger = logging.getLogger(__name__)
@@ -76,21 +86,93 @@ def _num(valore, decimali: int = 1) -> float:
     return round(float(valore or 0), decimali)
 
 
-def meal_payload(day: DayPlan, meal: PlannedMeal, slot: MealSlot, recipe: Recipe | None) -> dict | None:
+def _valori_dichiarati(recipe: Recipe) -> dict:
+    return {
+        "calories": recipe.calories,
+        "protein_g": recipe.protein_g,
+        "carbs_g": recipe.carbs_g,
+        "fat_g": recipe.fat_g,
+        **{campo: getattr(recipe, campo) for campo in CAMPI_DETTAGLIO},
+    }
+
+
+# Gli ingredienti di cui si è già chiesta la composizione in questo processo: se il
+# modello non la sa, chiederla a ogni giro vorrebbe dire una chiamata al minuto.
+_composizione_chiesta: set[int] = set()
+
+
+def _valori_ricetta(db: Session, recipe: Recipe, impara=None) -> dict:
+    """I numeri della ricetta per healthAI.
+
+    Le ricette generate li hanno già calcolati dagli ingredienti. Quelle scritte a mano
+    in DietAI tengono i numeri dell'utente (`docs/macro.md`) — ma a healthAI, che
+    incrocia quello che si è mangiato con sonno e allenamenti, va il conto fatto sugli
+    ingredienti, come per le altre: è l'utente che l'ha chiesto, e i suoi numeri in
+    DietAI restano dove sono. Un ingrediente senza composizione la riceve dal modello
+    (`impara`, una volta per processo); se il conto non si chiude lo stesso, partono i
+    numeri dell'utente. Un valore che il conto lascia aperto prende il suo.
+    """
+    dichiarati = _valori_dichiarati(recipe)
+    if not recipe.is_custom:
+        return dichiarati
+    items = [
+        {"ingredient_id": ri.ingredient_id, "quantity": ri.quantity, "unit": ri.unit}
+        for ri in db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == recipe.id)
+    ]
+    if not items:
+        return dichiarati
+    totali = macros.compute(db, items)
+    if totali is None and impara is not None:
+        da_chiedere = [
+            i.id
+            for i in macros.missing_composition(db, [it["ingredient_id"] for it in items])
+            if not macros.has_composition(i) and i.id not in _composizione_chiesta
+        ]
+        if da_chiedere:
+            _composizione_chiesta.update(da_chiedere)
+            impara(db, da_chiedere)
+            totali = macros.compute(db, items)
+    if totali is None:
+        return dichiarati
+    calcolati = totali.as_nutrition()
+    return {
+        campo: calcolati[campo] if calcolati[campo] is not None else dichiarati[campo]
+        for campo in dichiarati
+    }
+
+
+def _impara_composizione(db: Session, ingredient_ids: list[int]) -> None:
+    """La composizione dei nomi nuovi, dal modello dell'amministratore. Non solleva."""
+    admin = admin_user(db)
+    if admin is None:
+        return
+    try:
+        client = get_client(db, admin, "planning")
+        db.commit()  # niente transazione aperta durante la chiamata al modello
+        macros.ensure_composition(db, client, ingredient_ids)
+        db.commit()
+    except Exception:  # noqa: BLE001 — senza, partono i numeri dell'utente
+        db.rollback()
+        logger.warning("healthAI: composizione non stimata, parto coi numeri scritti", exc_info=True)
+
+
+def meal_payload(
+    day: DayPlan,
+    meal: PlannedMeal,
+    slot: MealSlot,
+    recipe: Recipe | None,
+    valori_ricetta: dict | None = None,
+) -> dict | None:
     """Il body del POST per quel pasto, o None se il pasto non è consumato.
 
     I valori sono per la porzione mangiata: quella di una persona. Le porzioni di
     `MealSlot.servings` moltiplicano la spesa, non quello che si mette nel piatto.
+    `valori_ricetta` sono i numeri da mandare per la ricetta (vedi `_valori_ricetta`);
+    senza, quelli salvati sulla ricetta.
     """
     if meal.is_followed is True and not meal.is_skipped:
         if recipe is not None:
-            valori = {
-                "calories": recipe.calories,
-                "protein_g": recipe.protein_g,
-                "carbs_g": recipe.carbs_g,
-                "fat_g": recipe.fat_g,
-                **{campo: getattr(recipe, campo) for campo in CAMPI_DETTAGLIO},
-            }
+            valori = valori_ricetta or _valori_dichiarati(recipe)
             titolo = recipe.title
         elif not slot.auto_generate:
             # «Lo faccio io»: l'utente ha detto di avere il suo pasto con quei macro, e
@@ -135,7 +217,9 @@ def _hash(payload: dict | None) -> str:
     return hashlib.sha256(testo.encode("utf-8")).hexdigest()
 
 
-def desired_payloads(db: Session, user_id: int, oggi: date, giorni: int) -> dict[int, dict | None]:
+def desired_payloads(
+    db: Session, user_id: int, oggi: date, giorni: int, impara=_impara_composizione
+) -> dict[int, dict | None]:
     """Tutti i pasti della finestra, con il payload che healthAI dovrebbe avere.
 
     None = quel pasto non dev'esserci. La finestra si ferma a oggi: un pasto di domani
@@ -153,7 +237,12 @@ def desired_payloads(db: Session, user_id: int, oggi: date, giorni: int) -> dict
     out: dict[int, dict | None] = {}
     for day, meal, slot in rows:
         recipe = db.get(Recipe, meal.recipe_id) if meal.recipe_id else None
-        out[meal.id] = meal_payload(day, meal, slot, recipe)
+        valori = None
+        # Il conto sugli ingredienti serve solo a chi parte: un pasto non consumato
+        # non costa né una query né, tanto meno, una chiamata al modello.
+        if recipe is not None and recipe.is_custom and meal.is_followed is True and not meal.is_skipped:
+            valori = _valori_ricetta(db, recipe, impara)
+        out[meal.id] = meal_payload(day, meal, slot, recipe, valori)
     return out
 
 
@@ -374,6 +463,7 @@ def reset_process_state() -> None:
     global _non_autorizzato, _pausa_fino
     _non_autorizzato = False
     _pausa_fino = None
+    _composizione_chiesta.clear()
 
 
 # ── Il thread ──────────────────────────────────────────────────────────────────

@@ -164,6 +164,123 @@ def test_non_ho_mangiato_niente_parte_a_zero(client, db, settimana, posta):
     assert body["caffeine_mg"] == 0 and body["fiber_g"] == 0
 
 
+def test_lo_faccio_io_con_una_ricetta_manda_la_ricetta(client, db, settimana, posta):
+    """Un pasto «lo faccio io» può avere dentro una ricetta (scelta dal ricettario,
+    perché entri nella spesa): allora si è mangiato quel piatto, e contano i suoi
+    numeri, non i target del pasto."""
+    pranzo = pasto(settimana, 0, "Pranzo")
+    meal = db.get(PlannedMeal, pranzo["id"])
+    slot = db.get(MealSlot, meal.meal_slot_id)
+    slot.auto_generate = False
+    recipe = db.get(Recipe, meal.recipe_id)
+    recipe.calories = slot.target_calories + 123  # diverso dal target, per distinguerli
+    db.commit()
+    segui(client, pranzo["id"])
+
+    giro(db, posta)
+
+    body = posta.chiamate[0][2]
+    assert body["calories"] == recipe.calories
+    assert body["recipe_title"] == recipe.title
+
+
+def test_lo_faccio_io_senza_ricetta_manda_i_target(client, db, settimana, posta):
+    pranzo = pasto(settimana, 0, "Pranzo")
+    meal = db.get(PlannedMeal, pranzo["id"])
+    slot = db.get(MealSlot, meal.meal_slot_id)
+    slot.auto_generate = False
+    meal.recipe_id = None
+    db.commit()
+    segui(client, pranzo["id"])
+
+    giro(db, posta)
+
+    body = posta.chiamate[0][2]
+    assert body["calories"] == slot.target_calories
+    assert body["recipe_title"] is None
+    assert body["fiber_g"] is None  # dei target non si sa altro
+
+
+# ── Le ricette scritte a mano ──────────────────────────────────────────────────
+
+
+def _ricetta_mia(client, settimana, *ingredienti, kcal=999):
+    """Una ricetta scritta a mano coi numeri «sbagliati», messa nel pranzo di lunedì
+    e segnata come seguita."""
+    res = client.post(
+        "/api/recipes",
+        json={
+            "title": "La mia pasta", "instructions": "Cuoci.",
+            "calories": kcal, "protein_g": 50, "carbs_g": 100, "fat_g": 40,
+            "ingredients": [{"name": n, "quantity": q, "unit": u} for n, q, u in ingredienti],
+        },
+    )
+    assert res.status_code in (200, 201), res.text
+    ricetta = res.json()
+    pranzo = pasto(settimana, 0, "Pranzo")
+    res = client.put(f"/api/planning/meals/{pranzo['id']}/assign", json={"recipe_id": ricetta["id"]})
+    assert res.status_code == 200, res.text
+    segui(client, pranzo["id"])
+    return ricetta, pranzo
+
+
+@pytest.fixture()
+def calcolo_acceso(monkeypatch):
+    from app.services import macros
+
+    monkeypatch.setattr(macros, "ATTIVO", True)
+
+
+def test_la_ricetta_scritta_a_mano_parte_coi_valori_calcolati(client, db, settimana, posta, calcolo_acceso):
+    """In DietAI tiene i numeri dell'utente; a healthAI va il conto sugli ingredienti."""
+    ricetta, _ = _ricetta_mia(
+        client, settimana, ("pasta", 100, "g"), ("olio extravergine d'oliva", 1, "cucchiai")
+    )
+
+    giro(db, posta)
+
+    body = posta.chiamate[0][2]
+    assert body["calories"] == 478  # 356 della pasta + 122 del cucchiaio d'olio
+    assert body["fiber_g"] == 2.7
+    # In DietAI non è cambiato niente.
+    assert client.get(f"/api/recipes/{ricetta['id']}").json()["calories"] == 999
+
+
+def test_un_ingrediente_nuovo_lo_chiede_al_modello_una_volta(client, db, settimana, posta, calcolo_acceso, monkeypatch):
+    class ModelloCheConosce:
+        chiamate = 0
+
+        def generate_json(self, system, prompt, **kw):
+            ModelloCheConosce.chiamate += 1
+            return {"items": [{"name": "tempeh", "kcal": 192, "protein_g": 20.3,
+                               "carbs_g": 7.6, "fat_g": 10.8, "fiber_g": 5.0,
+                               "sugar_g": 0.5, "saturated_fat_g": 2.2, "alcohol_g": 0,
+                               "caffeine_mg": 0}]}
+
+    monkeypatch.setattr(healthai, "get_client", lambda db, user, role: ModelloCheConosce())
+    _ricetta_mia(client, settimana, ("tempeh", 100, "g"))
+
+    giro(db, posta)
+    giro(db, posta, force=True)
+
+    assert posta.chiamate[0][2]["calories"] == 192
+    assert ModelloCheConosce.chiamate == 1  # imparato, resta in anagrafica
+
+
+def test_se_il_conto_non_si_chiude_partono_i_numeri_scritti(client, db, settimana, posta, calcolo_acceso, monkeypatch):
+    def rotto(db, user, role):
+        raise RuntimeError("provider giù")
+
+    monkeypatch.setattr(healthai, "get_client", rotto)
+    _ricetta_mia(client, settimana, ("polvere di stelle", 100, "g"))
+
+    giro(db, posta)
+    giro(db, posta, force=True)
+
+    assert posta.chiamate[0][2]["calories"] == 999
+    assert len(posta.chiamate) == 2  # e il giro dopo non riprova a chiedere
+
+
 def test_un_giorno_futuro_non_parte(client, db, settimana, posta):
     domani = pasto(settimana, 1, "Pranzo")
     segui(client, domani["id"])

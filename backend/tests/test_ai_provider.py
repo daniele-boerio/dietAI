@@ -191,3 +191,31 @@ def test_il_modello_scelto_sostituisce_il_default(client, db):
 @pytest.mark.parametrize("role", ["planning", "chat", "diet"])
 def test_esiste_un_default_per_ogni_ruolo(role):
     assert default_model(role)
+
+
+def test_i_numeri_storti_del_pdf_si_leggono_e_si_contengono(client, monkeypatch):
+    """«650 kcal» in stringa era un 500; un negativo o 50000 kcal entravano così; il
+    totale era quello letto a parte, anche se coi pasti non tornava."""
+
+    class ModelloDisordinato(FakeDietModel):
+        def generate_json(self, system, prompt, **kwargs):
+            return {
+                "daily_calories": 1800,
+                "meals": [
+                    {"name": "Pranzo", "order": 0, "calories": "650 kcal",
+                     "protein_g": "40,5 g", "carbs_g": -10, "fat_g": 20},
+                    {"name": "Cena", "order": 1, "calories": 50000, "protein_g": 30,
+                     "carbs_g": 60, "fat_g": 15, "servings": "due"},
+                ],
+            }
+
+    monkeypatch.setattr(diet_router, "get_client", lambda db, user, role: ModelloDisordinato())
+    client.put("/api/auth/api-key", json={"api_key": "sk-or-chiave-finta"})
+
+    res = _upload(client, build_pdf(DIET_TEXT))
+
+    assert res.status_code == 200, res.text
+    pranzo, cena = res.json()["meals"]
+    assert (pranzo["calories"], pranzo["protein_g"], pranzo["carbs_g"]) == (650, 40.5, 0)
+    assert cena["calories"] == 5000
+    assert res.json()["total_daily_calories"] == 5650

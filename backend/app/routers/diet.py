@@ -2,6 +2,7 @@
 
 import base64
 import logging
+import re
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from sqlalchemy.orm import Session
@@ -76,18 +77,35 @@ def _serialize_diet(db: Session, diet: DietPlan) -> dict:
     }
 
 
+def _numero(value, massimo: float) -> float:
+    """Un numero letto dal modello, nei limiti che l'editor impone a mano.
+
+    Il PDF lo legge il modello: «650 kcal» in stringa era un 500, un valore negativo o
+    da 50000 kcal entrava così com'era. Si prende la prima cifra, e si tiene fra 0 e il
+    tetto di `MealSlotInput`.
+    """
+    if isinstance(value, str):
+        trovato = re.search(r"\d+(?:[.,]\d+)?", value)
+        value = trovato.group(0).replace(",", ".") if trovato else None
+    try:
+        numero = float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    return min(max(numero, 0.0), massimo)
+
+
 def _slot_fields(index: int, meal: dict) -> dict:
     return {
-        "name": (meal.get("name") or f"Pasto {index + 1}").strip()[:100],
+        "name": str(meal.get("name") or f"Pasto {index + 1}").strip()[:100],
         "order_index": index,
-        "target_calories": int(meal.get("calories") or 0),
-        "target_protein_g": float(meal.get("protein_g") or 0),
-        "target_carbs_g": float(meal.get("carbs_g") or 0),
-        "target_fat_g": float(meal.get("fat_g") or 0),
-        "notes": (meal.get("notes") or None),
+        "target_calories": int(round(_numero(meal.get("calories"), 5000))),
+        "target_protein_g": _numero(meal.get("protein_g"), 500),
+        "target_carbs_g": _numero(meal.get("carbs_g"), 1000),
+        "target_fat_g": _numero(meal.get("fat_g"), 500),
+        "notes": (str(meal.get("notes"))[:500] if meal.get("notes") else None),
         "auto_generate": bool(meal.get("auto_generate", True)),
-        "servings": max(1, min(8, int(meal.get("servings") or 1))),
-        "batch_days": max(1, min(4, int(meal.get("batch_days") or 1))),
+        "servings": max(1, int(_numero(meal.get("servings") or 1, 8))),
+        "batch_days": max(1, int(_numero(meal.get("batch_days") or 1, 4))),
     }
 
 
@@ -212,8 +230,12 @@ def upload_diet(
     if not isinstance(data, dict) or not isinstance(data.get("meals"), list) or not data["meals"]:
         raise AIError("Nel PDF non ho trovato pasti riconoscibili. Inseriscili a mano.")
 
-    meals = data["meals"]
-    daily = int(data.get("daily_calories") or sum(int(m.get("calories") or 0) for m in meals))
+    meals = [m for m in data["meals"] if isinstance(m, dict)][:20]
+    if not meals:
+        raise AIError("Nel PDF non ho trovato pasti riconoscibili. Inseriscili a mano.")
+    # Il totale è la somma dei pasti, non il numero che il modello ha letto a parte:
+    # i due potevano non tornare, e il contesto diceva 1800 kcal su pasti da 2100.
+    daily = sum(int(round(_numero(m.get("calories"), 5000))) for m in meals)
 
     # Una sola dieta attiva: la precedente resta in archivio, disattivata.
     precedenti = _deactivate_previous(db, user.id)

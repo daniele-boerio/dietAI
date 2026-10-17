@@ -125,3 +125,10 @@ scritta, ci sono quelle delle linee guida CREA a un clic — proposte, mai impos
 dieta nuova senza frequenze sue **eredita quelle della precedente**
 (`_deactivate_previous`): chi ricalcola i macro dal questionario perché è cambiato il
 peso non ha cambiato idea sul pesce. Guardie in `tests/test_frequenze.py`.
+
+**I numeri del PDF passano dagli stessi limiti dell'editor** (`_numero` in
+`routers/diet.py`). Il PDF lo legge il modello, e quello che restituiva entrava così
+com'era: «650 kcal» in stringa era un 500, un negativo o 50000 kcal diventavano i
+target. Ora si prende la cifra, la si tiene nei limiti di `MealSlotInput`, e il totale
+del giorno è la somma dei pasti — non il `daily_calories` letto a parte, che poteva non
+tornare (1800 kcal su pasti da 2100).

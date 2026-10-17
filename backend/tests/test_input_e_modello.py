@@ -118,3 +118,24 @@ def test_la_sostituzione_riceve_le_regole_dell_utente(client, settimana, monkeyp
         json={"ingredient_to_replace": "pasta", "meal_id": pranzo["id"]},
     )
     assert "Sono celiaco" in visto["prompt"]
+
+
+@pytest.mark.parametrize(
+    ("rotta", "corpo"),
+    [
+        ("/api/recipes", {"title": "x", "instructions": "y", "calories": 1, "protein_g": 1,
+                          "carbs_g": 1, "fat_g": 1, "difficulty": "estrema"}),
+        ("/api/recipes", {"title": "x", "instructions": "y" * 10001, "calories": 1,
+                          "protein_g": 1, "carbs_g": 1, "fat_g": 1}),
+    ],
+)
+def test_una_ricetta_fuori_misura_e_un_422(client, rotta, corpo):
+    """Una difficoltà fuori elenco era un 500 dal CHECK del database."""
+    assert client.post(rotta, json=corpo).status_code == 422
+
+
+def test_giorni_fuori_settimana_e_assegnazioni_ambigue(client, settimana):
+    week_id = settimana["id"]
+    assert client.post(f"/api/planning/weeks/{week_id}/generate", json={"days": [9]}).status_code == 422
+    pasto = settimana["days"][0]["meals"][0]
+    assert client.put(f"/api/planning/meals/{pasto['id']}/assign", json={}).status_code == 422

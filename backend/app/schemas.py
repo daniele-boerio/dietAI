@@ -8,9 +8,9 @@ un dict costruito nel servizio è più leggibile di dieci schemi annidati.
 from datetime import date
 from urllib.parse import urlsplit
 
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 # ── Auth ───────────────────────────────────────────────────────────────────────
 
@@ -161,7 +161,7 @@ class PreferencesUpdate(BaseModel):
     # `cuisines.clean()`, che le riporta a somma 100.
     cuisines: dict[str, float] | list[str] = Field(default_factory=dict)
     max_prep_time_min: int | None = Field(default=None, ge=5, le=480)
-    budget_level: str | None = None
+    budget_level: Literal["economico", "medio", "premium"] | None = None
     # Facoltativo anche nel senso di «può mancare dal corpo»: chi salva le preferenze
     # senza mandarlo non lo cancella (vedi `update_preferences`).
     weekly_budget_eur: float | None = Field(default=None, gt=0, le=2000)
@@ -178,7 +178,7 @@ class NormalizationRuleCreate(BaseModel):
     `kind = "off"`: spegne un termine di serie ("sedani", che è anche un ortaggio).
     """
 
-    kind: str = Field(min_length=3, max_length=5)
+    kind: Literal["noise", "alias", "off"]
     term: str = Field(min_length=2, max_length=60)
     replacement: str | None = Field(default=None, max_length=60)
 
@@ -203,11 +203,14 @@ class RecipeIngredientInput(BaseModel):
 
 class RecipeCreate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
-    description: str | None = None
+    # Tetti anche sui testi: finiscono nei prompt a ogni generazione (le ricette amate
+    # sono esempi), e un procedimento da 5 MB passava.
+    description: str | None = Field(default=None, max_length=1000)
     prep_time_min: int = Field(default=0, ge=0, le=600)
     cook_time_min: int = Field(default=0, ge=0, le=600)
-    difficulty: str = "medium"
-    instructions: str = Field(min_length=1)
+    # Un valore fuori elenco era un IntegrityError sul CHECK del database, cioè un 500.
+    difficulty: Literal["easy", "medium", "hard"] = "medium"
+    instructions: str = Field(min_length=1, max_length=10000)
     calories: int = Field(ge=0, le=5000)
     protein_g: float = Field(ge=0, le=500)
     carbs_g: float = Field(ge=0, le=1000)
@@ -219,7 +222,7 @@ class RecipeCreate(BaseModel):
     saturated_fat_g: float | None = Field(default=None, ge=0, le=500)
     alcohol_g: float | None = Field(default=None, ge=0, le=500)
     caffeine_mg: float | None = Field(default=None, ge=0, le=2000)
-    ingredients: list[RecipeIngredientInput] = Field(default_factory=list)
+    ingredients: list[RecipeIngredientInput] = Field(default_factory=list, max_length=60)
     tags: dict | None = None
 
 
@@ -252,16 +255,17 @@ class GenerateWeekRequest(BaseModel):
     dialog si paga una chiamata sola sui soli pasti spuntati: chi la colazione se la
     prepara da sé non deve pagarne sette.
 
-    Non c'è nessuna validazione sui valori: `days` e `slot_ids` sono filtri, quindi un
-    giorno che non esiste semplicemente non seleziona niente. Una lista **vuota** però
+    I valori si validano solo nei limiti (giorni 0-6, liste corte): `days` e `slot_ids`
+    sono filtri, quindi uno slot che non esiste semplicemente non seleziona niente. Una lista **vuota** però
     è una scelta esplicita — "nessun giorno" — e vale come tale: il servizio risponde
     che nella selezione non c'è niente da generare invece di rifare tutto.
     """
 
     regenerate_all: bool = False
-    # `day_of_week`, da 0 (lunedì) a 6 (domenica).
-    days: list[int] | None = None
-    slot_ids: list[int] | None = None
+    # `day_of_week`, da 0 (lunedì) a 6 (domenica). I limiti non cambiano cosa vuol dire
+    # la selezione: tengono fuori solo liste che nessuna dialog manda.
+    days: list[Annotated[int, Field(ge=0, le=6)]] | None = Field(default=None, max_length=7)
+    slot_ids: list[int] | None = Field(default=None, max_length=20)
 
 
 class RegenerateMealRequest(BaseModel):
@@ -280,6 +284,12 @@ class AssignMealRequest(BaseModel):
 
     recipe_id: int | None = None
     recipe: RecipeCreate | None = None
+
+    @model_validator(mode="after")
+    def _una_sola_fonte(self):
+        if (self.recipe_id is None) == (self.recipe is None):
+            raise ValueError("Serve recipe_id oppure una ricetta completa, non tutti e due")
+        return self
 
 
 class RecurringRule(BaseModel):

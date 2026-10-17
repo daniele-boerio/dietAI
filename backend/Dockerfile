@@ -16,6 +16,12 @@ COPY app ./app
 
 EXPOSE 8000
 
+# Il server non gira come root: se qualcuno trovasse il modo di eseguire codice nel
+# container, non avrebbe i permessi per riscriverlo. L'app non scrive su disco
+# (PYTHONDONTWRITEBYTECODE, niente upload salvati), quindi /app può restare di root.
+RUN useradd --system --uid 10001 dietai
+USER dietai
+
 # All'avvio: migrazioni, poi seed, poi il server.
 #
 # Il seed è idempotente (crea l'utente solo se manca, riallinea l'anagrafica

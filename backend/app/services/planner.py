@@ -31,7 +31,7 @@ from ..models import (
     UserPreferences,
     WeekPlan,
 )
-from ..utils import cuisines
+from ..utils import clock, cuisines
 from ..utils import frequencies as freq
 from ..utils.seasonality import current_month, current_month_name, in_season
 from ..utils.units import format_quantity
@@ -73,8 +73,11 @@ def today() -> date:
     guarda da oggi in avanti, un pasto saltato si accoda a un giorno futuro — e i test
     devono poterlo spostare, altrimenti la stessa suite darebbe risultati diversi il
     lunedì e il venerdì.
+
+    È la data italiana (`utils.clock`): il container gira in UTC, e fra mezzanotte e
+    le due la spesa e la settimana credevano che fosse ancora ieri.
     """
-    return date.today()
+    return clock.local_today()
 
 
 def current_week_start() -> date:
@@ -1600,10 +1603,10 @@ def _apply_generated_week(
     # Indice delle caselle da riempire: (giorno, nome pasto normalizzato) → riga DB.
     index = {(d.day_of_week, s.name.strip().lower()): (d, m, s) for d, m, s in to_fill}
     filled = 0
+    excluded: list[str] = []
 
     for day_data in data["days"]:
         try:
-    excluded: list[str] = []
             dow = int(day_data.get("day_of_week"))
         except (TypeError, ValueError):
             continue
@@ -1658,10 +1661,10 @@ def _apply_generated_week(
         # perché — ci pensa chi cattura, che è anche l'unico a saperlo dire all'utente.
         raise AIError(
             "Il modello non ha prodotto nessuna ricetta utilizzabile. Riprova."
+            + (f" Scartate per gli esclusi: {'; '.join(excluded)}" if excluded else "")
         )
 
     if week.status == "draft" and week.week_start_date == current_week_start():
-            + (f" Scartate per gli esclusi: {'; '.join(excluded)}" if excluded else "")
         week.status = "active"
 
     db.commit()
@@ -1677,10 +1680,10 @@ def _apply_generated_week(
     return {
         "filled": filled,
         "missing": len(index),
+        "excluded": excluded,
         "notes": data.get("ingredient_reuse_notes"),
     }
 
-        "excluded": excluded,
 
 def _single_meal_frequencies(
     db: Session, user: User, week: WeekPlan, meal: PlannedMeal, slot: MealSlot

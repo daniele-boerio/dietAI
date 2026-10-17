@@ -29,18 +29,17 @@ import os
 import threading
 import time
 from datetime import date, datetime
-from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
 from ..config import SECRET_KEY
 from ..models import DayPlan, MealSlot, PlannedMeal, PushSubscription, UserPreferences, WeekPlan
+from ..utils.clock import FUSO
 
 logger = logging.getLogger(__name__)
 
 # L'ora del promemoria è quella dell'utente, e gli utenti sono in Italia. Il container
-# gira in UTC: senza questa riga «21:00» arriverebbe alle 23.
-FUSO = ZoneInfo("Europe/Rome")
+# gira in UTC: senza `FUSO` (utils/clock.py) «21:00» arriverebbe alle 23.
 
 _VAPID_SUBJECT = os.getenv("VAPID_SUBJECT", "mailto:dietai@localhost")
 

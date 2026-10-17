@@ -289,6 +289,9 @@ threadpool. La regola non ha eccezioni e `tests/test_concurrency.py` la fa rispe
   e il primo clic su "L'ho seguito" spegneva il dettaglio del pasto. Guardia in
   `tests/test_dettaglio_pasto.py`.
 - Tutte le chiamate del frontend passano da `api.js` — mai `fetch` nei componenti.
+- **«Oggi» è `planner.today()`, in ora italiana** (`utils/clock.py`), mai `date.today()`:
+  il container gira in UTC, e fra mezzanotte e le due spesa e andamento vivevano
+  ancora nel giorno prima. Guardia in `tests/test_oggi.py`.
 - **Testo UI in italiano.** Codice, commenti e nomi in inglese solo dove è già così.
 - I prompt stanno tutti in `services/prompts.py`: i vincoli devono essere identici tra
   generazione, rigenerazione e chat, altrimenti l'AI si contraddice da una schermata all'altra.

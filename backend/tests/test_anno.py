@@ -9,7 +9,7 @@ from datetime import date, timedelta
 
 import pytest
 
-from app.services import planner, tracking
+from app.services import planner
 from tests.test_flow import FakeModel
 
 
@@ -44,15 +44,14 @@ def oggi(monkeypatch):
     quanti giorni "sono già arrivati" dipende dal giorno in cui lanci la suite, e lo
     stesso test passa da mercoledì in poi e fallisce il lunedì.
 
-    Non basta il `oggi_e_lunedi` del conftest: quello sostituisce `planner.today`,
-    mentre `tracking` l'ha importata per nome (`from .planner import today`) e tiene il
-    riferimento originale. È il motivo per cui questo test è rimasto rosso metà
-    settimana senza che se ne accorgesse nessuno.
+    Prima `tracking` importava `today` per nome e il monkeypatch del conftest non lo
+    raggiungeva: questo test è rimasto rosso metà settimana senza che se ne accorgesse
+    nessuno. Ora tutto passa da `planner.today`, e basta spostare quello.
     """
 
     def a(giorno: int):  # 0 = lunedì della settimana in corso
         lunedi = planner.monday_of(date.today())
-        monkeypatch.setattr(tracking, "today", lambda: lunedi + timedelta(days=giorno))
+        monkeypatch.setattr(planner, "today", lambda: lunedi + timedelta(days=giorno))
 
     return a
 

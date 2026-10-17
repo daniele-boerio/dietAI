@@ -102,7 +102,7 @@ def year(
 ):
     """Aderenza giorno per giorno nell'anno, per il calendario a colpo d'occhio."""
     refresh_week_statuses(db, user_id)
-    return year_adherence(db, user_id, year or date.today().year)
+    return year_adherence(db, user_id, year or planner.today().year)
 
 
 @router.get("/weeks")
@@ -165,7 +165,7 @@ def dashboard(
     week = get_or_create_week(db, user_id, current_week_start())
     week_data = serialize_week(db, week)
 
-    today = date.today()
+    today = planner.today()
     today_meals = []
     for day, meal, slot in week_meals(db, week):
         if day.date != today:

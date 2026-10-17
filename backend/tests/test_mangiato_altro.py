@@ -184,9 +184,7 @@ def test_non_ho_mangiato_niente_solo_su_un_pasto_saltato(client, settimana):
 
 def test_la_home_porta_la_stima_sul_pasto_di_oggi(client, settimana):
     """La home conta la stima al posto del piatto rimandato: per farlo deve averla."""
-    from datetime import date
-
-    cena = pasto(settimana, date.today().weekday(), "Cena")
+    cena = pasto(settimana, planner.today().weekday(), "Cena")
     client.put(f"/api/planning/meals/{cena['id']}/followed", json={"is_followed": False})
     client.put(f"/api/planning/meals/{cena['id']}/eaten", json={"text": "una pizza"})
 

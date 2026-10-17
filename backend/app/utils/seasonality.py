@@ -6,6 +6,7 @@ quando un ingrediente nuovo entra in anagrafica.
 """
 
 from datetime import date
+from . import clock
 
 # Mesi di disponibilità (1 = gennaio). Chiavi in minuscolo, come i nomi in anagrafica.
 SEASONAL_PRODUCTS: dict[str, list[int]] = {
@@ -100,7 +101,7 @@ def in_season(month: int) -> list[str]:
 
 
 def current_month() -> int:
-    return date.today().month
+    return clock.local_today().month
 
 
 def current_month_name() -> str:

@@ -10,7 +10,8 @@ from datetime import date
 from sqlalchemy.orm import Session
 
 from ..models import DayPlan, MealSlot, PlannedMeal, Recipe, WeekPlan
-from .planner import DAY_NAMES, today, week_meals
+from . import planner
+from .planner import DAY_NAMES, week_meals
 
 # Sotto il 10% di scarto il piano è "in linea"; oltre il 20% è fuori bersaglio.
 # Sono le stesse soglie che i prompt danno all'AI, così UI e generazione concordano.
@@ -281,7 +282,7 @@ def year_adherence(db: Session, user_id: int, year: int) -> dict:
 
     # Serie più lunga di giorni pieni di fila: il numero che dà soddisfazione a
     # guardarlo. Solo fino a oggi, così un anno in corso non conta i giorni futuri.
-    limit = today() if year == today().year else end
+    limit = planner.today() if year == planner.today().year else end
     best_streak = current = 0
     day = start
     while day <= min(end, limit):
@@ -322,7 +323,7 @@ def recent_adherence(db: Session, user_id: int, days: int = RECENT_DAYS) -> dict
     Un giorno senza nessun pasto tracciato resta grigio e **fuori dal punteggio**: è
     un buco di dati, non un fallimento — la stessa regola del calendario dell'anno.
     """
-    end = today()
+    end = planner.today()
     start = date.fromordinal(end.toordinal() - (days - 1))
 
     rows = (
@@ -402,7 +403,7 @@ def _tracked_years(db: Session, user_id: int) -> list[int]:
         .all()
     )
     years = {r[0].year for r in rows}
-    years.add(today().year)
+    years.add(planner.today().year)
     return sorted(years)
 
 

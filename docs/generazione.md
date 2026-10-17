@@ -196,12 +196,13 @@ lavoro in coda invece di lanciarlo — SQLite in memoria ha una connessione sola
 thread insieme proverebbero il driver invece dell'app — e prova il thread vero a parte,
 su un database suo.
 
-**Aperto: `effort: high` sul ramo Anthropic.** La regola «il ragionamento si chiede in
-token, mai `effort: high`» nasce da OpenRouter, dove l'effort alto si mangiava il budget
-prima che il modello scrivesse la risposta (vedi sopra e `ai_client.py`). Il backend
-SDK Anthropic (`_AnthropicBackend.complete`) con `thinking` manda invece
-`thinking: adaptive` + `output_config.effort: high`, e la guardia
-`test_reasoning_budget.py` copre solo la strada OpenRouter. Non è stato verificato se lì
-lo stesso rischio esista: chi passa ad `AI_PROVIDER=anthropic` deve controllarlo (una
-generazione di settimana piena che finisce per «length») prima di fidarsene.
+**Il ramo Anthropic segue la stessa regola, a modo suo.** Il backend SDK Anthropic
+(`_AnthropicBackend.complete`) con `thinking` mandava `thinking: adaptive` +
+`output_config.effort: high` dentro lo stesso `max_tokens` del contenuto: la trappola di
+OpenRouter, mai vista solo perché in produzione quel ramo non gira. Il budget fisso in
+token (`budget_tokens`) sui modelli recenti è deprecato a favore di `adaptive`, quindi
+il patto si fa al contrario: il quarto per ragionare (`reasoning_budget`) si **aggiunge**
+a `max_tokens` e l'effort scende a `medium`. Guardia in `test_reasoning_budget.py`. Con
+una chiave Anthropic vera non è ancora stato provato: chi passa ad
+`AI_PROVIDER=anthropic` guardi la prima generazione di settimana piena.
 

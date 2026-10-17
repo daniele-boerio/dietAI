@@ -50,6 +50,11 @@ ROLES = ("planning", "chat", "diet")
 _STREAM_THRESHOLD = 8000
 
 
+def reasoning_budget(max_tokens: int) -> int:
+    """I token per ragionare: un quarto del budget, mai sotto il minimo di Anthropic."""
+    return max(1024, max_tokens // 4)
+
+
 class AIError(HTTPException):
     """Errore parlante verso l'utente: la UI mostra `detail` così com'è."""
 
@@ -206,9 +211,17 @@ class _AnthropicBackend:
             "system": system,
             "messages": messages,
         }
+        # La stessa lezione dell'altro backend (vedi `_OpenAICompatibleBackend`): i token
+        # del ragionamento si scalano da max_tokens, che è dimensionato per il solo
+        # contenuto, e `effort: high` se ne prendeva la parte grossa. Sui modelli
+        # recenti il budget fisso in token (`budget_tokens`) è deprecato a favore di
+        # `adaptive`, quindi qui il patto si fa al contrario: lo spazio del
+        # ragionamento si **aggiunge** a max_tokens invece di togliersi, e l'effort
+        # resta medio perché non lo sfori.
         if thinking:
+            params["max_tokens"] = max_tokens + reasoning_budget(max_tokens)
             params["thinking"] = {"type": "adaptive"}
-            params["output_config"] = {"effort": "high"}
+            params["output_config"] = {"effort": "medium"}
 
         anthropic = self._anthropic
         try:
@@ -327,7 +340,7 @@ class _OpenAICompatibleBackend:
         # Chi il parametro non lo supporta lo ignora, e chi accetta solo l'effort se lo
         # fa riconvertire da OpenRouter: si può mandare sempre.
         if thinking:
-            extra_body = {"reasoning": {"max_tokens": max(1024, max_tokens // 4)}}
+            extra_body = {"reasoning": {"max_tokens": reasoning_budget(max_tokens)}}
         else:
             extra_body = {"reasoning": {"effort": "low"}}
 

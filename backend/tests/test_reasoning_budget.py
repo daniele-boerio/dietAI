@@ -117,6 +117,53 @@ def test_il_budget_di_token_arriva_al_fornitore():
     assert completions.kwargs["max_tokens"] == 8000
 
 
+# ── Il ramo SDK Anthropic ──────────────────────────────────────────────────────
+
+
+class _AnthropicMessages:
+    def __init__(self):
+        self.kwargs = None
+
+    def create(self, **kwargs):
+        self.kwargs = kwargs
+        blocco = type("B", (), {"type": "text", "text": "{}"})()
+        return type("M", (), {"content": [blocco], "stop_reason": "end_turn", "usage": None})()
+
+
+def _anthropic_backend():
+    import anthropic
+
+    backend = ai_client._AnthropicBackend.__new__(ai_client._AnthropicBackend)
+    backend._anthropic = anthropic
+    messages = _AnthropicMessages()
+    backend._client = type("C", (), {"messages": messages})()
+    return backend, messages
+
+
+def test_sul_ramo_anthropic_il_ragionamento_non_ruba_spazio_al_contenuto():
+    """Era `effort: high` dentro lo stesso max_tokens: la trappola di OpenRouter. Ora
+    il ragionamento ha il suo quarto in più, e il contenuto tiene tutto il suo."""
+    backend, messages = _anthropic_backend()
+
+    backend.complete(model="claude-opus-4-8", system="s",
+                     messages=[{"role": "user", "content": "ciao"}],
+                     max_tokens=6000, thinking=True)
+
+    assert messages.kwargs["max_tokens"] == 6000 + 1500
+    assert messages.kwargs["output_config"] == {"effort": "medium"}
+
+
+def test_sul_ramo_anthropic_senza_ragionamento_il_budget_resta_quello():
+    backend, messages = _anthropic_backend()
+
+    backend.complete(model="claude-opus-4-8", system="s",
+                     messages=[{"role": "user", "content": "ciao"}],
+                     max_tokens=6000, thinking=False)
+
+    assert messages.kwargs["max_tokens"] == 6000
+    assert "thinking" not in messages.kwargs
+
+
 # ── Diagnosi delle risposte vuote ──────────────────────────────────────────────
 
 

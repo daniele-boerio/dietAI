@@ -224,9 +224,9 @@ paragrafo nel documento, scrivendo anche cosa non andava con la versione di prim
   selezione di giorni e pasti (`days`, `slot_ids`) filtra senza spezzarla. La conta in
   `lib/generation.js` deve dare lo stesso numero del server: se una casella si genera
   lo decide solo `planner.is_generable`, esposto come `generable` sul pasto.
-- Il ragionamento si chiede in token (un quarto di `max_tokens`), mai `effort: high`, su
-  OpenRouter. Il ramo SDK Anthropic usa `thinking: adaptive` con `effort: high`: non
-  verificato col budget, vedi `docs/generazione.md`.
+- Il ragionamento si chiede in token (un quarto di `max_tokens`, `reasoning_budget`), mai
+  `effort: high`. Sul ramo SDK Anthropic quel quarto si aggiunge a `max_tokens`, con
+  `thinking: adaptive` ed `effort: medium`.
 - Stato, diario ed errore della generazione stanno sul `WeekPlan`, non nella pagina:
   ciò che può fallire sta dentro il `try` e il fallimento si registra e si logga.
 - La generazione della settimana gira in un thread con una sessione sua

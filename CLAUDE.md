@@ -220,6 +220,8 @@ paragrafo nel documento, scrivendo anche cosa non andava con la versione di prim
   (`_in_background`): la POST risponde 202 e l'esito lo dice il polling. La suite la
   fa in primo piano (`generazione_in_primo_piano` in `conftest.py`).
 - Il singolo pasto con `user_request`: comanda l'utente, tranne macro ed esclusi.
+- Gli esclusi li controlla il server dopo il modello (`exclusions.check_recipe`), non
+  solo il prompt: una ricetta del modello che li contiene non entra nel piano.
 
 **Macro** (`docs/macro.md`)
 - I macro di una ricetta si **calcolano** dalla composizione degli ingredienti

@@ -134,6 +134,21 @@ _PEPERONI_QUALIFIERS = ("ross[oaie]", "giall[oaie]", "verd[ei]", "mist[oaie]")
 # attaccato al nome e farebbe una riga a sé nella lista della spesa.
 _PARENTESI = re.compile(r"\([^)]*\)")
 
+# Tranne quando fra parentesi c'è proprio ciò che cambia l'alimento: "penne (senza
+# glutine)" diventava "pasta", "latte (senza lattosio)" diventava "latte", e il celiaco
+# o l'intollerante si ritrovava in lista il prodotto normale. Queste glosse restano
+# nel nome, senza parentesi.
+_GLOSSA_CHE_CONTA = re.compile(
+    r"\b(senza|gluten[\s-]*free|delattosat\w*|vegan\w*|vegetal[ei])\b", re.IGNORECASE
+)
+
+
+def _glosse(nome: str) -> str:
+    return _PARENTESI.sub(
+        lambda m: f" {m.group(0)[1:-1]} " if _GLOSSA_CHE_CONTA.search(m.group(0)) else " ",
+        nome,
+    )
+
 # Preposizioni rimaste appese dopo aver tolto un qualificatore ("mandorle a" → "mandorle").
 _DANGLING = re.compile(r"\s+(a|di|in|al|alla|con|da)\s*$", re.IGNORECASE)
 
@@ -289,7 +304,7 @@ def _builtin(spenti: frozenset) -> _Builtin:
 def _builtin_normalize(name: str, spenti: frozenset = frozenset()) -> str:
     regole = _builtin(spenti)
 
-    n = _PARENTESI.sub(" ", _segni(name))
+    n = _glosse(_segni(name))
     if regole.pasta:
         n = regole.pasta.sub("pasta", n)
     if regole.pesce:
@@ -579,7 +594,7 @@ def builtin_rules() -> dict:
         ],
         "kept": [
             "integrale", "magro", "light", "intero", "al naturale", "sott'olio",
-            "senza zuccheri", "pelati",
+            "senza zuccheri", "senza glutine", "senza lattosio", "pelati",
         ],
     }
 

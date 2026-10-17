@@ -22,6 +22,7 @@ from ..rate_limit import AI_LIMIT, limiter
 from ..schemas import ChatMessageRequest
 from ..services import prompts
 from ..services.ai_client import _extract_json, get_client
+from ..services.exclusions import ExcludedFoodError, check_recipe
 from ..services.planner import DAY_NAMES, build_context, meal_context_for_chat
 from ..services.recipes import (
     fork_recipe_for_meal,
@@ -214,6 +215,9 @@ def send_message(
             try:
                 data = _extract_json(tail)
                 if isinstance(data, dict):
+                    # Gli esclusi prima di tutto, e prima di staccare la copia: una
+                    # modifica che non si applica non deve lasciare dietro niente.
+                    check_recipe(db, user.id, data)
                     # Lo stesso piatto in due giorni è una riga sola: se questo è il
                     # caso, la modifica chiesta qui se ne stacca una copia sua invece
                     # di riscrivere anche gli altri giorni.
@@ -224,6 +228,9 @@ def send_message(
                     # già (o non ha cambiato niente), si torna a una riga sola.
                     recipe = settle_recipe(db, meal) or recipe
                     recipe_updated = True
+            except ExcludedFoodError as exc:
+                logger.warning("Chat: modifica rifiutata (pasto %s): %s", meal_id, exc.detail)
+                visible += f"\n\n({exc.detail} La ricetta resta com'era.)"
             except ValueError:
                 logger.warning("Chat: [RECIPE_UPDATE] senza JSON valido (pasto %s)", meal_id)
                 visible += "\n\n(Non sono riuscito ad applicare la modifica, riprova.)"
@@ -325,8 +332,13 @@ def _apply_recipes_update(
     user: User,
     meals: dict[int, tuple[PlannedMeal, DayPlan, MealSlot]],
     data: dict,
+    rejected: list[str] | None = None,
 ) -> list[str]:
-    """Applica le ricette aggiornate dalla chat. Ritorna le etichette dei pasti cambiati."""
+    """Applica le ricette aggiornate dalla chat. Ritorna le etichette dei pasti cambiati.
+
+    Una ricetta che contiene un alimento escluso non si applica: il motivo finisce in
+    `rejected` e le altre vanno avanti.
+    """
     changed = []
     for entry in data.get("meals") or []:
         try:
@@ -340,6 +352,12 @@ def _apply_recipes_update(
             # inventato): meglio ignorarlo che scrivere una ricetta a caso.
             continue
         meal, day, slot = target
+        try:
+            check_recipe(db, user.id, recipe_data)
+        except ExcludedFoodError as exc:
+            if rejected is not None:
+                rejected.append(exc.detail)
+            continue
         # Come nella chat del pasto: se quel piatto è in programma anche altrove, la
         # modifica vale per questa casella e non per tutte quelle che lo condividono.
         recipe = fork_recipe_for_meal(db, meal)
@@ -428,7 +446,10 @@ def send_shopping_message(
         try:
             data = _extract_json(tail)
             if isinstance(data, dict):
-                changed = _apply_recipes_update(db, user, meals, data)
+                rifiutate: list[str] = []
+                changed = _apply_recipes_update(db, user, meals, data, rifiutate)
+                if rifiutate:
+                    visible += "\n\n(Non applicate: " + "; ".join(rifiutate) + ")"
         except ValueError:
             logger.warning("Chat spesa: [RECIPES_UPDATE] senza JSON valido (settimana %s)", week_id)
             visible += "\n\n(Non sono riuscito ad applicare le modifiche, riprova.)"
@@ -442,7 +463,9 @@ def send_shopping_message(
                 ShoppingChatMessage(week_plan_id=week_id, role="user", content=body.content)
             )
             visible += "\n\n(Non sono riuscito ad applicare le modifiche, riprova.)"
-        if not changed and "non sono riuscito" not in visible.lower():
+        if not changed and not any(
+            frase in visible.lower() for frase in ("non sono riuscito", "non applicate")
+        ):
             visible += "\n\n(Nessuna ricetta corrispondeva: non ho cambiato niente.)"
 
     db.add(ShoppingChatMessage(week_plan_id=week_id, role="assistant", content=visible))

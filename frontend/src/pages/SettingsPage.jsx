@@ -162,6 +162,13 @@ function ExcludedTab() {
       setItems((prev) => [...prev, row]);
       setDraft('');
       setReason('');
+      // Il piano già fatto non cambia da solo: chi ha appena aggiunto un'allergia deve
+      // sapere dove quell'alimento è ancora in programma.
+      if (row.conflicts?.length) {
+        const elenco = row.conflicts.slice(0, 3).join('; ');
+        const altri = row.conflicts.length > 3 ? ` e altri ${row.conflicts.length - 3}` : '';
+        addToast(`«${row.name}» è ancora in programma: ${elenco}${altri}. Rigenera quei pasti.`, 'error');
+      }
     } catch (e) {
       addToast(e.message, 'error');
     }

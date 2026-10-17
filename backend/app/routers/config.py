@@ -39,6 +39,7 @@ from ..schemas import (
 from ..services import planner
 from ..services.ai_client import ai_owner
 from ..services.catalog import list_models
+from ..services.exclusions import exclusion_rules, planned_conflicts
 from ..services.ingredients import (
     NormalizationRules,
     builtin_rules,
@@ -201,12 +202,17 @@ def add_excluded(
     )
     db.add(row)
     db.commit()
+    nome = known.name if known else clean
+    # Quello che è già in programma non cambia da solo: lo si dice, così chi ha appena
+    # scoperto un'allergia sa quali pasti rigenerare.
+    regole = [r for r in exclusion_rules(db, user_id) if r[0] == nome]
     return {
         "id": row.id,
         "ingredient_id": row.ingredient_id,
-        "name": known.name if known else clean,
+        "name": nome,
         "category": known.category if known else None,
         "reason": row.reason,
+        "conflicts": planned_conflicts(db, user_id, regole),
     }
 
 

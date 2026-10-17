@@ -79,6 +79,23 @@ vuota. Nel prompt la richiesta arriva come `RICHIESTA DELL'UTENTE`, e
 "come ieri ma col tacchino" è legittimo), i macro e gli ingredienti esclusi no — se il
 piatto chiesto non ci sta nei target il modello aggiusta le quantità o
 l'accompagnamento e lo scrive nella descrizione, invece di sfondare i numeri.
+
+**Gli esclusi si controllano dopo il modello, non solo nel prompt** (`services/exclusions.py`).
+Fino a qui arrivavano al modello in ogni prompt e basta: nessuno guardava gli
+ingredienti salvati, e una ricetta che ignorava la regola — o una chat che assecondava
+«mettici le arachidi» — finiva in piano e in lista senza un avviso. Ora `check_recipe`
+gira in `create_recipe` (solo per le ricette del modello: quelle scritte dall'utente le
+decide lui) e in `update_recipe_from_ai`. Il confronto è largo apposta: un escluso può
+essere una famiglia ("glutine", "frutti di mare": `FAMIGLIE`), singolare e plurale
+valgono uguale, e "senza glutine" o "latte di soia" non contano. Chi viola:
+- nella settimana resta fuori, la casella rimane vuota e il motivo esce in
+  `generation.excluded`; il resto della settimana entra lo stesso;
+- nella rigenerazione, nella sostituzione e nell'assegnazione dal ricettario è un 422
+  con il nome dell'alimento;
+- nelle chat la modifica non si applica e il messaggio lo dice.
+Le ricette amate passate al modello come esempio saltano quelle che urtano un escluso,
+e aggiungere un escluso risponde con `conflicts`, i pasti da oggi in avanti che lo
+contengono ancora: il piano già fatto non cambia da solo. Guardie in `tests/test_esclusi.py`.
 Dal frontend, a casella vuota, le vie per riempirla stanno **tutte e tre in fila** nello
 stato vuoto, con tre nomi diversi perché sono tre cose diverse: *Scegli tu il piatto*
 (genera e basta, un clic), *Genera da una mia idea* (apre `GenerateDialog`, il campo di

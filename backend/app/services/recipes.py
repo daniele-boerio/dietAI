@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from ..models import Ingredient, PlannedMeal, Recipe, RecipeIngredient
 from . import macros
+from .exclusions import check_recipe
 from .ingredients import get_or_create_ingredient
 
 _DIFFICULTIES = {"easy", "medium", "hard"}
@@ -248,7 +249,13 @@ def create_recipe(
     restituisce la sua. Vale soprattutto per la generazione, che chiama questa funzione
     una volta per casella e sul piatto che si ripete stava fabbricando un doppione al
     giorno.
+
+    Una ricetta del modello che contiene un alimento escluso non nasce
+    (`ExcludedFoodError`): il prompt glielo chiede, ma qui lo si controlla. Quelle
+    scritte dall'utente (`is_custom`) le decide lui.
     """
+    if not is_custom:
+        check_recipe(db, user_id, data)
     nutrition = _dict(data.get("nutrition"))
     details = declared_details(nutrition, data)
     items = _resolve(db, _clean_ingredients(data.get("ingredients")))
@@ -379,7 +386,11 @@ def update_recipe_from_ai(db: Session, recipe: Recipe, data: dict) -> None:
 
     Aggiorna solo i campi presenti: se il modello rimanda solo titolo e ingredienti,
     il procedimento precedente non deve sparire.
+
+    Prima di toccare qualcosa si controllano gli esclusi: la chat che asseconda
+    «mettici le arachidi» non deve poterle scrivere in ricetta.
     """
+    check_recipe(db, recipe.user_id, data)
     nutrition = _dict(data.get("nutrition"))
 
     if data.get("title"):

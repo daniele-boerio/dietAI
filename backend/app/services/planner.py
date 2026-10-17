@@ -37,6 +37,7 @@ from ..utils.seasonality import current_month, current_month_name, in_season
 from ..utils.units import format_quantity
 from . import prompts
 from .ai_client import AIError, get_client
+from .exclusions import ExcludedFoodError, exclusion_rules, recipe_violations
 from .recipes import (
     create_recipe,
     fit_recipe_data,
@@ -921,11 +922,19 @@ def _budget_line(prefs: UserPreferences | None) -> str:
 
 
 def _rated_titles(db: Session, user_id: int, high: bool) -> list[str]:
-    query = db.query(Recipe.title).filter(Recipe.user_id == user_id)
+    query = db.query(Recipe).filter(Recipe.user_id == user_id)
     query = (
         query.filter(Recipe.rating >= 4) if high else query.filter(Recipe.rating <= 2)
     )
-    return [r[0] for r in query.order_by(Recipe.id.desc()).limit(15).all()]
+    recipes = query.order_by(Recipe.id.desc()).limit(15).all()
+    if not high:
+        return [r.title for r in recipes]
+    # Le ricette amate sono modelli da imitare: una che contiene un alimento escluso
+    # dopo (un'allergia scoperta tardi) non deve più essere proposta come esempio.
+    regole = exclusion_rules(db, user_id)
+    if not regole:
+        return [r.title for r in recipes]
+    return [r.title for r in recipes if not recipe_violations(db, user_id, r.id, regole)]
 
 
 def _fmt_list(values: list[str], empty: str = "nessuno") -> str:
@@ -1594,6 +1603,7 @@ def _apply_generated_week(
 
     for day_data in data["days"]:
         try:
+    excluded: list[str] = []
             dow = int(day_data.get("day_of_week"))
         except (TypeError, ValueError):
             continue
@@ -1613,12 +1623,20 @@ def _apply_generated_week(
             if not recipe_data.get("title"):
                 continue
             _day, meal, slot = target
-            recipe = create_recipe(
-                db,
-                user.id,
-                fit_recipe_data(db, recipe_data, slot),
-                generation_prompt="week_plan",
-            )
+            try:
+                recipe = create_recipe(
+                    db,
+                    user.id,
+                    fit_recipe_data(db, recipe_data, slot),
+                    generation_prompt="week_plan",
+                )
+            except ExcludedFoodError as exc:
+                # Un piatto con un alimento escluso non entra: la casella resta vuota e
+                # si rigenera da sola, invece di buttare tutta la settimana.
+                logger.warning("Ricetta scartata (esclusi): %s", exc.detail)
+                excluded.append(exc.detail)
+                index[(dow, slot_name)] = target
+                continue
             meal.recipe_id = recipe.id
             meal.source = "ai_generated"
             meal.is_followed = None
@@ -1643,6 +1661,7 @@ def _apply_generated_week(
         )
 
     if week.status == "draft" and week.week_start_date == current_week_start():
+            + (f" Scartate per gli esclusi: {'; '.join(excluded)}" if excluded else "")
         week.status = "active"
 
     db.commit()
@@ -1661,6 +1680,7 @@ def _apply_generated_week(
         "notes": data.get("ingredient_reuse_notes"),
     }
 
+        "excluded": excluded,
 
 def _single_meal_frequencies(
     db: Session, user: User, week: WeekPlan, meal: PlannedMeal, slot: MealSlot

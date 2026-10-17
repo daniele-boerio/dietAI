@@ -10,7 +10,10 @@ righe di zucchine e la dispensa non ne coprirebbe nessuna. La linea di taglio è
 sgusciato), taglio (a lamelle, grattugiato, a fettine), calibro (medie, grandi, bio) e
 le glosse fra parentesi ("pasta corta (penne)"); restano integrale, magro, light,
 intero, al naturale, sott'olio — cambiano i macro, quindi cambiano l'alimento — e
-"pelati", che è una conserva e non lo stato di un pomodoro. Di conseguenza "surgelato"
+"pelati", che è una conserva e non lo stato di un pomodoro. Fra parentesi resta
+invece ciò che toglie qualcosa all'alimento — "senza glutine", "senza lattosio",
+"gluten free", "vegetale" (`_GLOSSA_CHE_CONTA`): prima "penne (senza glutine)"
+diventava "pasta" e il celiaco si ritrovava in lista la pasta normale. Di conseguenza "surgelato"
 non decide più il reparto: la parola sparisce prima di arrivare a `guess_category`, e
 il banco giusto lo sceglie l'utente dalla lista (dove la scelta resta).
 

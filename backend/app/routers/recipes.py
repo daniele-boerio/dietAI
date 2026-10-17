@@ -13,6 +13,7 @@ from ..rate_limit import AI_LIMIT, limiter
 from ..schemas import FavoriteRequest, RatingRequest, RecipeCreate, SubstituteRequest
 from ..services import macros, prompts
 from ..services.ai_client import AIError, get_client
+from ..services.exclusions import ExcludedFoodError, find_excluded
 from ..services.ingredients import get_or_create_ingredient, normalize_name
 from ..services.planner import DAY_NAMES, build_context
 from ..services.recipes import (
@@ -227,6 +228,16 @@ def substitute_ingredient(
         raise AIError("Claude non ha proposto un sostituto valido.")
 
     substitute = data["substitute"]
+    if not isinstance(substitute, dict) or not str(substitute.get("name") or "").strip():
+        raise AIError("Claude non ha proposto un sostituto valido.")
+    # Il sostituto non deve essere proprio quello che l'utente non può mangiare.
+    trovati = find_excluded(db, user.id, [substitute["name"]])
+    if trovati:
+        raise ExcludedFoodError(
+            f"Il sostituto proposto ({', '.join(trovati)}) è fra gli esclusi: "
+            "non l'ho applicato.",
+            trovati,
+        )
 
     # Se la richiesta arriva da un pasto e quel piatto è in programma anche altrove, la
     # sostituzione se ne stacca una copia: da qui in poi sono due piatti diversi.

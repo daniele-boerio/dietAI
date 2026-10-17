@@ -21,6 +21,7 @@ from ..schemas import (
 )
 from ..services import macros, planner, prompts
 from ..services.ai_client import get_client
+from ..services.exclusions import recipe_violations
 from ..services.planner import (
     clear_meal_cell,
     current_week_start,
@@ -277,6 +278,14 @@ def assign_meal(
         )
         if not recipe:
             raise HTTPException(404, "Ricetta non trovata")
+        # Un piatto del modello nato prima che l'alimento fosse escluso (un'allergia
+        # scoperta dopo) dal ricettario non torna nel piano. Quelli scritti dall'utente
+        # li decide lui.
+        trovati = [] if recipe.is_custom else recipe_violations(db, user.id, recipe.id)
+        if trovati:
+            raise HTTPException(
+                422, f"«{recipe.title}» contiene {', '.join(trovati)}, che hai escluso."
+            )
         meal.recipe_id = recipe.id
         meal.source = "from_favorites" if recipe.is_favorite else "user_custom"
     elif body.recipe:

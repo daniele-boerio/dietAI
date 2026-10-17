@@ -19,12 +19,13 @@ export const generabile = (day, meal) =>
   !meal.is_recurring &&
   meal.source !== 'user_custom';
 
-// La data di oggi nel fuso locale: `toISOString()` passa da UTC e a fine giornata
-// direbbe domani, cioè marcherebbe come passato un giorno che passato non è.
+// La data di oggi in Italia, come `planner.today()` sul server. `toISOString()` passa
+// da UTC e a fine giornata direbbe domani; il fuso del dispositivo, fuori dall'Italia,
+// avrebbe preselezionato giorni diversi da quelli che il server conta.
+const GIORNO_ITALIANO = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Rome' });
+
 export function oggiIso(now = new Date()) {
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
-    now.getDate()
-  ).padStart(2, '0')}`;
+  return GIORNO_ITALIANO.format(now);
 }
 
 /**

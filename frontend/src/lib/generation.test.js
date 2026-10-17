@@ -117,6 +117,8 @@ describe('oggi', () => {
   it('si legge nel fuso locale, non in UTC', () => {
     // Alle 23:30 del 5 gennaio `toISOString()` direbbe già il 6: il lunedì
     // risulterebbe passato mentre lo si sta ancora vivendo.
-    expect(oggiIso(new Date(2026, 0, 5, 23, 30))).toBe('2026-01-05');
+    // 22:30 UTC sono le 23:30 a Roma: ancora il 5. Mezz'ora dopo è già il 6.
+    expect(oggiIso(new Date(Date.UTC(2026, 0, 5, 22, 30)))).toBe('2026-01-05');
+    expect(oggiIso(new Date(Date.UTC(2026, 0, 5, 23, 30)))).toBe('2026-01-06');
   });
 });

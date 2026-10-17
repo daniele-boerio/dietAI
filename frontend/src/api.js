@@ -428,8 +428,13 @@ export const api = {
 
 // ── Formattatori condivisi ──
 
+// «2026-10-17» da solo il browser lo legge come mezzanotte UTC: a ovest di Greenwich
+// diventava il 16. Una data senza ora è un giorno del calendario, e si legge locale.
 export const formatDate = (iso, options = { day: 'numeric', month: 'long' }) =>
-  new Date(iso).toLocaleDateString('it-IT', options);
+  new Date(/^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso}T00:00` : iso).toLocaleDateString(
+    'it-IT',
+    options
+  );
 
 export const formatMoney = (value) =>
   value == null ? null : `€ ${value.toFixed(2).replace('.', ',')}`;

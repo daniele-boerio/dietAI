@@ -183,7 +183,7 @@ paragrafo nel documento, scrivendo anche cosa non andava con la versione di prim
 **Spesa e dispensa** (`docs/spesa.md`)
 - La lista è una funzione: quello che le ricette da oggi a domenica otto
   (`shopping_horizon`) chiedono e la dispensa non ha. Chi tocca il piano chiama
-  `rebuild_shopping_list(db, user_id)`.
+  `rebuild_shopping_list(db, user_id)`, e chi la mostra (pagina, home, chat) la ricalcola.
 - Il prezzo scritto a mano (`paid_price`) è un fatto e non si ricalcola; il prezzo al
   kg che se ne ricava vale per tutti. Reparto e prezzo corretti a mano sono protetti
   dal seed (`category_by_user`, `price_by_user`).

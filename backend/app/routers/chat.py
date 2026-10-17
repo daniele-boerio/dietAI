@@ -33,7 +33,6 @@ from ..services.recipes import (
     update_recipe_from_ai,
 )
 from ..services.shopping import (
-    current_list,
     meals_to_buy,
     rebuild_shopping_list,
     serialize_shopping_list,
@@ -394,7 +393,8 @@ def send_shopping_message(
     """
     week = _get_week(db, user.id, week_id)
     meals = _editable_meals(db, user.id)
-    _, lst = current_list(db, user.id)
+    # La lista che il modello legge è quella vera di adesso, non l'ultima salvata.
+    lst = rebuild_shopping_list(db, user.id)
 
     lock_note = "- Il piano è modificabile: applica pure i cambi richiesti."
 

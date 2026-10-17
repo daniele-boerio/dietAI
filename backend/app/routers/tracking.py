@@ -21,7 +21,7 @@ from ..services.planner import (
     serialize_week,
     week_meals,
 )
-from ..services.shopping import current_list
+from ..services.shopping import rebuild_shopping_list
 from ..services.tracking import (
     diet_targets,
     recent_adherence,
@@ -224,7 +224,9 @@ def dashboard(
             }
         )
 
-    _, lst = current_list(db, user_id)
+    # Ricalcolata, come la pagina Spesa: la lista è una funzione del piano e della
+    # dispensa, e letta così com'era la home poteva contare articoli già in dispensa.
+    lst = rebuild_shopping_list(db, user_id)
     db.commit()
     items = (
         db.query(ShoppingListItem)

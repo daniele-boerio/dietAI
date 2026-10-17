@@ -97,3 +97,22 @@ def test_una_scrittura_da_un_altro_sito_si_rifiuta(client):
     assert client.get("/api/auth/me").status_code == 200  # la sessione è intatta
     # Dalla stessa origine, e dai client che non lo dicono, si passa.
     assert client.post("/api/auth/refresh", headers={"Sec-Fetch-Site": "same-origin"}).status_code == 200
+
+
+def test_il_login_ha_un_limite_di_tentativi(client):
+    """Il limiter è spento in tutta la suite: senza questo test, togliere il
+    decoratore al login (10/minuto) non lo noterebbe nessuno."""
+    from app.rate_limit import limiter
+
+    limiter.enabled = True
+    limiter.reset()
+    try:
+        codici = [
+            client.post("/api/auth/login", json={"email": "x@y.z", "password": "no"}).status_code
+            for _ in range(11)
+        ]
+    finally:
+        limiter.reset()
+        limiter.enabled = False
+    assert codici[:10] == [401] * 10
+    assert codici[10] == 429

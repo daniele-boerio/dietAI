@@ -4,6 +4,7 @@ Chi mette la chiave paga per tutti: il registro (`AIUsage`) è il numero che gli
 per decidere quando usare il freno `ai_enabled`.
 """
 
+import pytest
 from types import SimpleNamespace
 
 from app.models import AIUsage
@@ -70,10 +71,9 @@ def test_una_chiamata_fallita_e_pagata_lo_stesso(db, client):
     c.model = "x/m"
     c._backend = Backend()
     c.on_usage = lambda model, u: righe.append(u)
-    try:
+    # pytest.raises e non try/except: se chat smettesse di sollevare, il test lo direbbe.
+    with pytest.raises(ai_client.AIError):
         c.chat("s", [{"role": "user", "content": "x"}])
-    except ai_client.AIError:
-        pass
     assert righe and righe[0]["output_tokens"] == 9000
 
 

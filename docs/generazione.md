@@ -111,7 +111,10 @@ prende lo stesso nome dell'altra strada (*Scegli tu il piatto*) per dirlo. Guard
 azzerato alla fine (anche in caso di errore); `serialize_week` lo espone come
 `is_generating` e il frontend ci si riaggancia con un polling. Serve a ritrovare il
 caricamento dopo un cambio pagina o un F5, ma soprattutto a rifiutare con 409 una
-seconda generazione in parallelo — che sarebbe una spesa doppia. Dopo
+seconda generazione in parallelo — che sarebbe una spesa doppia. Il segno lo prende
+una UPDATE condizionata (`claim_generation`), non la lettura iniziale: fra
+`ensure_not_generating` e la chiamata passano contesto e prompt, e un doppio clic
+passava il controllo due volte (guardia `test_due_richieste_insieme_ne_paga_una_sola`). Dopo
 `GENERATION_TIMEOUT` (15 minuti) il segno si considera morto, così un processo
 riavviato a metà non blocca la settimana per sempre.
 

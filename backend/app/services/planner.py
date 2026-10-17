@@ -14,6 +14,7 @@ import time
 from datetime import date, datetime, timedelta, timezone
 
 from fastapi import HTTPException
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..models import (
@@ -481,6 +482,35 @@ def ensure_not_generating(week: WeekPlan) -> None:
             409,
             "C'è già una generazione in corso per questa settimana: aspetta che finisca.",
         )
+
+
+def claim_generation(db: Session, week: WeekPlan) -> None:
+    """Segna la settimana "in generazione", ma solo se non lo è già: atomico.
+
+    `ensure_not_generating` legge, e fra la lettura e questo punto passano il contesto
+    e il prompt: un doppio clic (o due schede) passava il controllo due volte e si
+    pagavano due generazioni sulla stessa settimana. La UPDATE condizionata la vince
+    una sola richiesta; l'altra riceve 409 prima di chiamare il modello.
+    """
+    adesso = datetime.now(timezone.utc)
+    presa = (
+        db.query(WeekPlan)
+        .filter(
+            WeekPlan.id == week.id,
+            or_(
+                WeekPlan.generation_started_at.is_(None),
+                WeekPlan.generation_started_at < adesso - GENERATION_TIMEOUT,
+            ),
+        )
+        .update({"generation_started_at": adesso}, synchronize_session=False)
+    )
+    if not presa:
+        db.rollback()
+        raise HTTPException(
+            409,
+            "C'è già una generazione in corso per questa settimana: aspetta che finisca.",
+        )
+    week.generation_started_at = adesso
 
 
 def ensure_not_skipped(day: DayPlan, meal: PlannedMeal | None = None) -> None:
@@ -1452,7 +1482,7 @@ def generate_week(
     # Da qui in avanti la settimana risulta "in generazione". Il commit chiude anche
     # la transazione aperta dalle letture qui sopra: senza, Postgres si terrebbe una
     # connessione "idle in transaction" per tutta la durata della chiamata.
-    week.generation_started_at = datetime.now(timezone.utc)
+    claim_generation(db, week)
     clear_generation_progress(db, week)
     db.commit()
 

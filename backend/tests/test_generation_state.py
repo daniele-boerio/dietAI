@@ -171,3 +171,32 @@ def test_una_generazione_riuscita_cancella_l_errore_di_prima(
     assert client.post(f"/api/planning/weeks/{week['id']}/generate").status_code == 200
 
     assert client.get("/api/planning/weeks/current").json()["generation_error"] is None
+
+
+def test_due_richieste_insieme_ne_paga_una_sola(client, diet, db, monkeypatch, api_key):
+    """Il controllo iniziale lo passano tutte e due: il segno lo prende una sola.
+
+    Fra `ensure_not_generating` e la chiamata al modello passano contesto e prompt;
+    un doppio clic arrivava lì due volte. Qui l'altra richiesta prende il segno proprio
+    in quell'intervallo, e questa deve fermarsi prima di chiamare il modello.
+    """
+    chiamato = []
+
+    class ModelloContato(FakeModel):
+        def generate_json(self, system, prompt, **kwargs):
+            chiamato.append(True)
+            return super().generate_json(system, prompt, **kwargs)
+
+    def get_client_in_ritardo(db_, user, role):
+        settimana = db_.query(WeekPlan).first()
+        db_.query(WeekPlan).filter(WeekPlan.id == settimana.id).update(
+            {"generation_started_at": datetime.now(timezone.utc)}
+        )
+        return ModelloContato(user)
+
+    monkeypatch.setattr(planner, "get_client", get_client_in_ritardo)
+    week = client.get("/api/planning/weeks/current").json()
+    res = client.post(f"/api/planning/weeks/{week['id']}/generate")
+
+    assert res.status_code == 409
+    assert chiamato == []

@@ -20,11 +20,13 @@ class LoginRequest(BaseModel):
     # Con EmailStr un indirizzo come `io@dietai.local` verrebbe rifiutato (i domini
     # .local sono riservati) e l'utente creato dal seed non potrebbe fare login.
     email: str = Field(min_length=3, max_length=255)
-    password: str
+    # Un tetto anche qui: bcrypt ne legge 72 byte, ma il corpo intero arrivava fino a
+    # lui senza limite.
+    password: str = Field(max_length=128)
 
 
 class ChangePasswordRequest(BaseModel):
-    current_password: str
+    current_password: str = Field(max_length=128)
     new_password: str = Field(min_length=8, max_length=128)
 
 

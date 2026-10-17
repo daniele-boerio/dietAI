@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
 from ..auth import (
+    dummy_password_hash,
     REFRESH_COOKIE_NAME,
     clear_auth_cookies,
     consume_refresh_token,
@@ -72,7 +73,9 @@ def login(
     user = db.query(User).filter(User.email == body.email.lower()).first()
     # Messaggio identico per email inesistente e password sbagliata: non diciamo a
     # un attaccante quale delle due ha indovinato.
-    if not user or not verify_password(body.password, user.password_hash):
+    # E stesso tempo: bcrypt gira anche quando l'utente non c'è.
+    hash_da_provare = user.password_hash if user else dummy_password_hash()
+    if not verify_password(body.password, hash_da_provare) or not user:
         raise HTTPException(401, "Credenziali non valide")
 
     # Qui invece il messaggio è esplicito: le credenziali erano giuste, e chi le ha

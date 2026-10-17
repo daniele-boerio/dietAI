@@ -6,6 +6,7 @@ dietro il login c'è la API key Claude dell'utente, cioè soldi spendibili da ch
 riesca a entrare.
 """
 
+import functools
 import hashlib
 import logging
 import secrets
@@ -52,6 +53,16 @@ def get_password_hash(password: str) -> str:
     # noi, come faceva passlib storicamente.
     pwd_bytes = password.encode("utf-8")[:72]
     return bcrypt.hashpw(pwd_bytes, bcrypt.gensalt()).decode("utf-8")
+
+
+@functools.lru_cache(maxsize=1)
+def dummy_password_hash() -> str:
+    """Un hash qualunque, per far lavorare bcrypt anche quando l'utente non esiste.
+
+    Senza, il login con un'email sconosciuta rispondeva in un millesimo di secondo e
+    quello con un'email vera in un quarto: dal tempo si capiva chi ha un account.
+    """
+    return get_password_hash(secrets.token_urlsafe(16))
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:

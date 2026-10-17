@@ -362,3 +362,19 @@ def test_fette_spicchi_e_cucchiai_pesano_il_giusto(nome, per_pezzo, quantita, un
     assert grams_of(ingrediente, quantita, unita) == pytest.approx(grammi) if grammi else (
         grams_of(ingrediente, quantita, unita) is None
     )
+
+
+@pytest.mark.parametrize(
+    ("valori", "alcol", "ok"),
+    [
+        ([165, 31, 0, 3.6], None, True),  # petto di pollo
+        ([165, 31, 0, 36], None, False),  # un 36 al posto di 3,6
+        ([500, 60, 60, 5], None, False),  # più di 100 g in 100 g
+        ([70, 0, 2, 0], 9.5, True),  # vino
+        ([-5, 1, 1, 1], None, False),
+    ],
+)
+def test_una_composizione_stimata_deve_tornare(valori, alcol, ok):
+    from app.services.macros import composizione_plausibile
+
+    assert composizione_plausibile(valori, alcol) is ok

@@ -527,6 +527,21 @@ def _dettaglio(voce: dict, campo: str) -> float | None:
     return valore if valore >= 0 else None
 
 
+def composizione_plausibile(valori: list[float], alcol: float | None = None) -> bool:
+    """I controlli che il catalogo passa nei test, applicati alle stime del modello.
+
+    Prima si scartavano solo i negativi e le kcal oltre 900: passavano 60 g di
+    proteine più 60 di carboidrati in 100 g, o calorie che coi macro non c'entravano.
+    """
+    kcal, proteine, carboidrati, grassi = valori
+    if any(v < 0 for v in valori) or kcal > 900:
+        return False
+    if proteine + carboidrati + grassi > 100:
+        return False
+    atwater = 4 * proteine + 4 * carboidrati + 9 * grassi + 7 * (alcol or 0)
+    return abs(kcal - atwater) <= max(15, 0.25 * kcal)
+
+
 def ensure_composition(db: Session, client, ingredient_ids: list[int]) -> int:
     """Chiede al modello la composizione dei nomi che non ce l'hanno. Una chiamata.
 
@@ -575,7 +590,10 @@ def ensure_composition(db: Session, client, ingredient_ids: list[int]) -> int:
             valori = [float(voce[k]) for k in ("kcal", "protein_g", "carbs_g", "fat_g")]
         except (KeyError, TypeError, ValueError):
             continue
-        if any(v < 0 for v in valori) or valori[0] > 900:
+        if not composizione_plausibile(valori, _dettaglio(voce, "alcohol_g")):
+            # Una stima che non torna non entra: l'anagrafica è condivisa, e un 35 al
+            # posto di 3,5 falserebbe macro, ritocco e healthAI per tutti gli account.
+            logger.warning("Composizione stimata scartata per %s: %s", ingredient.name, valori)
             continue
         (
             ingredient.kcal_100g,

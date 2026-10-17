@@ -111,3 +111,11 @@ alimenti (`_PEZZI_DI_PEZZO`); dove non c'è, il conto non si chiude e restano i 
 dichiarati, come per ogni ingrediente che non si sa contare. Allo stesso modo un
 cucchiaio di polvere non pesa come uno d'acqua (`_CUCCHIAIO_DI`: parmigiano 6 g,
 farina 9 g, zucchero 12 g). Guardia `test_fette_spicchi_e_cucchiai_pesano_il_giusto`.
+
+**Una composizione stimata dal modello deve tornare** (`composizione_plausibile`). Gli
+ingredienti fuori catalogo imparano la composizione da una stima del modello
+(`composition_source="ai"`), e finisce nell'anagrafica condivisa. Prima si scartavano
+solo negativi e kcal oltre 900; ora valgono gli stessi controlli che il catalogo passa
+nei test: proteine + carboidrati + grassi non oltre 100 g, e kcal entro il 25% (almeno
+15) da 4·P + 4·C + 9·G + 7·alcol. Una stima che non torna lascia l'ingrediente senza
+composizione, e le ricette che lo usano tengono i macro dichiarati.

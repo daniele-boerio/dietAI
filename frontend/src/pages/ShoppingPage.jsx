@@ -42,7 +42,19 @@ import { useDueColonne } from '../lib/schermo';
  * al supermercato si scrive un numero e si passa oltre, non si cercano pulsanti.
  * Vuoto significa "ho preso quello che c'era scritto", che è il caso normale.
  */
+// Chiuso il campo, il focus torna sul pulsante da cui si era aperto: il campo prende
+// il suo posto nel DOM, e senza questo il focus da tastiera finiva sul `body`.
+function useRitornaSu(id) {
+  useEffect(
+    () => () => {
+      setTimeout(() => document.getElementById(id)?.focus(), 0);
+    },
+    [id]
+  );
+}
+
 function QuantityInput({ item, onDone, onCancel }) {
+  useRitornaSu(`qty-${item.id}`);
   const [value, setValue] = useState(item.bought_quantity ?? '');
   const annullato = useRef(false);
 
@@ -60,6 +72,7 @@ function QuantityInput({ item, onDone, onCancel }) {
         autoFocus
         value={value}
         placeholder={String(item.quantity)}
+        aria-label={`Quanto ${item.name} hai preso, in ${item.unit}. Invio salva, Esc annulla`}
         onFocus={(e) => e.target.select()}
         onChange={(e) => setValue(e.target.value)}
         onBlur={conferma}
@@ -87,6 +100,7 @@ function QuantityInput({ item, onDone, onCancel }) {
  * quantità della riga. Vuoto cancella il prezzo tuo e rimette la media del catalogo.
  */
 function PriceInput({ item, onDone, onCancel }) {
+  useRitornaSu(`price-${item.id}`);
   // Quello che si ritrova nel campo è quello che ci si era scritto, non la stima
   // ricalcolata: il prezzo pagato sta sulla riga proprio per questo.
   const [value, setValue] = useState(item.paid_price ?? '');
@@ -108,6 +122,7 @@ function PriceInput({ item, onDone, onCancel }) {
         autoFocus
         value={value}
         placeholder={item.estimated_price != null ? String(item.estimated_price) : '0,00'}
+        aria-label={`Quanto hai pagato ${item.name}, in euro. Invio salva, Esc annulla`}
         onFocus={(e) => e.target.select()}
         onChange={(e) => setValue(e.target.value)}
         onBlur={conferma}
@@ -443,6 +458,7 @@ export default function ShoppingPage() {
                             />
                           ) : (
                             <button
+                              id={`qty-${item.id}`}
                               className={`shopping-qty ${item.bought_quantity ? 'bought' : ''}`}
                               onClick={() => setQuantityOf(item.id)}
                               title="Quanto ne hai preso?"
@@ -463,6 +479,7 @@ export default function ShoppingPage() {
                             />
                           ) : (
                             <button
+                              id={`price-${item.id}`}
                               className={`shopping-price ${item.paid_price != null ? 'mine' : ''}`}
                               onClick={() => setPriceOf(item.id)}
                               title={

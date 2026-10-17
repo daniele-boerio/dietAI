@@ -354,7 +354,10 @@ export default function DietPage() {
 
               {meals.map((meal, i) => (
                 <div
-                  key={i}
+                  // L'id del pasto: con l'indice, togliere una riga spostava sulla
+                  // successiva lo stato dei campi non controllati. L'indice resta solo
+                  // per un pasto appena aggiunto, che l'id non ce l'ha ancora.
+                  key={meal.id ?? `nuovo-${i}`}
                   className={`meal-editor-row ${
                     meal.auto_generate === false ? 'self-managed' : ''
                   }`}

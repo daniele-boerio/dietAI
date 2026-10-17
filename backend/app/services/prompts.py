@@ -373,6 +373,7 @@ SUBSTITUTE_PROMPT = """RICETTA:
 INGREDIENTE DA SOSTITUIRE: {ingredient}
 MOTIVO: {reason}
 INGREDIENTI ESCLUSI: {excluded}
+{rules}
 INGREDIENTI DI BASE (sempre disponibili): {base}
 
 Proponi la sostituzione."""

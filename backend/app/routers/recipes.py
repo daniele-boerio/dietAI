@@ -217,6 +217,12 @@ def substitute_ingredient(
         (line for line in context.splitlines() if "ESCLUSI" in line), "nessuno"
     )
     base_line = next((line for line in context.splitlines() if "BASE" in line), "nessuno")
+    # Le regole libere arrivavano a generazione e chat, non qui: «sono celiaco» scritto
+    # nelle preferenze non impediva di proporre il farro come sostituto della pasta.
+    rules_line = next(
+        (line.strip(" -") for line in context.splitlines() if "REGOLE SCRITTE" in line),
+        "REGOLE SCRITTE DALL'UTENTE: nessuna",
+    )
 
     prompt = prompts.render(
         prompts.SUBSTITUTE_PROMPT,
@@ -224,6 +230,7 @@ def substitute_ingredient(
         ingredient=target_name,
         reason=body.reason or "non specificato",
         excluded=excluded_line,
+        rules=rules_line,
         base=base_line,
     )
 

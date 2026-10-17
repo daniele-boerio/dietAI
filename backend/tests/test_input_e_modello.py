@@ -94,3 +94,27 @@ def test_una_settimana_con_giorni_storti_tiene_quelli_buoni(client, diet, monkey
     res = client.post(f"/api/planning/weeks/{week['id']}/generate")
     assert res.status_code == 200, res.text
     assert res.json()["generation"]["filled"] == 5 * 3
+
+
+def test_la_sostituzione_riceve_le_regole_dell_utente(client, settimana, monkeypatch):
+    res = client.put(
+        "/api/config/preferences",
+        json={"prefer_seasonal": True, "notes": "Sono celiaco: niente glutine."},
+    )
+    assert res.status_code == 200, res.text
+    pranzo = settimana["days"][0]["meals"][1]
+    visto = {}
+
+    class Sostituto:
+        model = "finto"
+
+        def generate_json(self, system, prompt, **k):
+            visto["prompt"] = prompt
+            return {"substitute": {"name": "riso", "quantity": 80, "unit": "g"}}
+
+    monkeypatch.setattr(recipes_router, "get_client", lambda db, user, role: Sostituto())
+    client.post(
+        f"/api/recipes/{pranzo['recipe']['id']}/substitute",
+        json={"ingredient_to_replace": "pasta", "meal_id": pranzo["id"]},
+    )
+    assert "Sono celiaco" in visto["prompt"]

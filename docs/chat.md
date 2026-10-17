@@ -41,3 +41,10 @@ finisce in `CONTEXT_TEMPLATE` così com'è: il destinatario è un modello lingui
 quindi trasformare "carne rossa al massimo due volte a settimana" in caselle
 perderebbe sfumature senza guadagnare niente. Vale per generazione, rigenerazione e
 chat, perché tutte e tre passano da `build_context`.
+
+**La sostituzione di un ingrediente riceve le stesse regole della chat.** Il prompt di
+`/recipes/{id}/substitute` prendeva dal contesto solo gli esclusi e gli ingredienti di
+base: le regole libere delle preferenze («sono celiaco») non arrivavano, e il farro
+poteva sostituire la pasta. Ora c'è anche la riga `REGOLE SCRITTE DALL'UTENTE`, presa
+dallo stesso `build_context`. Il sostituto passa comunque dal controllo degli esclusi
+(`docs/generazione.md`). Guardia in `tests/test_input_e_modello.py`.

@@ -219,6 +219,19 @@ def set_paid_price(
 _MAX_FOTO = 8 * 1024 * 1024
 
 
+def _tipo_immagine(content: bytes) -> str | None:
+    """Il tipo della foto letto dai primi byte, non da quello che dichiara il client."""
+    if content.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if content.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if content[:4] == b"RIFF" and content[8:12] == b"WEBP":
+        return "image/webp"
+    if content[4:8] == b"ftyp" and content[8:12] in (b"heic", b"heix", b"mif1", b"hevc"):
+        return "image/heic"
+    return None
+
+
 @router.post("/current/receipt")
 @limiter.limit(AI_LIMIT)
 def read_receipt(
@@ -241,11 +254,14 @@ def read_receipt(
     """
     if not (file.content_type or "").startswith("image/"):
         raise HTTPException(400, "Serve una foto dello scontrino.")
-    content = file.file.read()
+    content = file.file.read(_MAX_FOTO + 1)
     if not content:
         raise HTTPException(400, "La foto è vuota.")
     if len(content) > _MAX_FOTO:
         raise HTTPException(400, "La foto è troppo grande (massimo 8 MB).")
+    tipo = _tipo_immagine(content)
+    if tipo is None:
+        raise HTTPException(400, "Serve una foto JPEG, PNG, WebP o HEIC dello scontrino.")
 
     refresh_week_statuses(db, user.id)
     lst = rebuild_shopping_list(db, user.id)
@@ -268,7 +284,7 @@ def read_receipt(
         prompts.RECEIPT_SYSTEM,
         prompts.render(prompts.RECEIPT_PROMPT, items=elenco),
         base64.standard_b64encode(content).decode(),
-        file.content_type,
+        tipo,
     )
 
     per_id = {item.id: item for item, _ in righe}

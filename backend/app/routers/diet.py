@@ -172,11 +172,16 @@ def upload_diet(
 
     # `file.file` è il file temporaneo sottostante: si legge in modo sincrono,
     # come tutto il resto di questa rotta (che gira già in un thread).
-    content = file.file.read()
+    # Al massimo un byte oltre il limite: leggere tutto e poi misurare caricava in
+    # memoria qualunque cosa arrivasse.
+    content = file.file.read(MAX_PDF_BYTES + 1)
     if not content:
         raise HTTPException(400, "Il file è vuoto.")
     if len(content) > MAX_PDF_BYTES:
         raise HTTPException(400, "Il PDF è troppo grande (massimo 10 MB).")
+    # Il tipo dichiarato lo scrive il client: conta quello che c'è dentro.
+    if not content.startswith(b"%PDF-"):
+        raise HTTPException(400, "Il file non è un PDF.")
 
     client = get_client(db, user, "diet")
     text = extract_text(content)

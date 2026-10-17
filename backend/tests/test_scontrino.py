@@ -126,3 +126,17 @@ def test_l_immagine_parte_nella_forma_del_suo_backend(anthropic):
     else:
         assert blocco == {"type": "image_url",
                           "image_url": {"url": "data:image/jpeg;base64,QUJD"}}
+
+
+def test_conta_cosa_c_e_nel_file_non_il_tipo_dichiarato(client):
+    """Il tipo lo scrive il client: un SVG dichiarato come immagine non passa."""
+    finto = ("scontrino.png", b"<svg xmlns='http://www.w3.org/2000/svg'/>", "image/png")
+    res = client.post("/api/shopping/current/receipt", files={"file": finto})
+    assert res.status_code == 400
+
+
+def test_un_pdf_che_non_e_un_pdf_si_rifiuta(client):
+    finto = ("dieta.pdf", b"<html>non sono un pdf</html>", "application/pdf")
+    res = client.post("/api/diet/upload", files={"file": finto})
+    assert res.status_code == 400
+    assert "non è un PDF" in res.json()["detail"]

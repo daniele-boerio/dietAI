@@ -21,13 +21,18 @@ logger = logging.getLogger(__name__)
 MIN_USEFUL_CHARS = 200
 
 
+MAX_PAGINE = 40
+
+
 def extract_text(content: bytes) -> str:
     """Testo del PDF, pagina per pagina. Stringa vuota se non se ne cava nulla."""
     from pypdf import PdfReader
 
     try:
         reader = PdfReader(io.BytesIO(content))
-        pages = [page.extract_text() or "" for page in reader.pages]
+        # Una dieta sta in poche pagine: oltre, è un file sbagliato, e pypdf non ha
+        # limiti di tempo propri.
+        pages = [page.extract_text() or "" for page in reader.pages[:MAX_PAGINE]]
     except Exception as exc:  # pypdf solleva di tutto sui file malformati
         logger.warning("PDF illeggibile: %s", exc)
         return ""

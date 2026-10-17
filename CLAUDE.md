@@ -228,8 +228,9 @@ paragrafo nel documento, scrivendo anche cosa non andava con la versione di prim
 - I macro di una ricetta si **calcolano** dalla composizione degli ingredienti
   (`services/macros.py`), non si prendono dal modello. Se un ingrediente non si sa
   contare restano quelli dichiarati e `Recipe.nutrition_source` lo dice.
-- Fuori dal ±10% si ritoccano le grammature delle tre leve (proteine, carboidrati,
-  grassi), mai le altre righe, mai oltre i limiti. Le ricette dell'utente non si toccano.
+- Fuori dal ±10% (calorie o uno dei tre macro, con un minimo in grammi) si ritoccano le
+  grammature delle tre leve (proteine, carboidrati, grassi), mai le altre righe, mai
+  oltre i limiti. Le ricette dell'utente non si toccano.
 - La suite gira coi macro dichiarati (`macro_dichiarati` in `conftest.py`).
 - Fibre, zuccheri, saturi, alcol (g di etanolo) e caffeina seguono le stesse regole,
   ma **valore per valore** e con **NULL ≠ 0** (non si sa / non ce n'è). Zuccheri e

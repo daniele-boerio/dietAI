@@ -378,3 +378,13 @@ def test_una_composizione_stimata_deve_tornare(valori, alcol, ok):
     from app.services.macros import composizione_plausibile
 
     assert composizione_plausibile(valori, alcol) is ok
+
+
+def test_calorie_giuste_con_grassi_doppi_non_sono_dentro():
+    """Prima il ritocco guardava solo calorie e proteine."""
+    from app.services.macros import Target, Totali, _dentro
+
+    obiettivo = Target(kcal=600, protein=40, carbs=70, fat=18)
+    assert _dentro(Totali(kcal=600, protein=40, carbs=70, fat=18), obiettivo)
+    # Stesse calorie (±2%), ma grassi quasi doppi e carboidrati tagliati.
+    assert not _dentro(Totali(kcal=612, protein=40, carbs=38, fat=32), obiettivo)

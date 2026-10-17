@@ -119,3 +119,8 @@ solo negativi e kcal oltre 900; ora valgono gli stessi controlli che il catalogo
 nei test: proteine + carboidrati + grassi non oltre 100 g, e kcal entro il 25% (almeno
 15) da 4·P + 4·C + 9·G + 7·alcol. Una stima che non torna lascia l'ingrediente senza
 composizione, e le ricette che lo usano tengono i macro dichiarati.
+
+**Dentro vuol dire dentro su tutto** (`_dentro`). Il ritocco guardava solo calorie e
+proteine: una ricetta con grassi quasi doppi e carboidrati dimezzati ma calorie nel
+±10% restava com'era. Ora contano anche carboidrati e grassi, ciascuno col suo minimo in
+grammi (8 e 4, come i 5 delle proteine), sotto il quale lo scarto non è un errore.

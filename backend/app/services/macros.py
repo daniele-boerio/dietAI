@@ -96,6 +96,11 @@ TOLLERANZA = 0.10
 # Per le proteine sotto i 50 g il 10% sono 4-5 grammi: meno della differenza fra due
 # uova. Sotto questa soglia lo scarto non è un errore.
 TOLLERANZA_PROTEINE_G = 5.0
+# Lo stesso per carboidrati e grassi. Prima non si guardavano: una ricetta con grassi
+# doppi e carboidrati dimezzati, ma calorie nel ±10%, restava com'era, contro la
+# regola «calorie e macro ±10%» che il prompt promette.
+TOLLERANZA_CARBOIDRATI_G = 8.0
+TOLLERANZA_GRASSI_G = 4.0
 
 # Quanto si può allungare o accorciare un ingrediente. Oltre, il piatto non è più
 # quello che il modello ha pensato (tre volte la pasta, un terzo del pollo) ed è
@@ -340,8 +345,14 @@ def _dentro(t: Totali, target: Target) -> bool:
         return True
     if abs(t.kcal - target.kcal) > TOLLERANZA * target.kcal:
         return False
-    margine_p = max(TOLLERANZA * target.protein, TOLLERANZA_PROTEINE_G)
-    return abs(t.protein - target.protein) <= margine_p
+    for valore, obiettivo, minimo in (
+        (t.protein, target.protein, TOLLERANZA_PROTEINE_G),
+        (t.carbs, target.carbs, TOLLERANZA_CARBOIDRATI_G),
+        (t.fat, target.fat, TOLLERANZA_GRASSI_G),
+    ):
+        if abs(valore - obiettivo) > max(TOLLERANZA * obiettivo, minimo):
+            return False
+    return True
 
 
 def _det3(m: list[list[float]]) -> float:

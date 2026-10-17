@@ -198,3 +198,10 @@ def test_il_pasto_di_un_altro_non_si_tocca(client, guest_client, settimana):
     cena = pasto(settimana, 0, "Cena")
     res = guest_client.put(f"/api/planning/meals/{cena['id']}/eaten", json={"text": "x"})
     assert res.status_code == 404
+
+
+def test_una_stima_assurda_non_conta():
+    from app.routers.planning import _eaten_estimate
+
+    assert _eaten_estimate({"calories": 40000, "protein_g": 1, "carbs_g": 1, "fat_g": 1}) is None
+    assert _eaten_estimate({"calories": 850, "protein_g": 32, "carbs_g": 105, "fat_g": 30})

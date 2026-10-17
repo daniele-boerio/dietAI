@@ -341,7 +341,9 @@ class DietFrequenciesUpdate(BaseModel):
 
 
 class WeightEntryIn(BaseModel):
-    weight_kg: float = Field(gt=20, lt=400)
+    # Gli stessi limiti del questionario: una pesata fuori da lì diventava il
+    # riferimento del ricalcolo proposto, che poi rimbalzava sul questionario con 422.
+    weight_kg: float = Field(ge=35, le=250)
     day: date | None = None
 
 

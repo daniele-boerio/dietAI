@@ -445,6 +445,9 @@ def set_eaten_instead(
 NIENTE = "Non ho mangiato niente"
 
 
+MAX_KCAL_PASTO = 5000
+
+
 def _eaten_estimate(data) -> dict | None:
     """La stima ripulita: numeri non negativi, o None se il modello non ne ha dati."""
     if not isinstance(data, dict):
@@ -456,6 +459,10 @@ def _eaten_estimate(data) -> dict | None:
         except (TypeError, ValueError):
             return None
     out["calories"] = int(round(out["calories"]))
+    # Un pasto da 40000 kcal è una risposta sbagliata, non un pasto: finiva così
+    # nell'andamento e a healthAI. Oltre un tetto largo la stima non vale.
+    if out["calories"] > MAX_KCAL_PASTO:
+        return None
     for key in ("protein_g", "carbs_g", "fat_g"):
         out[key] = round(out[key], 1)
     # Gli altri valori sono facoltativi uno per uno: un None resta None ("non lo so"),

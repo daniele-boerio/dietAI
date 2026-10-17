@@ -109,7 +109,10 @@ Le chiavi VAPID che firmano le notifiche si **ricavano da `SECRET_KEY`** se
 ogni riavvio — chiavi nuove renderebbero inutili tutte le iscrizioni dei telefoni. Ogni
 dispositivo è una `PushSubscription` (l'`endpoint` è unico: lo stesso telefono con un
 altro account loggato passa a quell'account); quelle che il servizio di push dichiara
-morte (404/410) si cancellano al primo invio. Su iPhone le notifiche esistono solo per
+morte (404/410) si cancellano al primo invio. L'`endpoint` deve essere `https` su un
+servizio push dei browser (`PUSH_HOSTS` in `schemas.py`): il server ci fa una POST, e
+con una stringa libera un utente poteva far chiamare al backend un indirizzo della rete
+interna, con `/push/test` a dirgli se aveva risposto. Su iPhone le notifiche esistono solo per
 l'app installata sulla schermata Home, e la pagina lo dice invece di mostrare un
 pulsante che non funziona. Guardie in `tests/test_promemoria.py`, compreso il giro vero
 di cifratura e firma fino alla richiesta HTTP esclusa.

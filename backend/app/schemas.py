@@ -6,8 +6,9 @@ un dict costruito nel servizio è più leggibile di dieci schemi annidati.
 """
 
 from datetime import date
+from urllib.parse import urlsplit
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # ── Auth ───────────────────────────────────────────────────────────────────────
 
@@ -345,9 +346,32 @@ class PushKeys(BaseModel):
     auth: str = Field(min_length=1, max_length=100)
 
 
+# I servizi push dei browser: Chrome/Edge/Android (FCM), Safari e iOS (Apple),
+# Firefox (Mozilla), Edge legacy (WNS). L'endpoint arriva dal browser, ma il server ci
+# fa una POST: con una stringa libera un utente poteva far chiamare al backend un
+# indirizzo della rete interna (SSRF), e `/push/test` diceva se aveva risposto.
+PUSH_HOSTS = (
+    "fcm.googleapis.com",
+    "push.apple.com",
+    "push.services.mozilla.com",
+    "notify.windows.com",
+)
+
+
 class PushSubscribeRequest(BaseModel):
     endpoint: str = Field(min_length=10, max_length=1000)
     keys: PushKeys
+
+    @field_validator("endpoint")
+    @classmethod
+    def _servizio_push(cls, value: str) -> str:
+        parti = urlsplit(value)
+        host = (parti.hostname or "").lower()
+        if parti.scheme != "https" or not any(
+            host == h or host.endswith("." + h) for h in PUSH_HOSTS
+        ):
+            raise ValueError("Indirizzo di notifica non riconosciuto")
+        return value
 
 
 class PushUnsubscribeRequest(BaseModel):

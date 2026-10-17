@@ -12,7 +12,7 @@ from app.services import planner, push
 from tests.test_flow import FakeModel
 
 ISCRIZIONE = {
-    "endpoint": "https://push.example.com/abc123",
+    "endpoint": "https://fcm.googleapis.com/fcm/send/abc123",
     "keys": {"p256dh": "BFakeP256dhKeyForTests", "auth": "fakeAuth"},
 }
 
@@ -143,3 +143,21 @@ def test_la_notifica_esce_cifrata_e_firmata(client, db, monkeypatch):
     assert intestazioni["content-encoding"] == "aes128gcm"
     assert intestazioni["authorization"].startswith("vapid t=")
     assert b"title" not in corpo  # cifrato
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "http://fcm.googleapis.com/fcm/send/x",
+        "https://backend:8000/api/auth/me",
+        "https://169.254.169.254/latest/meta-data",
+        "https://fcm.googleapis.com.attacker.example/x",
+    ],
+)
+def test_l_iscrizione_accetta_solo_i_servizi_push(client, endpoint):
+    """Il server fa una POST all'endpoint: non deve poter puntare alla rete interna."""
+    res = client.post(
+        "/api/push/subscribe",
+        json={"endpoint": endpoint, "keys": {"p256dh": "x" * 20, "auth": "y" * 10}},
+    )
+    assert res.status_code == 422

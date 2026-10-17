@@ -327,10 +327,13 @@ function PreferencesTab() {
           max={TEMPO_LIBERO}
           step="5"
           value={tempo}
-          disabled={busy}
+          aria-label="Tempo massimo di preparazione"
+          // Si salva quando ci si ferma, come per le cucine: con `save` a ogni tacca
+          // partiva una PUT per passo, e `busy` disabilitava il cursore sotto il dito
+          // interrompendo il trascinamento.
           onChange={(e) => {
             const n = Number(e.target.value);
-            save({ ...prefs, max_prep_time_min: n >= TEMPO_LIBERO ? null : n });
+            saveTraPoco({ ...prefs, max_prep_time_min: n >= TEMPO_LIBERO ? null : n });
           }}
         />
         <div className="range-ends">

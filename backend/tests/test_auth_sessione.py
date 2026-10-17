@@ -89,3 +89,11 @@ def test_i_cookie_di_sessione_sono_httponly(client):
     for riga in intestazioni:
         assert "HttpOnly" in riga
         assert "samesite=lax" in riga.lower()
+
+
+def test_una_scrittura_da_un_altro_sito_si_rifiuta(client):
+    res = client.post("/api/auth/logout", headers={"Sec-Fetch-Site": "same-site"})
+    assert res.status_code == 403
+    assert client.get("/api/auth/me").status_code == 200  # la sessione è intatta
+    # Dalla stessa origine, e dai client che non lo dicono, si passa.
+    assert client.post("/api/auth/refresh", headers={"Sec-Fetch-Site": "same-origin"}).status_code == 200

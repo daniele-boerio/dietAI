@@ -91,3 +91,9 @@ server la prendeva per un furto e l'utente finiva al login ogni mezz'ora. Ora:
   nuovi, così a chi avesse copiato il cookie non dà niente;
 - `/auth/refresh` rifiuta anche un account spento, come `get_current_user`.
 Guardie in `tests/test_auth_sessione.py` e `frontend/src/api.test.js`.
+
+**Le scritture da un altro sito si rifiutano** (middleware in `main.py`). I cookie
+SameSite=Lax fermano le POST da domini estranei, non quelle da un sottodominio dello
+stesso dominio, che qui ospita anche altre app: una POST/PUT/PATCH/DELETE con
+`Sec-Fetch-Site` `cross-site` o `same-site` è un 403. Chi l'header non lo manda (curl,
+test, browser vecchi) passa e resta coperto da SameSite.

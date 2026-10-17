@@ -6,8 +6,9 @@ dall'applicazione: all'avvio non si crea nessuna tabella.
 
 import logging
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -35,6 +36,22 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Le scritture partite da un altro sito si rifiutano. I cookie sono SameSite=Lax, che
+# ferma le POST da domini estranei ma non da un sottodominio dello stesso dominio
+# (qui `spassocasa.it` ospita anche altre app): `Sec-Fetch-Site` lo scrive il browser
+# e non si può falsificare da una pagina. Chi non lo manda (curl, i test, browser
+# vecchi) passa: resta la protezione di SameSite.
+_SCRITTURE = {"POST", "PUT", "PATCH", "DELETE"}
+
+
+@app.middleware("http")
+async def _solo_dallo_stesso_sito(request: Request, call_next):
+    sito = request.headers.get("sec-fetch-site")
+    if request.method in _SCRITTURE and sito in ("cross-site", "same-site"):
+        return JSONResponse({"detail": "Richiesta da un altro sito rifiutata"}, status_code=403)
+    return await call_next(request)
+
 
 app.include_router(auth.router)
 app.include_router(admin.router)

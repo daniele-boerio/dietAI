@@ -21,8 +21,18 @@ export default function MealChat({ mealId, locked, onRecipeUpdated }) {
   const bodyRef = useRef(null);
 
   useEffect(() => {
-    api.getChat(mealId).then(setMessages).catch(() => {});
-  }, [mealId]);
+    // Passando a un altro pasto la conversazione di prima non deve restare a schermo,
+    // né arrivare dopo quella giusta.
+    let superata = false;
+    setMessages([]);
+    api
+      .getChat(mealId)
+      .then((m) => !superata && setMessages(m))
+      .catch((e) => !superata && addToast(e.message, 'error'));
+    return () => {
+      superata = true;
+    };
+  }, [mealId, addToast]);
 
   useEffect(() => {
     bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight, behavior: 'smooth' });
@@ -36,7 +46,8 @@ export default function MealChat({ mealId, locked, onRecipeUpdated }) {
     setSending(true);
     // Messaggio ottimistico: la risposta del modello può metterci qualche secondo e
     // vedere il proprio testo sparire nel nulla è la cosa più fastidiosa di tutte.
-    setMessages((prev) => [...prev, { id: `tmp-${Date.now()}`, role: 'user', content }]);
+    const provvisorio = `tmp-${Date.now()}`;
+    setMessages((prev) => [...prev, { id: provvisorio, role: 'user', content }]);
 
     try {
       const reply = await api.sendChat(mealId, content);
@@ -50,7 +61,10 @@ export default function MealChat({ mealId, locked, onRecipeUpdated }) {
       }
     } catch (e) {
       addToast(e.message, 'error');
-      setMessages((prev) => prev.filter((m) => m.content !== content || m.role !== 'user'));
+      // Si toglie il messaggio provvisorio — quello, non tutti quelli col suo testo —
+      // e il testo torna nel campo: riprovare non deve voler dire riscriverlo.
+      setMessages((prev) => prev.filter((m) => m.id !== provvisorio));
+      setDraft((attuale) => attuale || content);
     } finally {
       setSending(false);
     }
@@ -76,13 +90,14 @@ export default function MealChat({ mealId, locked, onRecipeUpdated }) {
             style={{ marginLeft: 'auto' }}
             onClick={clear}
             title="Svuota la conversazione"
+            aria-label="Svuota la conversazione"
           >
             <Trash2 size={15} />
           </button>
         )}
       </div>
 
-      <div className="chat-body" ref={bodyRef}>
+      <div className="chat-body" ref={bodyRef} role="log" aria-live="polite" aria-label="Conversazione">
         {messages.length === 0 && !sending && (
           <div className="chat-hint">
             {locked
@@ -115,6 +130,7 @@ export default function MealChat({ mealId, locked, onRecipeUpdated }) {
 
       <div className="chat-input">
         <textarea
+          aria-label="Messaggio"
           rows={1}
           value={draft}
           placeholder="Scrivi un messaggio..."

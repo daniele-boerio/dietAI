@@ -56,8 +56,23 @@ export default function ShoppingChat({ weekId, onClose, onListUpdated, inline = 
   const keyboard = useKeyboardInset();
 
   useEffect(() => {
-    if (weekId) api.getShoppingChat(weekId).then(setMessages).catch(() => {});
-  }, [weekId]);
+    if (!weekId) return undefined;
+    let superata = false;
+    api
+      .getShoppingChat(weekId)
+      .then((m) => !superata && setMessages(m))
+      .catch((e) => !superata && addToast(e.message, 'error'));
+    return () => {
+      superata = true;
+    };
+  }, [weekId, addToast]);
+
+  useEffect(() => {
+    if (inline) return undefined;
+    const esc = (e) => e.key === 'Escape' && onClose?.();
+    document.addEventListener('keydown', esc);
+    return () => document.removeEventListener('keydown', esc);
+  }, [inline, onClose]);
 
   useEffect(() => {
     bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight, behavior: 'smooth' });
@@ -69,7 +84,8 @@ export default function ShoppingChat({ weekId, onClose, onListUpdated, inline = 
 
     setDraft('');
     setSending(true);
-    setMessages((prev) => [...prev, { id: `tmp-${Date.now()}`, role: 'user', content }]);
+    const provvisorio = `tmp-${Date.now()}`;
+    setMessages((prev) => [...prev, { id: provvisorio, role: 'user', content }]);
 
     try {
       const reply = await api.sendShoppingChat(weekId, content);
@@ -84,7 +100,10 @@ export default function ShoppingChat({ weekId, onClose, onListUpdated, inline = 
       }
     } catch (e) {
       addToast(e.message, 'error');
-      setMessages((prev) => prev.filter((m) => m.content !== content || m.role !== 'user'));
+      // Si toglie il messaggio provvisorio — quello, non tutti quelli col suo testo —
+      // e il testo torna nel campo: riprovare non deve voler dire riscriverlo.
+      setMessages((prev) => prev.filter((m) => m.id !== provvisorio));
+      setDraft((attuale) => attuale || content);
     } finally {
       setSending(false);
     }
@@ -102,6 +121,10 @@ export default function ShoppingChat({ weekId, onClose, onListUpdated, inline = 
   return (
     <div
       className={inline ? 'chat-panel shopping-chat-inline' : 'shopping-chat'}
+      // Sul telefono è un foglio sopra la pagina: per il lettore di schermo è una
+      // finestra, con un nome, e Esc la chiude come le altre.
+      role={inline ? undefined : 'dialog'}
+      aria-label={inline ? undefined : 'Chiedi alla lista'}
       // Col foglio alzato sopra la tastiera va accorciato anche, o la sua testata
       // (dove sta la X per chiudere) esce dallo schermo dalla parte opposta. In
       // pagina il problema non c'è: la tastiera del telefono non apre questa forma.
@@ -120,6 +143,7 @@ export default function ShoppingChat({ weekId, onClose, onListUpdated, inline = 
             style={{ marginLeft: 'auto' }}
             onClick={clear}
             title="Svuota la conversazione"
+            aria-label="Svuota la conversazione"
           >
             <Trash2 size={15} />
           </button>
@@ -132,13 +156,14 @@ export default function ShoppingChat({ weekId, onClose, onListUpdated, inline = 
             style={{ marginLeft: messages.length > 0 ? 4 : 'auto' }}
             onClick={onClose}
             title="Chiudi"
+            aria-label="Chiudi la chat"
           >
             <X size={16} />
           </button>
         )}
       </div>
 
-      <div className="chat-body" ref={bodyRef}>
+      <div className="chat-body" ref={bodyRef} role="log" aria-live="polite" aria-label="Conversazione">
         {messages.length === 0 && !sending && (
           <div className="chat-hint">
             Non trovi un ingrediente o vuoi cambiarlo? Dimmelo: lo cambio in tutte le
@@ -170,6 +195,7 @@ export default function ShoppingChat({ weekId, onClose, onListUpdated, inline = 
 
       <div className="chat-input">
         <textarea
+          aria-label="Messaggio"
           rows={1}
           value={draft}
           placeholder="Scrivi un messaggio..."

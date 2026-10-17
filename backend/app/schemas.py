@@ -8,6 +8,8 @@ un dict costruito nel servizio è più leggibile di dieci schemi annidati.
 from datetime import date
 from urllib.parse import urlsplit
 
+from typing import Literal
+
 from pydantic import BaseModel, Field, field_validator
 
 # ── Auth ───────────────────────────────────────────────────────────────────────
@@ -278,10 +280,17 @@ class AssignMealRequest(BaseModel):
     recipe: RecipeCreate | None = None
 
 
+class RecurringRule(BaseModel):
+    # Era un dict libero: {"day": "x"} dava 500 e {"day": 9} passava, e quel fisso
+    # non si ricopiava mai più senza dire niente.
+    type: Literal["daily", "weekly"]
+    day: int | None = Field(default=None, ge=0, le=6)
+
+
 class RecurringRequest(BaseModel):
     is_recurring: bool
     # {"type": "daily"} oppure {"type": "weekly", "day": 5}
-    recurring_rule: dict | None = None
+    recurring_rule: RecurringRule | None = None
 
 
 class FollowedRequest(BaseModel):

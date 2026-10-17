@@ -125,6 +125,9 @@ def get_week_by_date(
     settimane mai vissute, coi pasti fissi ricopiati in giorni già passati.
     """
     refresh_week_statuses(db, user_id)
+    if not 2000 <= week_start.year <= 2100:
+        # Vicino ai bordi del calendario `monday_of` va in OverflowError, cioè in 500.
+        raise HTTPException(400, "Data fuori dall'intervallo gestito.")
     monday = monday_of(week_start)
 
     if monday < current_week_start():
@@ -356,11 +359,12 @@ def set_recurring(
     if body.is_recurring and not meal.recipe_id:
         raise HTTPException(400, "Assegna prima una ricetta a questo pasto.")
 
-    rule = body.recurring_rule or {"type": "weekly", "day": day.day_of_week}
-    if rule.get("type") not in ("daily", "weekly"):
-        raise HTTPException(400, "Regola di ricorrenza non valida")
-    if rule["type"] == "weekly":
-        rule = {"type": "weekly", "day": int(rule.get("day", day.day_of_week))}
+    regola = body.recurring_rule
+    if regola is None or regola.type == "weekly":
+        giorno = regola.day if regola is not None and regola.day is not None else day.day_of_week
+        rule = {"type": "weekly", "day": giorno}
+    else:
+        rule = {"type": "daily"}
 
     meal.is_recurring = body.is_recurring
     meal.recurring_rule = rule if body.is_recurring else None

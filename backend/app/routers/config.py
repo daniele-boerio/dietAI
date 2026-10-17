@@ -78,13 +78,21 @@ def list_base(user_id: int = Depends(get_current_user_id), db: Session = Depends
     ]
 
 
+def _ingredient_or_400(db: Session, name: str) -> Ingredient:
+    """Un nome che normalizzandosi resta vuoto ("fresco") è un input sbagliato, non un 500."""
+    try:
+        return get_or_create_ingredient(db, name)
+    except ValueError:
+        raise HTTPException(400, "Nome non valido: scrivi l'alimento, non solo com'è.")
+
+
 @router.post("/base-ingredients", status_code=201)
 def add_base(
     body: IngredientNameRequest,
     user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-    ingredient = get_or_create_ingredient(db, body.ingredient_name)
+    ingredient = _ingredient_or_400(db, body.ingredient_name)
     row = BaseIngredient(user_id=user_id, ingredient_id=ingredient.id)
     db.add(row)
     try:
@@ -276,7 +284,7 @@ def add_pantry(
     user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-    ingredient = get_or_create_ingredient(db, body.ingredient_name)
+    ingredient = _ingredient_or_400(db, body.ingredient_name)
     existing = (
         db.query(PantryItem)
         .filter(PantryItem.user_id == user_id, PantryItem.ingredient_id == ingredient.id)

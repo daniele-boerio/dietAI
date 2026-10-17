@@ -17,6 +17,7 @@ from ..services.exclusions import ExcludedFoodError, find_excluded
 from ..services.ingredients import get_or_create_ingredient, normalize_name
 from ..services.planner import DAY_NAMES, build_context
 from ..services.recipes import (
+    _num,
     create_recipe,
     fork_recipe_for_meal,
     ingredients_of,
@@ -195,6 +196,10 @@ def substitute_ingredient(
             )
             .first()
         )
+        if meal is None:
+            # Senza pasto la sostituzione vale per il piatto ovunque: un `meal_id`
+            # sbagliato non deve allargarla a tutti i giorni che lo condividono.
+            raise HTTPException(404, "Pasto non trovato")
 
     target_name = normalize_name(body.ingredient_to_replace)
     rows = (
@@ -255,15 +260,17 @@ def substitute_ingredient(
 
     new_ingredient = get_or_create_ingredient(db, substitute.get("name") or "")
     match.ingredient_id = new_ingredient.id
-    match.quantity = float(substitute.get("quantity") or match.quantity)
-    match.unit = (substitute.get("unit") or match.unit)[:20]
+    # I numeri del modello si leggono con `_num`, come quando una ricetta nasce: un
+    # «q.b.» o un «circa 450» davano 500 dopo aver già pagato la chiamata.
+    match.quantity = _num(substitute.get("quantity"), match.quantity) or match.quantity
+    match.unit = str(substitute.get("unit") or match.unit)[:20]
 
-    nutrition = data.get("updated_nutrition") or {}
-    if nutrition:
-        recipe.calories = int(nutrition.get("calories", recipe.calories))
-        recipe.protein_g = float(nutrition.get("protein_g", recipe.protein_g))
-        recipe.carbs_g = float(nutrition.get("carbs_g", recipe.carbs_g))
-        recipe.fat_g = float(nutrition.get("fat_g", recipe.fat_g))
+    nutrition = data.get("updated_nutrition")
+    if isinstance(nutrition, dict) and nutrition:
+        recipe.calories = int(_num(nutrition.get("calories"), recipe.calories))
+        recipe.protein_g = _num(nutrition.get("protein_g"), recipe.protein_g)
+        recipe.carbs_g = _num(nutrition.get("carbs_g"), recipe.carbs_g)
+        recipe.fat_g = _num(nutrition.get("fat_g"), recipe.fat_g)
         set_declared_details(recipe, nutrition)
     # I numeri del modello valgono solo se non si possono calcolare, come per una
     # ricetta che nasce: l'ingrediente nuovo cambia anche fibre, zuccheri e il resto.

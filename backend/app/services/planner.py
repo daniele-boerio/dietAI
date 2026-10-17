@@ -1697,12 +1697,20 @@ def _apply_generated_week(
     excluded: list[str] = []
 
     for day_data in data["days"]:
+        # La risposta del modello si prende per quello che è: un giorno o un pasto che
+        # non sono oggetti (una stringa, una lista) davano AttributeError, e il rollback
+        # buttava anche le ricette buone già pagate.
+        if not isinstance(day_data, dict):
+            continue
         try:
             dow = int(day_data.get("day_of_week"))
         except (TypeError, ValueError):
             continue
-        for meal_data in day_data.get("meals") or []:
-            slot_name = (meal_data.get("slot_name") or "").strip().lower()
+        pasti = day_data.get("meals")
+        for meal_data in pasti if isinstance(pasti, list) else []:
+            if not isinstance(meal_data, dict):
+                continue
+            slot_name = str(meal_data.get("slot_name") or "").strip().lower()
             target = index.pop((dow, slot_name), None)
             if not target:
                 # L'AI ha inventato un pasto che non esiste (o l'ha già riempito):
@@ -1713,8 +1721,8 @@ def _apply_generated_week(
                     slot_name,
                 )
                 continue
-            recipe_data = meal_data.get("recipe") or {}
-            if not recipe_data.get("title"):
+            recipe_data = meal_data.get("recipe")
+            if not isinstance(recipe_data, dict) or not recipe_data.get("title"):
                 continue
             _day, meal, slot = target
             try:

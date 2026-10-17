@@ -375,6 +375,16 @@ class _OpenAICompatibleBackend:
                     model=model, messages=payload, max_tokens=max_tokens, extra_body=extra_body
                 )
                 usage = getattr(response, "usage", None)
+                if not response.choices:
+                    # OpenRouter a volte risponde 200 senza scelte e con l'errore nel
+                    # corpo: era un IndexError fuori da ogni except, cioè un 500.
+                    self.last_usage = _usage_dict(usage)
+                    errore = getattr(response, "error", None)
+                    dettaglio = errore.get("message") if isinstance(errore, dict) else errore
+                    raise AIError(
+                        "Il provider non ha restituito una risposta"
+                        + (f": {dettaglio}" if dettaglio else ". Riprova.")
+                    )
                 choice = response.choices[0]
                 text = choice.message.content or ""
                 finish_reason = choice.finish_reason

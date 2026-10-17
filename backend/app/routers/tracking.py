@@ -77,13 +77,28 @@ def weekly(
 
     if week_start_date:
         try:
-            start = monday_of(date.fromisoformat(week_start_date))
+            giorno = date.fromisoformat(week_start_date)
+            if not 2000 <= giorno.year <= 2100:
+                raise ValueError
+            start = monday_of(giorno)
         except ValueError:
             raise HTTPException(400, "Data non valida: usa il formato AAAA-MM-GG.")
     else:
         start = current_week_start()
 
-    week = get_or_create_week(db, user_id, start)
+    if start < current_week_start():
+        # Come in Pianificazione: il passato non si inventa. Creare qui una settimana
+        # mai vissuta la riempiva di caselle e di pasti fissi ricopiati in giorni
+        # già passati, a ogni data chiesta.
+        week = (
+            db.query(WeekPlan)
+            .filter(WeekPlan.user_id == user_id, WeekPlan.week_start_date == start)
+            .first()
+        )
+        if week is None:
+            raise HTTPException(404, "In quella settimana non c'era nessun piano.")
+    else:
+        week = get_or_create_week(db, user_id, start)
     data = weekly_tracking(db, week)
 
     diet = get_active_diet(db, user_id)
@@ -96,7 +111,9 @@ def weekly(
 
 @router.get("/year")
 def year(
-    year: int | None = Query(None, description="Anno solare, default: quello corrente"),
+    year: int | None = Query(
+        None, ge=2000, le=2100, description="Anno solare, default: quello corrente"
+    ),
     user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):

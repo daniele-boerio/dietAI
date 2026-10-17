@@ -28,4 +28,9 @@ USER dietai
 # ingredienti) e non deve poter impedire l'avvio: se SEED_USER_PASSWORD non è
 # impostata esce con codice 1, e senza il `||` l'intero container non partirebbe.
 # Farlo qui evita il caso peggiore: app deployata e nessun utente per entrarci.
-CMD ["sh", "-c", "alembic upgrade head && (python -m app.seed || echo 'Seed saltato: controlla SEED_USER_PASSWORD') && uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips=*"]
+#
+# `--host ::` e non 0.0.0.0: la rete di Coolify è dual-stack, `backend` risolve
+# anche in IPv6 e nginx provava prima quello. Col solo IPv4 la connessione veniva
+# rifiutata ("upstream server temporarily disabled") e nginx ripiegava sull'altro
+# indirizzo. `::` ascolta su IPv6 e, su Linux, anche su IPv4.
+CMD ["sh", "-c", "alembic upgrade head && (python -m app.seed || echo 'Seed saltato: controlla SEED_USER_PASSWORD') && uvicorn app.main:app --host :: --port 8000 --proxy-headers --forwarded-allow-ips=*"]

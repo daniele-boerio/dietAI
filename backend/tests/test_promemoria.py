@@ -161,3 +161,21 @@ def test_l_iscrizione_accetta_solo_i_servizi_push(client, endpoint):
         json={"endpoint": endpoint, "keys": {"p256dh": "x" * 20, "auth": "y" * 10}},
     )
     assert res.status_code == 422
+
+
+def test_un_invio_che_si_rompe_non_perde_il_promemoria(client, settimana, db, monkeypatch):
+    """Prima il segno «fatto oggi» si scriveva prima di provare: un errore e il
+    promemoria del giorno era perso, senza una riga di log."""
+    client.put("/api/push/reminder", json={"time": "21:00"})
+    rotto = {"volte": 0}
+
+    def invio(db_, user_id, payload):
+        rotto["volte"] += 1
+        if rotto["volte"] == 1:
+            raise RuntimeError("database giù")
+        return 1
+
+    monkeypatch.setattr(push, "send", invio)
+    assert push.send_due_reminders(db, alle(21, 0)) == 0
+    # Il giro dopo ci riprova, e questa volta arriva.
+    assert push.send_due_reminders(db, alle(21, 1)) == 1

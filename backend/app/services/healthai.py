@@ -64,6 +64,8 @@ from .accounts import admin_user
 from .ai_client import get_client
 from .macros import CAMPI_DETTAGLIO, round_detail
 
+from ..utils.giro_unico import HEALTHAI as GIRO_HEALTHAI, giro_unico
+
 logger = logging.getLogger(__name__)
 
 SOURCE = "dietai"
@@ -519,7 +521,10 @@ def start_scheduler(session_factory, intervallo: float = 60.0) -> None:
             try:
                 db = session_factory()
                 try:
-                    sync(db)
+                    # Con più processi lo fa uno solo (vedi utils/giro_unico.py).
+                    with giro_unico(db.get_bind(), GIRO_HEALTHAI) as mio:
+                        if mio:
+                            sync(db)
                 finally:
                     db.close()
             except Exception:  # noqa: BLE001 — il giro dopo ci riprova

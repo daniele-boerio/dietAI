@@ -116,3 +116,13 @@ interna, con `/push/test` a dirgli se aveva risposto. Su iPhone le notifiche esi
 l'app installata sulla schermata Home, e la pagina lo dice invece di mostrare un
 pulsante che non funziona. Guardie in `tests/test_promemoria.py`, compreso il giro vero
 di cifratura e firma fino alla richiesta HTTP esclusa.
+
+**Un promemoria, anche con più processi, e mai perso per un errore.** Il giro leggeva
+`last_reminder_on`, lo scriveva e poi mandava: due processi (`--workers 2`, due repliche)
+mandavano due notifiche, e un errore dopo la scrittura perdeva il promemoria del giorno
+senza log. Ora il promemoria si prende con una UPDATE condizionata, ogni utente ha il
+suo `try` (chi fallisce non ferma gli altri e il segno torna indietro, così il giro dopo
+riprova), e una consegna a zero dispositivi si logga. Sopra c'è `utils/giro_unico.py`:
+un advisory lock di Postgres, su una connessione sua, fa fare ogni giro (promemoria e
+healthAI) a un solo processo.
+

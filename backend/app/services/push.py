@@ -30,11 +30,13 @@ import threading
 import time
 from datetime import date, datetime
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..config import SECRET_KEY
 from ..models import DayPlan, MealSlot, PlannedMeal, PushSubscription, UserPreferences, WeekPlan
 from ..utils.clock import FUSO
+from ..utils.giro_unico import PROMEMORIA, giro_unico
 
 logger = logging.getLogger(__name__)
 
@@ -174,11 +176,43 @@ def send_due_reminders(db: Session, adesso: datetime | None = None) -> int:
     for prefs in righe:
         if prefs.reminder_time > ora or prefs.last_reminder_on == oggi:
             continue
-        prefs.last_reminder_on = oggi
+        precedente = prefs.last_reminder_on
+        # Il promemoria si «prende» con una UPDATE condizionata: leggere e poi scrivere
+        # lasciava passare due processi insieme, e partivano due notifiche.
+        preso = (
+            db.query(UserPreferences)
+            .filter(
+                UserPreferences.id == prefs.id,
+                or_(
+                    UserPreferences.last_reminder_on.is_(None),
+                    UserPreferences.last_reminder_on != oggi,
+                ),
+            )
+            .update({"last_reminder_on": oggi}, synchronize_session=False)
+        )
         db.commit()
-        quanti = meals_to_answer(db, prefs.user_id, oggi)
-        if quanti and send(db, prefs.user_id, reminder_payload(quanti)):
-            inviati += 1
+        if not preso:
+            continue
+        # Un utente che fallisce non ferma quelli dopo di lui, e il suo promemoria non
+        # va perso: il segno torna com'era e il giro dopo ci riprova.
+        try:
+            quanti = meals_to_answer(db, prefs.user_id, oggi)
+            if not quanti:
+                continue
+            if send(db, prefs.user_id, reminder_payload(quanti)):
+                inviati += 1
+            else:
+                logger.warning(
+                    "Promemoria non consegnato a user %s: nessun dispositivo l'ha ricevuto",
+                    prefs.user_id,
+                )
+        except Exception:  # noqa: BLE001
+            logger.exception("Promemoria fallito per user %s: riprovo al giro dopo", prefs.user_id)
+            db.rollback()
+            db.query(UserPreferences).filter(UserPreferences.id == prefs.id).update(
+                {"last_reminder_on": precedente}, synchronize_session=False
+            )
+            db.commit()
     return inviati
 
 
@@ -203,7 +237,10 @@ def start_scheduler(session_factory, intervallo: float = 60.0) -> None:
             try:
                 db = session_factory()
                 try:
-                    send_due_reminders(db)
+                    # Con più processi lo fa uno solo (vedi utils/giro_unico.py).
+                    with giro_unico(db.get_bind(), PROMEMORIA) as mio:
+                        if mio:
+                            send_due_reminders(db)
                 finally:
                     db.close()
             except Exception:  # noqa: BLE001 — il giro dopo ci riprova

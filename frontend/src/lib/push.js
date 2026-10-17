@@ -35,19 +35,31 @@ async function registrazione() {
   return reg;
 }
 
+// Senza la chiave (browser vecchi non la espongono) non si può sapere: si tiene.
+function stessaChiave(attuale, attesa) {
+  if (!attuale) return true;
+  const a = new Uint8Array(attuale);
+  return a.length === attesa.length && a.every((b, i) => b === attesa[i]);
+}
+
 export async function iscrivi(publicKey) {
   const permesso = await Notification.requestPermission();
   if (permesso !== 'granted') {
     throw new Error('Senza il permesso alle notifiche il promemoria non può arrivare.');
   }
   const reg = await registrazione();
-  const esistente = await reg.pushManager.getSubscription();
+  const chiave = chiaveInByte(publicKey);
+  let esistente = await reg.pushManager.getSubscription();
+  // Un'iscrizione fatta con un'altra chiave del server (le chiavi VAPID derivano da
+  // SECRET_KEY: se cambia, cambiano) non riceve più niente, e riusarla lasciava il
+  // telefono muto senza un errore. Si rifà.
+  if (esistente && !stessaChiave(esistente.options?.applicationServerKey, chiave)) {
+    await esistente.unsubscribe();
+    esistente = null;
+  }
   const sub =
     esistente ||
-    (await reg.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: chiaveInByte(publicKey),
-    }));
+    (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: chiave }));
   return sub.toJSON();
 }
 

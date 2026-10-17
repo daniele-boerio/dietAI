@@ -2,7 +2,12 @@
 // senza rete (la lista della spesa al supermercato è il caso d'uso). Le chiamate
 // /api NON vengono mai messe in cache: dati stantii su una dieta sono peggio di un
 // errore di rete.
-const CACHE = 'dietai-shell-v1';
+// v2: la v1 poteva contenere risposte d'errore messe in cache come asset; cambiare
+// nome la fa svuotare all'attivazione.
+const CACHE = 'dietai-shell-v2';
+// Ogni deploy porta bundle con un nome nuovo: oltre questo numero si buttano i più
+// vecchi, o la cache cresce per sempre.
+const MAX_ASSET = 60;
 const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/icon.svg'];
 
 self.addEventListener('install', (event) => {
@@ -43,13 +48,20 @@ self.addEventListener('push', (event) => {
 // Toccando la notifica si torna all'app se è già aperta, invece di aprirne un'altra.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const url = (event.notification.data && event.notification.data.url) || '/';
+  const richiesto = (event.notification.data && event.notification.data.url) || '/';
+  // Solo indirizzi dell'app: il payload lo firma il server, ma una notifica non deve
+  // poter portare altrove.
+  const url = new URL(richiesto, self.location.origin).origin === self.location.origin
+    ? richiesto
+    : '/';
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((finestre) => {
       const aperta = finestre.find((c) => new URL(c.url).origin === self.location.origin);
       if (aperta) {
         aperta.focus();
-        return aperta.navigate(url);
+        // `navigate` rifiuta sulle finestre che il service worker non controlla:
+        // prima il tocco non faceva niente.
+        return aperta.navigate(url).catch(() => self.clients.openWindow(url));
       }
       return self.clients.openWindow(url);
     })
@@ -76,7 +88,7 @@ self.addEventListener('fetch', (event) => {
         .then((response) => {
           if (response.ok) {
             const copy = response.clone();
-            caches.open(CACHE).then((c) => c.put('/index.html', copy));
+            event.waitUntil(caches.open(CACHE).then((c) => c.put('/index.html', copy)));
           }
           return response;
         })
@@ -90,10 +102,24 @@ self.addEventListener('fetch', (event) => {
       (cached) =>
         cached ||
         fetch(request).then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE).then((c) => c.put(request, copy));
+          // In cache solo quello che è davvero l'asset chiesto. Un 502 durante un
+          // deploy, o un index.html servito al posto di uno script, finivano qui sotto
+          // il nome dello script e venivano serviti per sempre: app nera.
+          const tipo = response.headers.get('content-type') || '';
+          if (response.ok && response.type === 'basic' && !tipo.includes('text/html')) {
+            const copy = response.clone();
+            event.waitUntil(
+              caches.open(CACHE).then((c) => c.put(request, copy).then(() => sfoltisci(c)))
+            );
+          }
           return response;
         })
     )
   );
 });
+
+async function sfoltisci(cache) {
+  const chiavi = await cache.keys();
+  const asset = chiavi.filter((r) => new URL(r.url).pathname.startsWith('/assets/'));
+  await Promise.all(asset.slice(0, Math.max(0, asset.length - MAX_ASSET)).map((r) => cache.delete(r)));
+}

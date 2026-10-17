@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import { Suspense, createContext, lazy, useCallback, useContext, useMemo, useState } from 'react';
 import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import {
   CalendarDays,
@@ -17,17 +17,21 @@ import { useAuth } from './AuthContext';
 
 import DashboardPage from './pages/DashboardPage';
 import PlanningPage from './pages/PlanningPage';
-import MealDetailPage from './pages/MealDetailPage';
 import ShoppingPage from './pages/ShoppingPage';
-import RecipesPage from './pages/RecipesPage';
-import RecipeDetailPage from './pages/RecipeDetailPage';
-import TrackingPage from './pages/TrackingPage';
-import DietPage from './pages/DietPage';
-import PantryPage from './pages/PantryPage';
-import SettingsPage from './pages/SettingsPage';
 import AltroPage from './pages/AltroPage';
 import LoginPage from './pages/LoginPage';
-import OnboardingPage from './pages/OnboardingPage';
+
+// Le schede di tutti i giorni (home, piano, spesa) arrivano subito; il resto si
+// scarica quando lo si apre. Prima il login portava con sé anche Impostazioni,
+// Onboarding e Dieta — un bundle unico da 390 kB su una rete da supermercato.
+const MealDetailPage = lazy(() => import('./pages/MealDetailPage'));
+const RecipesPage = lazy(() => import('./pages/RecipesPage'));
+const RecipeDetailPage = lazy(() => import('./pages/RecipeDetailPage'));
+const TrackingPage = lazy(() => import('./pages/TrackingPage'));
+const DietPage = lazy(() => import('./pages/DietPage'));
+const PantryPage = lazy(() => import('./pages/PantryPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const OnboardingPage = lazy(() => import('./pages/OnboardingPage'));
 import Toast from './components/Toast';
 import ThemeToggle from './components/ThemeToggle';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -103,7 +107,9 @@ function AuthenticatedApp() {
         {/* Il login non naviga: nell'app ci pensa la rotta `*`, ma qui non ci sono
             rotte e l'onboarding restava sull'indirizzo `/login`. */}
         {pathname === '/login' && <Navigate to="/" replace />}
-        <OnboardingPage />
+        <Suspense fallback={<div className="spinner" />}>
+          <OnboardingPage />
+        </Suspense>
         <Toast toasts={toasts} onClose={closeToast} />
       </AppContext.Provider>
     );
@@ -226,6 +232,7 @@ function AuthenticatedApp() {
               resterebbe una finestra vuota, nera col tema scuro, e sul telefono
               nemmeno un modo per capire cosa sia successo. */}
           <ErrorBoundary resetKey={pathname}>
+            <Suspense fallback={<div className="spinner" />}>
             <Routes>
               <Route path="/" element={<DashboardPage />} />
               <Route path="/plan" element={<PlanningPage />} />
@@ -254,6 +261,7 @@ function AuthenticatedApp() {
               <Route path="/settings/:tab" element={<SettingsPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
+            </Suspense>
           </ErrorBoundary>
         </main>
 

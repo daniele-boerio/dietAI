@@ -38,16 +38,26 @@ export default function RecipeDetailPage() {
     load();
   }, [load]);
 
+  // Senza try/catch un errore restava una promessa respinta e basta: nessun avviso,
+  // e il voto sembrava semplicemente ignorato.
   const rate = async (rating) => {
-    await api.rateRecipe(recipe.id, rating);
-    setRecipe((r) => ({ ...r, rating }));
-    addToast('Voto salvato ✓');
+    try {
+      await api.rateRecipe(recipe.id, rating);
+      setRecipe((r) => ({ ...r, rating }));
+      addToast('Voto salvato ✓');
+    } catch (e) {
+      addToast(e.message, 'error');
+    }
   };
 
   const toggleFavorite = async () => {
     const next = !recipe.is_favorite;
-    await api.favoriteRecipe(recipe.id, next);
-    setRecipe((r) => ({ ...r, is_favorite: next }));
+    try {
+      await api.favoriteRecipe(recipe.id, next);
+      setRecipe((r) => ({ ...r, is_favorite: next }));
+    } catch (e) {
+      addToast(e.message, 'error');
+    }
   };
 
   const remove = async () => {

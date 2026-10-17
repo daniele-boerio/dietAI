@@ -113,20 +113,32 @@ function WeeklyView() {
 
   useEffect(() => {
     setLoading(true);
+    // Cambiando settimana in fretta la risposta della precedente non deve arrivare
+    // dopo e prendere il posto di quella scelta.
+    let superata = false;
     api
       .getTracking(selected || undefined)
       .then((d) => {
+        if (superata) return;
         setData(d);
         setError(null);
       })
       .catch((e) => {
+        if (superata) return;
+        // Niente dati della settimana di prima sotto il nome di quella nuova.
+        setData(null);
         setError(e.message);
         addToast(e.message, 'error');
       })
-      .finally(() => setLoading(false));
+      .finally(() => !superata && setLoading(false));
+    return () => {
+      superata = true;
+    };
   }, [selected, attempt, addToast]);
 
-  if (loading) return <div className="spinner" />;
+  // Lo spinner solo la prima volta: dopo, la settimana di prima resta a schermo finché
+  // arriva la nuova, e il selettore non sparisce sotto il dito (né perde il focus).
+  if (loading && !data) return <div className="spinner" />;
   if (!data) return <LoadError message={error} onRetry={() => setAttempt((n) => n + 1)} />;
 
   const summary = data.weekly_summary;

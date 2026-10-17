@@ -168,6 +168,7 @@ export default function ShoppingPage() {
     // Aggiornamento ottimistico: al supermercato si spunta in fretta e aspettare il
     // server a ogni tocco renderebbe la lista inutilizzabile.
     const next = !item.is_checked;
+    spunte.current += 1;
     setList((prev) => ({
       ...prev,
       checked_items: prev.checked_items + (next ? 1 : -1),
@@ -191,8 +192,19 @@ export default function ShoppingPage() {
       await api.checkShoppingItem(item.id, next);
     } catch (e) {
       addToast(e.message, 'error');
-      load();
+      // In silenzio: con lo spinner la lista si smontava (e si perdeva il punto), e una
+      // seconda spunta ancora in volo veniva sovrascritta.
+      load({ silent: true });
     }
+  };
+
+  // La lista che torna da quantità e prezzo è quella di quando il server ha risposto:
+  // se nel frattempo si è spuntato qualcos'altro, rimetterla a schermo toglieva la
+  // spunta appena data. In quel caso si tiene lo stato locale (la spunta ha la sua
+  // richiesta in volo).
+  const spunte = useRef(0);
+  const mostraSeAttuale = (lista, versione) => {
+    if (versione === spunte.current) setList(lista);
   };
 
   // Le confezioni non si tagliano a misura: per 140 g di tacchino si porta a casa il
@@ -201,8 +213,9 @@ export default function ShoppingPage() {
   const saveQuantity = async (item, quantity) => {
     setQuantityOf(null);
     if (quantity === item.bought_quantity) return;
+    const versione = spunte.current;
     try {
-      setList(await api.setBoughtQuantity(item.id, quantity));
+      mostraSeAttuale(await api.setBoughtQuantity(item.id, quantity), versione);
     } catch (e) {
       addToast(e.message, 'error');
       load({ silent: true });
@@ -215,9 +228,9 @@ export default function ShoppingPage() {
   const savePrice = async (item, paid) => {
     setPriceOf(null);
     if (paid === (item.paid_price ?? null)) return;
+    const versione = spunte.current;
     try {
-      const aggiornata = await api.setPaidPrice(item.id, paid);
-      setList(aggiornata);
+      mostraSeAttuale(await api.setPaidPrice(item.id, paid), versione);
       if (paid) addToast(`${item.name}: prezzo segnato ✓`);
     } catch (e) {
       addToast(e.message, 'error');

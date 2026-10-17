@@ -8,24 +8,34 @@ export default function IngredientInput({ value, onChange, placeholder = 'Ingred
   const [suggestions, setSuggestions] = useState([]);
   const [open, setOpen] = useState(false);
   const timer = useRef(null);
+  const campo = useRef(null);
+  // Il nome appena scelto dal menu: cambia `value`, e senza questo segno la ricerca
+  // ripartiva e riapriva il menu sopra la riga, anche col campo già lasciato.
+  const scelto = useRef(null);
 
   useEffect(() => {
     clearTimeout(timer.current);
-    if (value.trim().length < 2) {
+    if (value.trim().length < 2 || value === scelto.current) {
       setSuggestions([]);
-      return;
+      return undefined;
     }
+    let superata = false;
     // Debounce: si scrive più velocemente di quanto il server risponda.
     timer.current = setTimeout(() => {
       api
         .searchIngredients(value)
         .then((rows) => {
+          if (superata) return;
           setSuggestions(rows);
-          setOpen(rows.length > 0);
+          // Il menu si apre solo per chi sta scrivendo qui.
+          setOpen(rows.length > 0 && document.activeElement === campo.current);
         })
-        .catch(() => setSuggestions([]));
+        .catch(() => !superata && setSuggestions([]));
     }, 250);
-    return () => clearTimeout(timer.current);
+    return () => {
+      superata = true;
+      clearTimeout(timer.current);
+    };
   }, [value]);
 
   return (
@@ -34,9 +44,13 @@ export default function IngredientInput({ value, onChange, placeholder = 'Ingred
     // di stringersi, e la riga andava a capo storta invece di comprimersi.
     <div className="ingredient-input">
       <input
+        ref={campo}
         type="text"
         value={value}
         placeholder={placeholder}
+        aria-label={placeholder.replace(/[.…]+$/, '')}
+        aria-autocomplete="list"
+        aria-expanded={open}
         onChange={(e) => onChange(e.target.value)}
         onFocus={() => setOpen(suggestions.length > 0)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
@@ -62,6 +76,7 @@ export default function IngredientInput({ value, onChange, placeholder = 'Ingred
               className="btn btn-ghost btn-block"
               style={{ justifyContent: 'flex-start' }}
               onMouseDown={() => {
+                scelto.current = s.name;
                 onChange(s.name);
                 setOpen(false);
               }}

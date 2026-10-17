@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -46,11 +46,20 @@ export default function MealDetailPage() {
   // Lo spinner solo quando si è senza niente a schermo: `load()` si richiama anche
   // dopo una sostituzione, col dialogo del risultato aperto sopra la pagina, e
   // rimettere lo spinner lo farebbe sparire e ricomparire.
+  // Il pasto che si sta guardando adesso: passando da un pasto all'altro la risposta
+  // del primo poteva arrivare dopo, e la pagina mostrava il pasto sbagliato mentre i
+  // pulsanti agivano su quello giusto.
+  const pastoVisto = useRef(mealId);
+  pastoVisto.current = mealId;
+  const [segnando, setSegnando] = useState(false);
+
   const load = useCallback(
     async ({ spinner = false } = {}) => {
       if (spinner) setLoading(true);
       try {
-        setMeal(await api.getMeal(mealId));
+        const data = await api.getMeal(mealId);
+        if (pastoVisto.current !== mealId) return;
+        setMeal(data);
         setError(null);
       } catch (e) {
         // Il toast dura tre secondi, la pagina resta: senza il messaggio anche qui,
@@ -63,6 +72,13 @@ export default function MealDetailPage() {
     },
     [mealId, addToast],
   );
+
+  useEffect(() => {
+    // Un pasto nuovo parte da zero: se il caricamento fallisce si vede LoadError, non
+    // il pasto di prima con i pulsanti del nuovo.
+    setMeal(null);
+    setLoading(true);
+  }, [mealId]);
 
   useEffect(() => {
     load();
@@ -145,6 +161,9 @@ export default function MealDetailPage() {
       setAltro(meal);
       return;
     }
+    // Due tocchi rapidi mandavano due richieste e due avvisi sulla dispensa.
+    if (segnando) return;
+    setSegnando(true);
     try {
       const updated = await api.setFollowed(mealId, value);
       setMeal(updated);
@@ -168,6 +187,8 @@ export default function MealDetailPage() {
       }
     } catch (e) {
       addToast(e.message, "error");
+    } finally {
+      setSegnando(false);
     }
   };
 

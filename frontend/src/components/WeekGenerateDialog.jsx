@@ -66,8 +66,11 @@ export default function WeekGenerateDialog({
   // sembrare che non ci sia niente da rigenerare.
   useEffect(() => {
     setGiorni(giorniPredefiniti(listaGiorni));
+    // Dipende dall'id e non dall'oggetto: la settimana si rilegge (il polling, una
+    // risposta in volo) anche con la finestra aperta, e ogni rilettura azzerava i
+    // giorni appena scelti. `listaGiorni` resta fuori apposta: è derivata da `week`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rifaiTutto, week]);
+  }, [rifaiTutto, week.id]);
 
   // I pasti invece si spuntano una volta e restano: quello che si è escluso la
   // settimana scorsa è quasi sempre quello da escludere anche adesso.
@@ -75,8 +78,9 @@ export default function WeekGenerateDialog({
     if (pasti !== null) return;
     const esclusi = leggiEsclusi();
     setPasti(listaPasti.filter((p) => !esclusi.includes(p.nome)).map((p) => p.id));
+    // Come sopra: conta quale settimana è, non ogni sua rilettura.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pasti, week]);
+  }, [pasti, week.id]);
 
   const scelti = pasti || [];
   const totale = contaSelezione(celle, giorni, scelti);

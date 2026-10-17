@@ -70,6 +70,14 @@ ogni avvio del container** e riallinea l'anagrafica al catalogo — se la ripren
 al primo deploy. Il raggruppamento avviene alla lettura (`serialize_shopping_list`),
 quindi non serve ricostruire niente.
 
+Reparto e prezzo imparato stanno sull'anagrafica, che è **una per tutti gli account**:
+quello che sposta un ospite lo vede anche l'amministratore. È voluto — gli account
+sono della stessa casa e girano gli stessi negozi, e un reparto per persona vorrebbe
+dire una tabella in più e ogni lettura della lista da riscrivere — e la review di
+sicurezza lo ha segnalato come canale fra account: per questo lo dice un test
+(`test_reparto_e_prezzo_sono_della_casa` in `tests/test_due_account.py`). Se un giorno
+gli account non fossero più della stessa casa, è il primo posto da separare.
+
 **Un articolo che è anche in dispensa dice perché è in lista lo stesso.** La quantità
 che si legge è già netta della dispensa, e questo rende la nota gratis: se una voce è
 in lista `net > 0`, quindi la scorta compatibile è stata scalata tutta e quella cifra

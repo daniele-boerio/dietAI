@@ -249,3 +249,20 @@ def test_il_ricettario_non_e_in_comune(client, guest_client):
     assert dettaglio_mio["ingredients"][0]["quantity"] == 200
     assert dettaglio_suo["ingredients"][0]["quantity"] == 120
     assert dettaglio_mio["calories"] == 700 and dettaglio_suo["calories"] == 450
+
+
+def test_reparto_e_prezzo_sono_della_casa(client, guest_client, db):
+    """L'anagrafica è una per tutti: il reparto spostato dall'ospite vale anche per
+    l'admin. È una scelta (stessa casa, stessi negozi — vedi docs/spesa.md), non una
+    svista: se questo test cambia, va cambiata anche quella decisione."""
+    from app.models import Ingredient
+    from app.services.ingredients import get_or_create_ingredient
+
+    seitan = get_or_create_ingredient(db, "seitan")
+    db.commit()
+    res = guest_client.put(
+        f"/api/config/ingredients/{seitan.id}/category", json={"category": "carne"}
+    )
+    assert res.status_code == 200, res.text
+    db.expire_all()
+    assert db.get(Ingredient, seitan.id).category == "carne"

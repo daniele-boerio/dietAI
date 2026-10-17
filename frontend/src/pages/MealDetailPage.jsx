@@ -21,6 +21,7 @@ import EatenInstead from "../components/EatenInstead";
 import EatenInsteadDialog from "../components/EatenInsteadDialog";
 import EmptyState from "../components/EmptyState";
 import LoadError from "../components/LoadError";
+import Modal from "../components/Modal";
 import MealChat from "../components/MealChat";
 import RecipeView from "../components/RecipeView";
 import StarRating from "../components/StarRating";
@@ -504,28 +505,25 @@ export default function MealDetailPage() {
       )}
 
       {substitution && (
-        <div className="modal-overlay" onClick={() => setSubstitution(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2 className="modal-title">Ingrediente sostituito</h2>
-            <p className="modal-text">
-              <strong>{substitution.original?.name}</strong> →{" "}
-              <strong>{substitution.substitute?.name}</strong> (
-              {substitution.substitute?.quantity}{" "}
-              {substitution.substitute?.unit})
-              <br />
-              <br />
-              {substitution.explanation}
-            </p>
-            <div className="modal-actions">
-              <button
-                className="btn btn-primary"
-                onClick={() => setSubstitution(null)}
-              >
-                Ho capito
-              </button>
-            </div>
+        <Modal title="Ingrediente sostituito" onClose={() => setSubstitution(null)}>
+          <p className="modal-text">
+            <strong>{substitution.original?.name}</strong> →{" "}
+            <strong>{substitution.substitute?.name}</strong> (
+            {substitution.substitute?.quantity}{" "}
+            {substitution.substitute?.unit})
+            <br />
+            <br />
+            {substitution.explanation}
+          </p>
+          <div className="modal-actions">
+            <button
+              className="btn btn-primary"
+              onClick={() => setSubstitution(null)}
+            >
+              Ho capito
+            </button>
           </div>
-        </div>
+        </Modal>
       )}
 
       {confirmClear && (
@@ -589,58 +587,58 @@ function GenerateDialog({ meal, busy, onGenerate, onCancel }) {
   const richiesta = testo.trim();
 
   return (
-    <div className="modal-overlay" onClick={busy ? undefined : onCancel}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h2 className="modal-title">
-          {meal.recipe ? "Rigenera questo pasto" : "Genera questo pasto"}
-        </h2>
-        <p className="modal-text">
-          Target: {meal.target.calories} kcal · P {meal.target.protein_g}g · C{" "}
-          {meal.target.carbs_g}g · G {meal.target.fat_g}g.
-          <br />
-          Scrivi cosa ti va: un'idea, un ingrediente da finire, un piatto
-          preciso.
-        </p>
+    <Modal
+      title={meal.recipe ? "Rigenera questo pasto" : "Genera questo pasto"}
+      onClose={onCancel}
+      busy={busy}
+    >
+      <p className="modal-text">
+        Target: {meal.target.calories} kcal · P {meal.target.protein_g}g · C{" "}
+        {meal.target.carbs_g}g · G {meal.target.fat_g}g.
+        <br />
+        Scrivi cosa ti va: un'idea, un ingrediente da finire, un piatto
+        preciso.
+      </p>
 
-        <textarea
-          rows={4}
-          value={testo}
-          placeholder={ESEMPI_RICHIESTA}
-          onChange={(e) => setTesto(e.target.value)}
-          maxLength={500}
+      <textarea
+        rows={4}
+        value={testo}
+        placeholder={ESEMPI_RICHIESTA}
+        aria-label="Cosa ti va di mangiare"
+        onChange={(e) => setTesto(e.target.value)}
+        maxLength={500}
+        disabled={busy}
+        autoFocus
+      />
+
+      <p className="field-hint" style={{ marginTop: 8 }}>
+        {richiesta
+          ? "I macro restano il vincolo: le quantità le calcola l’AI per starci dentro."
+          : "Lascialo vuoto e ti propongo un piatto diverso dagli altri della settimana."}
+      </p>
+
+      <div className="modal-actions" style={{ marginTop: 16 }}>
+        <button
+          className="btn btn-secondary"
+          onClick={onCancel}
           disabled={busy}
-          autoFocus
-        />
-
-        <p className="field-hint" style={{ marginTop: 8 }}>
-          {richiesta
-            ? "I macro restano il vincolo: le quantità le calcola l’AI per starci dentro."
-            : "Lascialo vuoto e ti propongo un piatto diverso dagli altri della settimana."}
-        </p>
-
-        <div className="modal-actions" style={{ marginTop: 16 }}>
-          <button
-            className="btn btn-secondary"
-            onClick={onCancel}
-            disabled={busy}
-          >
-            Annulla
-          </button>
-          <button
-            className="btn btn-primary"
-            onClick={() => onGenerate(richiesta || null)}
-            disabled={busy}
-          >
-            {busy ? (
-              <span className="spinner-inline" />
-            ) : (
-              <Sparkles size={16} />
-            )}
-            {richiesta ? "Genera così" : "Scegli tu il piatto"}
-          </button>
-        </div>
+        >
+          Annulla
+        </button>
+        <button
+          className="btn btn-primary"
+          onClick={() => onGenerate(richiesta || null)}
+          disabled={busy}
+        >
+          {busy ? (
+            <span className="spinner-inline" />
+          ) : (
+            <Sparkles size={16} />
+          )}
+          {richiesta ? "Genera così" : "Scegli tu il piatto"}
+        </button>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -659,47 +657,45 @@ function RecipePicker({ onPick, onCancel }) {
   }, [search]);
 
   return (
-    <div className="modal-overlay" onClick={onCancel}>
-      <div className="modal modal-lg" onClick={(e) => e.stopPropagation()}>
-        <h2 className="modal-title">Scegli dal ricettario</h2>
-        <input
-          type="text"
-          placeholder="Cerca..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          style={{ marginBottom: 12 }}
-        />
-        <div
-          className="list-rows"
-          style={{ maxHeight: 380, overflowY: "auto" }}
-        >
-          {items.map((r) => (
-            <div key={r.id} className="list-row">
-              <div className="list-row-main">
-                <strong>{r.title}</strong>
-                <span>
-                  {r.calories} kcal · P {r.protein_g}g · C {r.carbs_g}g · G{" "}
-                  {r.fat_g}g
-                </span>
-              </div>
-              <button
-                className="btn btn-secondary btn-sm"
-                onClick={() => onPick(r.id)}
-              >
-                Scegli
-              </button>
+    <Modal title="Scegli dal ricettario" onClose={onCancel} className="modal-lg">
+      <input
+        type="text"
+        placeholder="Cerca..."
+        aria-label="Cerca nel ricettario"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        style={{ marginBottom: 12 }}
+      />
+      <div
+        className="list-rows"
+        style={{ maxHeight: 380, overflowY: "auto" }}
+      >
+        {items.map((r) => (
+          <div key={r.id} className="list-row">
+            <div className="list-row-main">
+              <strong>{r.title}</strong>
+              <span>
+                {r.calories} kcal · P {r.protein_g}g · C {r.carbs_g}g · G{" "}
+                {r.fat_g}g
+              </span>
             </div>
-          ))}
-          {items.length === 0 && (
-            <p className="field-hint">Nessuna ricetta trovata.</p>
-          )}
-        </div>
-        <div className="modal-actions" style={{ marginTop: 16 }}>
-          <button className="btn btn-secondary" onClick={onCancel}>
-            Chiudi
-          </button>
-        </div>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => onPick(r.id)}
+            >
+              Scegli
+            </button>
+          </div>
+        ))}
+        {items.length === 0 && (
+          <p className="field-hint">Nessuna ricetta trovata.</p>
+        )}
       </div>
-    </div>
+      <div className="modal-actions" style={{ marginTop: 16 }}>
+        <button className="btn btn-secondary" onClick={onCancel}>
+          Chiudi
+        </button>
+      </div>
+    </Modal>
   );
 }

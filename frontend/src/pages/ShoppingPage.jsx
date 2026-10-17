@@ -30,6 +30,7 @@ import { useApp } from '../App';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
 import LoadError from '../components/LoadError';
+import Modal from '../components/Modal';
 import ShoppingChat from '../components/ShoppingChat';
 import ReceiptReader from '../components/ReceiptReader';
 import { useDueColonne } from '../lib/schermo';
@@ -552,32 +553,29 @@ export default function ShoppingPage() {
       </div>
 
       {moving && (
-        <div className="modal-overlay" onClick={() => setMoving(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2 className="modal-title">Dove tieni «{moving.name}»?</h2>
-            <p className="modal-text">
-              Ora è in {moving.from}. Il reparto serve a farti girare il supermercato una
-              volta sola: quello che scegli vale anche per tutte le liste che verranno.
-            </p>
-            <div className="category-picker">
-              {list.all_categories.map((cat) => (
-                <button
-                  key={cat.key}
-                  className={`category-option ${cat.key === moving.category ? 'active' : ''}`}
-                  onClick={() => moveTo(cat.key)}
-                  disabled={cat.key === moving.category}
-                >
-                  {cat.label}
-                </button>
-              ))}
-            </div>
-            <div className="modal-actions">
-              <button className="btn btn-secondary" onClick={() => setMoving(null)}>
-                Annulla
+        <Modal title={`Dove tieni «${moving.name}»?`} onClose={() => setMoving(null)}>
+          <p className="modal-text">
+            Ora è in {moving.from}. Il reparto serve a farti girare il supermercato una
+            volta sola: quello che scegli vale anche per tutte le liste che verranno.
+          </p>
+          <div className="category-picker">
+            {list.all_categories.map((cat) => (
+              <button
+                key={cat.key}
+                className={`category-option ${cat.key === moving.category ? 'active' : ''}`}
+                onClick={() => moveTo(cat.key)}
+                disabled={cat.key === moving.category}
+              >
+                {cat.label}
               </button>
-            </div>
+            ))}
           </div>
-        </div>
+          <div className="modal-actions">
+            <button className="btn btn-secondary" onClick={() => setMoving(null)}>
+              Annulla
+            </button>
+          </div>
+        </Modal>
       )}
 
       {confirmDone && (

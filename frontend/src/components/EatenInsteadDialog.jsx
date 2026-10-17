@@ -3,6 +3,7 @@ import { Sparkles } from 'lucide-react';
 import { api } from '../api';
 import { useApp } from '../App';
 import { otherNutrientsLine } from '../lib/nutrients';
+import Modal from './Modal';
 
 // «Ho mangiato altro»: subito dopo il pulsante, la domanda. Prima la si trovava solo
 // aprendo il pasto, sotto i pulsanti, e quasi nessuno la vedeva: il pasto restava
@@ -20,12 +21,6 @@ export default function EatenInsteadDialog({ meal, onSaved, onClose }) {
   useEffect(() => {
     campo.current?.focus();
   }, []);
-
-  useEffect(() => {
-    const esc = (e) => e.key === 'Escape' && !busy && onClose();
-    window.addEventListener('keydown', esc);
-    return () => window.removeEventListener('keydown', esc);
-  }, [busy, onClose]);
 
   const invia = async (niente) => {
     setBusy(niente ? 'niente' : 'stima');
@@ -54,46 +49,49 @@ export default function EatenInsteadDialog({ meal, onSaved, onClose }) {
   };
 
   return (
-    <div className="modal-overlay" onClick={busy ? undefined : onClose}>
-      <form className="modal" onClick={(e) => e.stopPropagation()} onSubmit={salva}>
-        <h2 className="modal-title">Cosa hai mangiato invece?</h2>
-        <p className="modal-text">
-          {meal.slot_name ? `${meal.slot_name}: ` : ''}scrivilo come lo diresti — «una pizza
-          margherita», «panino al bar e una birra». Il modello stima calorie e valori
-          nutrizionali, e l'andamento li conta.
-        </p>
-        <input
-          ref={campo}
-          type="text"
-          className="eaten-dialog-input"
-          maxLength={500}
-          placeholder="una pizza margherita, un panino al bar…"
-          value={testo}
-          onChange={(e) => setTesto(e.target.value)}
-          disabled={busy}
-          aria-label="Cosa hai mangiato invece"
-        />
-        {/* «Niente» è una risposta, non un rinuncia: si salva come zero saputo, e
-            senza modello (niente scintille). «Non lo so» invece chiude e basta. */}
-        <div className="modal-actions eaten-dialog-actions">
-          <button type="button" className="btn btn-secondary" onClick={onClose} disabled={!!busy}>
-            Non lo so
-          </button>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => invia(true)}
-            disabled={!!busy}
-          >
-            {busy === 'niente' && <span className="spinner-inline" />}
-            Non ho mangiato niente
-          </button>
-          <button type="submit" className="btn btn-ai" disabled={!!busy || !testo.trim()}>
-            {busy === 'stima' ? <span className="spinner-inline" /> : <Sparkles size={16} />}
-            Stima
-          </button>
-        </div>
-      </form>
-    </div>
+    <Modal
+      as="form"
+      title="Cosa hai mangiato invece?"
+      onClose={onClose}
+      busy={!!busy}
+      onSubmit={salva}
+    >
+      <p className="modal-text">
+        {meal.slot_name ? `${meal.slot_name}: ` : ''}scrivilo come lo diresti — «una pizza
+        margherita», «panino al bar e una birra». Il modello stima calorie e valori
+        nutrizionali, e l'andamento li conta.
+      </p>
+      <input
+        ref={campo}
+        type="text"
+        className="eaten-dialog-input"
+        maxLength={500}
+        placeholder="una pizza margherita, un panino al bar…"
+        value={testo}
+        onChange={(e) => setTesto(e.target.value)}
+        disabled={busy}
+        aria-label="Cosa hai mangiato invece"
+      />
+      {/* «Niente» è una risposta, non un rinuncia: si salva come zero saputo, e
+          senza modello (niente scintille). «Non lo so» invece chiude e basta. */}
+      <div className="modal-actions eaten-dialog-actions">
+        <button type="button" className="btn btn-secondary" onClick={onClose} disabled={!!busy}>
+          Non lo so
+        </button>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={() => invia(true)}
+          disabled={!!busy}
+        >
+          {busy === 'niente' && <span className="spinner-inline" />}
+          Non ho mangiato niente
+        </button>
+        <button type="submit" className="btn btn-ai" disabled={!!busy || !testo.trim()}>
+          {busy === 'stima' ? <span className="spinner-inline" /> : <Sparkles size={16} />}
+          Stima
+        </button>
+      </div>
+    </Modal>
   );
 }

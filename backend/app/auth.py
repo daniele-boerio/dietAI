@@ -145,12 +145,25 @@ def _as_utc(value: datetime) -> datetime:
     return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
 
 
-def consume_refresh_token(db: Session, raw_token: str) -> RefreshToken:
+# Quanto a lungo un refresh token appena ruotato non conta come replay. Le richieste
+# di una pagina partono insieme e, scaduto l'access token, ricevono tutte 401: due
+# schede (o un client senza coda) presentano lo stesso cookie a pochi millisecondi
+# l'una dall'altra. Trattare la seconda come un furto revocava la famiglia e buttava
+# fuori l'utente ogni mezz'ora. Dentro la finestra la seconda richiesta non riceve
+# token nuovi — il browser ha già i cookie della prima — quindi a chi ha copiato il
+# cookie non dà niente.
+REUSE_GRACE = timedelta(seconds=30)
+
+
+def consume_refresh_token(db: Session, raw_token: str) -> RefreshToken | None:
     """Valida un refresh token e lo marca come usato (rotazione).
 
-    Se risulta già usato siamo davanti a un replay: qualcuno ha copiato il cookie.
-    Non possiamo sapere se a presentarlo sia la vittima o l'attaccante, quindi
-    revochiamo l'intera famiglia e obblighiamo entrambi a rifare il login.
+    Restituisce None se il token è stato ruotato da meno di `REUSE_GRACE`: la
+    sessione è viva, i cookie nuovi li ha già portati la richiesta che ha vinto.
+
+    Un riuso più tardi è un replay: qualcuno ha copiato il cookie. Non possiamo sapere
+    se a presentarlo sia la vittima o l'attaccante, quindi revochiamo l'intera famiglia
+    e obblighiamo entrambi a rifare il login.
     """
     invalid = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED, detail="Sessione non valida o scaduta"
@@ -165,23 +178,33 @@ def consume_refresh_token(db: Session, raw_token: str) -> RefreshToken:
     if not db_token or db_token.revoked_at is not None:
         raise invalid
 
-    if db_token.used_at is not None:
-        logger.warning(
-            "Riuso di un refresh token già ruotato (user_id=%s, family=%s): "
-            "revoco l'intera famiglia",
-            db_token.user_id,
-            db_token.family_id,
-        )
-        revoke_token_family(db, db_token.user_id, db_token.family_id)
-        db.commit()
-        raise invalid
-
     if _as_utc(db_token.expires_at) < datetime.now(timezone.utc):
         raise invalid
 
-    db_token.used_at = datetime.now(timezone.utc)
-    db.add(db_token)
-    return db_token
+    # Leggere `used_at` e poi scriverlo lasciava passare due richieste insieme, e
+    # nascevano due token figli: la UPDATE condizionata la vince una sola.
+    now = datetime.now(timezone.utc)
+    claimed = (
+        db.query(RefreshToken)
+        .filter(RefreshToken.id == db_token.id, RefreshToken.used_at.is_(None))
+        .update({"used_at": now}, synchronize_session=False)
+    )
+    db.refresh(db_token)
+    if claimed:
+        return db_token
+
+    if now - _as_utc(db_token.used_at) <= REUSE_GRACE:
+        return None
+
+    logger.warning(
+        "Riuso di un refresh token già ruotato (user_id=%s, family=%s): "
+        "revoco l'intera famiglia",
+        db_token.user_id,
+        db_token.family_id,
+    )
+    revoke_token_family(db, db_token.user_id, db_token.family_id)
+    db.commit()
+    raise invalid
 
 
 # --- Cookie ------------------------------------------------------------------

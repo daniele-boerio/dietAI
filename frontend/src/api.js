@@ -11,6 +11,25 @@ export const setSessionExpiredHandler = (fn) => {
 // stesso creerebbe un ciclo infinito.
 const NO_REFRESH_RETRY = ['/auth/login', '/auth/refresh', '/auth/logout'];
 
+// Il refresh in corso, condiviso. Scaduto l'access token, tutte le richieste partite
+// insieme da una pagina ricevono 401: se ognuna chiedeva il suo refresh, la seconda
+// presentava un cookie appena ruotato, il server lo prendeva per un furto e revocava
+// la sessione — e l'utente finiva al login ogni mezz'ora. Ora chi arriva dopo aspetta
+// lo stesso refresh.
+let refreshing = null;
+
+// 'ok' (cookie nuovi), 'expired' (il server ha rifiutato la sessione) o 'offline'
+// (rete giù, 502 durante un deploy): solo il secondo vuol dire tornare al login.
+function refreshSession() {
+  refreshing ??= fetch(`${BASE}/auth/refresh`, { method: 'POST', credentials: 'same-origin' })
+    .then((r) => (r.ok ? 'ok' : r.status === 401 || r.status === 403 ? 'expired' : 'offline'))
+    .catch(() => 'offline')
+    .finally(() => {
+      refreshing = null;
+    });
+  return refreshing;
+}
+
 async function raw(path, options = {}, allowRefresh = true) {
   const res = await fetch(`${BASE}${path}`, {
     // I cookie di sessione sono httpOnly: il browser li allega da solo, JS non li vede.
@@ -20,12 +39,10 @@ async function raw(path, options = {}, allowRefresh = true) {
 
   // L'access token dura 30 minuti, il refresh 90 giorni: senza questo rientro
   // l'utente verrebbe buttato fuori ogni mezz'ora pur avendo una sessione valida.
-  if (res.status === 401 && allowRefresh && !NO_REFRESH_RETRY.includes(path)) {
-    const refreshed = await fetch(`${BASE}/auth/refresh`, {
-      method: 'POST',
-      credentials: 'same-origin',
-    });
-    if (refreshed.ok) return raw(path, options, false); // un solo tentativo
+  if (res.status === 401 && !NO_REFRESH_RETRY.includes(path)) {
+    const esito = allowRefresh ? await refreshSession() : 'expired';
+    if (esito === 'ok') return raw(path, options, false); // un solo tentativo
+    if (esito === 'offline') throw new Error('Server non raggiungibile, riprova tra poco');
     onSessionExpired?.();
     throw new Error('Sessione scaduta');
   }

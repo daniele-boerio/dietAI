@@ -76,3 +76,18 @@ vuoto per «length» i token li ha consumati tutti, ed è proprio quella da cont
 scrive con una sessione propria (`usage.recorder`), perché chi chiama può avere in mano
 mezza settimana non committata; se la scrittura fallisce si logga e basta. Guardie in
 `tests/test_costo_ai.py`.
+
+**La sessione si rinnova una volta sola, anche se la chiedono in tanti.** L'access
+token dura 30 minuti, il refresh 90 giorni con rotazione: un refresh token già usato
+che torna indietro è un cookie copiato, e si revoca l'intera famiglia. Ma scaduto
+l'access token tutte le richieste partite insieme da una pagina ricevono 401, e prima
+ognuna chiedeva il suo refresh: la seconda presentava il cookie appena ruotato, il
+server la prendeva per un furto e l'utente finiva al login ogni mezz'ora. Ora:
+- `api.js` tiene un solo refresh in volo (`refreshSession`) e le altre richieste lo
+  aspettano; torna al login solo su 401/403, mentre un 502 durante un deploy dice
+  «server non raggiungibile» e lascia la sessione com'è;
+- `consume_refresh_token` marca il token con una UPDATE condizionata (una sola
+  richiesta vince) e per `REUSE_GRACE` (30 s) un riuso risponde 200 **senza** token
+  nuovi, così a chi avesse copiato il cookie non dà niente;
+- `/auth/refresh` rifiuta anche un account spento, come `get_current_user`.
+Guardie in `tests/test_auth_sessione.py` e `frontend/src/api.test.js`.

@@ -96,8 +96,14 @@ def refresh_session(request: Request, response: Response, db: Session = Depends(
         raise HTTPException(401, "Sessione assente")
 
     db_token = consume_refresh_token(db, raw)
+    if db_token is None:
+        # Ruotato un attimo fa da una richiesta parallela: i cookie nuovi sono già
+        # nel browser, il client ritenta con quelli.
+        return {"ok": True}
     user = db.get(User, db_token.user_id)
-    if not user:
+    # La sospensione revoca già le sessioni, ma un account riattivato o spento a mano
+    # nel DB non deve potersi rinnovare: è la stessa doppia guardia di get_current_user.
+    if not user or not user.is_active:
         raise HTTPException(401, "Sessione non valida")
 
     access = create_access_token({"user_id": user.id, "token_version": user.token_version})

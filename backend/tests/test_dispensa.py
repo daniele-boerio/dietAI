@@ -492,6 +492,13 @@ def test_cancellare_il_prezzo_rimette_quello_del_catalogo(client, settimana):
     assert riga["unit_price"] == pytest.approx(INGREDIENT_CATALOG["pasta"][1])
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason="Dopo «Ho fatto la spesa» le righe comprate escono dalla lista e il loro id "
+    "non esiste più: su Postgres è un 404. Passava solo perché SQLite riusava gli id "
+    "dopo la cancellazione totale, e il prezzo finiva su un'altra riga. Serve decidere "
+    "dove restano le righe già comprate (vedi docs/spesa.md).",
+)
 def test_il_prezzo_si_segna_anche_a_spesa_fatta(client, settimana):
     """Lo scontrino si guarda a casa: la spesa è chiusa, i prezzi no."""
     pasta = voce(client, "pasta")
@@ -647,3 +654,13 @@ def test_lo_stesso_ingrediente_in_due_unita_non_rompe_la_spesa(client, settimana
     # La scorta è una sola e tiene la prima riga, quella in grammi.
     assert scorta(client, "pasta")["quantity"] == pytest.approx(700)
     assert scorta(client, "pasta")["unit"] == "g"
+
+
+def test_ricalcolare_la_lista_non_cambia_gli_id(client, settimana):
+    """Prima la lista si cancellava e si riscriveva a ogni lettura: una spunta data dal
+    telefono mentre il computer la rileggeva finiva su un id che non c'era più."""
+    prima = {i["name"]: i["id"] for c in client.get("/api/shopping/current").json()["categories"] for i in c["items"]}
+    dopo = {i["name"]: i["id"] for c in client.get("/api/shopping/current").json()["categories"] for i in c["items"]}
+    assert prima == dopo
+    pasta = voce(client, "pasta")
+    assert client.put(f"/api/shopping/items/{pasta['id']}/check", json={"is_checked": True}).status_code == 200

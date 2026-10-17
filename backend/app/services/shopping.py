@@ -223,21 +223,24 @@ def rebuild_shopping_list(db: Session, user_id: int) -> ShoppingList:
             quantity, unit = to_base(item.quantity_available, item.unit or "unità")
             pantry[(item.ingredient_id, unit)] = pantry.get((item.ingredient_id, unit), 0) + quantity
 
-    # Le spunte già messe e le quantità prese si conservano tra un ricalcolo e l'altro:
-    # rigenerare una ricetta non deve far ripartire da capo chi sta già girando per il
-    # supermercato, né cancellargli il pacco da 400 g che ha appena segnato.
+    # La lista si aggiorna per differenza, non si cancella e si riscrive. Le spunte, le
+    # quantità prese e il prezzo scritto a mano stanno sulla riga e restano dove sono:
+    # rigenerare una ricetta non deve far ripartire da capo chi è già al supermercato.
+    # E gli id restano gli stessi: prima cambiavano a ogni lettura, e una spunta data
+    # dal telefono mentre il computer rileggeva la lista finiva in un 404.
     previous = {
         (i.ingredient_id, i.unit): i
         for i in db.query(ShoppingListItem).filter(ShoppingListItem.shopping_list_id == lst.id)
     }
-    checked = {key for key, i in previous.items() if i.is_checked}
-    bought = {key: i.bought_quantity for key, i in previous.items() if i.bought_quantity}
-    # E il prezzo scritto a mano è la cosa che meno di tutte si può rifare da soli:
-    # è una cifra letta su uno scaffale.
-    paid = {key: i.paid_price for key, i in previous.items() if i.paid_price is not None}
-    db.query(ShoppingListItem).filter(ShoppingListItem.shopping_list_id == lst.id).delete()
+    ingredienti = {
+        i.id: i
+        for i in db.query(Ingredient).filter(
+            Ingredient.id.in_({ingredient_id for ingredient_id, _ in totals})
+        )
+    } if totals else {}
 
     estimated_total = 0.0
+    servono: set[tuple[int, str]] = set()
     for (ingredient_id, unit), quantity in totals.items():
         if ingredient_id in base_ids:
             continue  # sempre in casa, non si compra
@@ -245,13 +248,16 @@ def rebuild_shopping_list(db: Session, user_id: int) -> ShoppingList:
         if net <= 0:
             continue  # la dispensa copre tutto
 
-        ingredient = db.get(Ingredient, ingredient_id)
+        chiave = (ingredient_id, unit)
+        servono.add(chiave)
+        riga = previous.get(chiave)
+        ingredient = ingredienti[ingredient_id]
         # Il costo segue quello che si porta a casa: se il pacco è più grande della
         # quantità che serve, il conto alla cassa è quello del pacco. A meno che il
         # prezzo l'utente non l'abbia scritto: quello vale com'è, anche se intanto la
         # quantità in lista è cambiata perché il piano è cambiato.
-        pagato = paid.get((ingredient_id, unit))
-        taken = bought.get((ingredient_id, unit)) or round(net, 2)
+        pagato = riga.paid_price if riga is not None else None
+        taken = (riga.bought_quantity if riga is not None else None) or round(net, 2)
         price = (
             pagato
             if pagato is not None
@@ -260,18 +266,24 @@ def rebuild_shopping_list(db: Session, user_id: int) -> ShoppingList:
         if price:
             estimated_total += price
 
-        db.add(
-            ShoppingListItem(
-                shopping_list_id=lst.id,
-                ingredient_id=ingredient_id,
-                total_quantity=round(net, 2),
-                unit=unit,
-                is_checked=(ingredient_id, unit) in checked,
-                bought_quantity=bought.get((ingredient_id, unit)),
-                paid_price=pagato,
-                estimated_price=price,
+        if riga is None:
+            db.add(
+                ShoppingListItem(
+                    shopping_list_id=lst.id,
+                    ingredient_id=ingredient_id,
+                    total_quantity=round(net, 2),
+                    unit=unit,
+                    is_checked=False,
+                    estimated_price=price,
+                )
             )
-        )
+        else:
+            riga.total_quantity = round(net, 2)
+            riga.estimated_price = price
+
+    for chiave, riga in previous.items():
+        if chiave not in servono:
+            db.delete(riga)
 
     lst.estimated_cost = round(estimated_total, 2) if estimated_total else None
     db.flush()

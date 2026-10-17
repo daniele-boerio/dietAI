@@ -61,6 +61,21 @@ protegga il numero dal seed, che gira a ogni avvio del container. Il prezzo si s
 anche a spesa fatta — lo scontrino si guarda a casa — e la lista espone `priced_items`
 perché il totale possa dire su cosa si regge invece di spacciarsi per un preventivo.
 
+**La lista si aggiorna per differenza, e gli id restano.** `rebuild_shopping_list`
+cancellava tutte le righe e le riscriveva a ogni lettura: gli id cambiavano a ogni GET,
+e una spunta data dal telefono mentre il computer rileggeva la lista finiva in un 404.
+Ora la riga che serve ancora si aggiorna (quantità e stima), quella nuova si aggiunge,
+quella che non serve più si toglie; spunta, quantità presa e prezzo stanno sulla riga
+e non vanno più ricopiati.
+
+⚠️ Aperto: **il prezzo «a spesa fatta» oggi non funziona.** Dopo «Ho fatto la spesa» le
+righe comprate escono dalla lista (la roba è in dispensa) e il loro id non esiste più:
+su Postgres segnarne il prezzo è un 404. Nei test passava solo perché SQLite riusava
+gli id dopo la cancellazione totale, e il prezzo finiva su un'altra riga. Per
+sistemarlo va deciso dove restano visibili le righe già comprate (e con quale segno,
+senza rimetterle in dispensa a ogni conferma): il test che lo descrive è segnato
+`xfail` in `tests/test_dispensa.py` finché non c'è.
+
 **Il reparto di un ingrediente lo decide chi fa la spesa.** `Ingredient.category`
 serve a girare il supermercato una volta sola, e il catalogo non può sapere che gli
 il seitan sta con la carne (`guess_category` non lo riconosce e finisce in

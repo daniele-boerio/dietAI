@@ -312,3 +312,28 @@ def test_lo_storico_si_puo_svuotare(client, meal_id, monkeypatch):
 
 def test_un_pasto_inesistente_da_404(client, meal_id):
     assert client.get("/api/chat/meals/999999/messages").status_code == 404
+
+
+def test_una_modifica_che_si_rompe_a_metà_non_lascia_niente(client, meal_id, monkeypatch, db):
+    """Un ingrediente il cui nome si svuota normalizzandolo è un ValueError a metà
+    dell'applicazione: la copia staccata e il titolo nuovo non devono restare."""
+    import json
+
+    from app.models import Recipe
+
+    ricette_prima = db.query(Recipe).count()
+    rotta = {**RICETTA_AGGIORNATA, "title": "Titolo che non deve restare"}
+    rotta["ingredients"] = [{"name": "fresco", "quantity": 10, "unit": "g"}]
+    use_chat(monkeypatch, "Fatto.\n[RECIPE_UPDATE]\n" + json.dumps(rotta))
+
+    res = client.post(f"/api/chat/meals/{meal_id}/messages", json={"content": "Cambia"})
+
+    assert res.status_code == 200, res.text
+    assert res.json()["recipe_updated"] is False
+    assert "Non sono riuscito" in res.json()["content"]
+    db.expire_all()
+    assert db.query(Recipe).count() == ricette_prima
+    assert db.query(Recipe).filter(Recipe.title == "Titolo che non deve restare").count() == 0
+    # La conversazione si salva comunque: domanda e risposta.
+    storia = client.get(f"/api/chat/meals/{meal_id}/messages").json()
+    assert [m["role"] for m in storia][-2:] == ["user", "assistant"]

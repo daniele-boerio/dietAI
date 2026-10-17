@@ -191,13 +191,15 @@ def send_message(
     messages = [{"role": m.role, "content": m.content} for m in reversed(history)]
     messages.append({"role": "user", "content": body.content})
 
-    db.add(MealChatMessage(planned_meal_id=meal_id, role="user", content=body.content))
-    db.flush()
-
     client = get_client(db, user, "chat")
+    # Niente transazione aperta durante la chiamata al modello, che può durare minuti:
+    # Postgres terrebbe la connessione "idle in transaction" e il pool si esaurirebbe
+    # con poche chat lente. Il messaggio dell'utente si scrive insieme alla risposta.
+    db.commit()
     # Budget largo: sui modelli che ragionano una parte se ne va in ragionamento
     # prima ancora che comincino a scrivere.
     answer = client.chat(system, messages, max_tokens=8000)
+    db.add(MealChatMessage(planned_meal_id=meal_id, role="user", content=body.content))
     if not frozen and _needs_marker_retry(answer, UPDATE_MARKER):
         answer = _retry_for_marker(client, system, messages, answer, UPDATE_MARKER, 8000)
 
@@ -232,7 +234,14 @@ def send_message(
                 logger.warning("Chat: modifica rifiutata (pasto %s): %s", meal_id, exc.detail)
                 visible += f"\n\n({exc.detail} La ricetta resta com'era.)"
             except ValueError:
-                logger.warning("Chat: [RECIPE_UPDATE] senza JSON valido (pasto %s)", meal_id)
+                # Non solo JSON assente: anche un ingrediente il cui nome si svuota
+                # normalizzandolo. In quel caso la copia staccata e metà modifica sono
+                # già nella sessione, e vanno buttate come nel ramo qui sotto.
+                logger.warning("Chat: [RECIPE_UPDATE] non applicabile (pasto %s)", meal_id)
+                db.rollback()
+                db.add(
+                    MealChatMessage(planned_meal_id=meal_id, role="user", content=body.content)
+                )
                 visible += "\n\n(Non sono riuscito ad applicare la modifica, riprova.)"
             except Exception:
                 # Come sopra: la ricetta resta com'era, ma la conversazione si salva.
@@ -425,13 +434,12 @@ def send_shopping_message(
     messages = [{"role": m.role, "content": m.content} for m in reversed(history)]
     messages.append({"role": "user", "content": body.content})
 
-    db.add(ShoppingChatMessage(week_plan_id=week_id, role="user", content=body.content))
-    db.flush()
-
     client = get_client(db, user, "chat")
+    db.commit()  # come nella chat del pasto: niente transazione aperta durante la chiamata
     # Budget più largo della chat sul pasto: qui una risposta può contenere più ricette
     # complete in una volta.
     answer = client.chat(system, messages, max_tokens=16000)
+    db.add(ShoppingChatMessage(week_plan_id=week_id, role="user", content=body.content))
     if _needs_marker_retry(answer, RECIPES_UPDATE_MARKER):
         answer = _retry_for_marker(
             client, system, messages, answer, RECIPES_UPDATE_MARKER, 16000
@@ -451,7 +459,12 @@ def send_shopping_message(
                 if rifiutate:
                     visible += "\n\n(Non applicate: " + "; ".join(rifiutate) + ")"
         except ValueError:
-            logger.warning("Chat spesa: [RECIPES_UPDATE] senza JSON valido (settimana %s)", week_id)
+            logger.warning("Chat spesa: [RECIPES_UPDATE] non applicabile (settimana %s)", week_id)
+            db.rollback()
+            db.add(
+                ShoppingChatMessage(week_plan_id=week_id, role="user", content=body.content)
+            )
+            changed = []
             visible += "\n\n(Non sono riuscito ad applicare le modifiche, riprova.)"
         except Exception:
             # Un JSON sintatticamente valido ma fatto in un modo imprevisto non deve

@@ -1579,6 +1579,9 @@ def _run_generation(
 ) -> dict:
     """La chiamata al modello e la scrittura del piano: la parte che dura minuti."""
     try:
+        # Nel thread le letture qui sopra hanno aperto una transazione: chiuderla prima
+        # della chiamata, o la connessione resta "idle in transaction" per minuti.
+        db.commit()
         data = client.generate_json(
             prompts.WEEK_PLAN_SYSTEM,
             prompt,

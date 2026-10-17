@@ -15,6 +15,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from fastapi import HTTPException
 from sqlalchemy import or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..models import (
@@ -296,12 +297,9 @@ def ensure_week_structure(db: Session, week: WeekPlan, slots: list[MealSlot]) ->
     db.flush()
 
 
-def get_or_create_week(db: Session, user_id: int, week_start: date) -> WeekPlan:
-    diet = require_active_diet(db, user_id)
-    slots = meal_slots_of(db, diet.id)
-    if not slots:
-        raise HTTPException(400, "La dieta attiva non ha pasti configurati.")
-
+def _week_with_structure(
+    db: Session, user_id: int, week_start: date, slots: list[MealSlot]
+) -> tuple[WeekPlan, bool]:
     week = (
         db.query(WeekPlan)
         .filter(WeekPlan.user_id == user_id, WeekPlan.week_start_date == week_start)
@@ -316,8 +314,31 @@ def get_or_create_week(db: Session, user_id: int, week_start: date) -> WeekPlan:
         )
         db.add(week)
         db.flush()
-
     ensure_week_structure(db, week, slots)
+    return week, created
+
+
+def get_or_create_week(db: Session, user_id: int, week_start: date) -> WeekPlan:
+    diet = require_active_diet(db, user_id)
+    slots = meal_slots_of(db, diet.id)
+    if not slots:
+        raise HTTPException(400, "La dieta attiva non ha pasti configurati.")
+
+    # Due richieste che aprono insieme una settimana nuova (il lunedì mattina, la
+    # dashboard e la spesa in parallelo) la creavano tutte e due, e la seconda finiva
+    # in un 500 su `uq_week_plan_user_week` o `uq_planned_meal`. Il vincolo resta
+    # l'arbitro: chi perde annulla solo il suo tentativo (SAVEPOINT, non tutta la
+    # transazione del chiamante) e rilegge quello che ha scritto l'altra.
+    for tentativo in range(2):
+        try:
+            with db.begin_nested():
+                week, created = _week_with_structure(db, user_id, week_start, slots)
+            break
+        except IntegrityError:
+            if tentativo:
+                raise
+            logger.info("Settimana %s creata in parallelo: rileggo", week_start)
+
     if created:
         apply_recurring_meals(db, user_id, week)
     db.commit()

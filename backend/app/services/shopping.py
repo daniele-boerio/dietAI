@@ -20,6 +20,7 @@ stati cucinati, quindi comprarli di nuovo sarebbe comprare due volte la stessa c
 from datetime import date, datetime, timedelta, timezone
 
 from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..models import (
@@ -76,10 +77,17 @@ def get_or_create_list(db: Session, week: WeekPlan) -> ShoppingList:
     lista contiene lo decidono le ricette da oggi in avanti, non quella settimana.
     """
     lst = db.query(ShoppingList).filter(ShoppingList.week_plan_id == week.id).first()
-    if not lst:
-        lst = ShoppingList(week_plan_id=week.id)
-        db.add(lst)
-        db.flush()
+    if lst:
+        return lst
+    # Come per la settimana: due richieste insieme la creerebbero due volte, e il
+    # vincolo unico su `week_plan_id` darebbe un 500 alla seconda.
+    try:
+        with db.begin_nested():
+            lst = ShoppingList(week_plan_id=week.id)
+            db.add(lst)
+            db.flush()
+    except IntegrityError:
+        lst = db.query(ShoppingList).filter(ShoppingList.week_plan_id == week.id).one()
     return lst
 
 

@@ -483,13 +483,15 @@ def get_or_create_ingredient(db: Session, name: str) -> Ingredient:
     from .macros import apply_catalog_composition
 
     apply_catalog_composition(ingredient)
-    db.add(ingredient)
     try:
-        db.flush()
+        with db.begin_nested():
+            db.add(ingredient)
+            db.flush()
     except IntegrityError:
         # Race con un'altra richiesta che ha creato lo stesso ingrediente: il vincolo
-        # UNIQUE sul nome è l'arbitro, noi ci riprendiamo la riga sua.
-        db.rollback()
+        # UNIQUE sul nome è l'arbitro, noi ci riprendiamo la riga sua. Si annulla solo
+        # questo inserimento (SAVEPOINT): il `db.rollback()` di prima buttava via
+        # anche le ricette già scritte della settimana che si stava generando.
         return db.query(Ingredient).filter(Ingredient.name == clean).one()
     return ingredient
 

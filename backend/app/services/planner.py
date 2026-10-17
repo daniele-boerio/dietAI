@@ -422,6 +422,27 @@ def clear_generation_progress(db: Session, week: WeekPlan) -> None:
     )
 
 
+def store_generation_outcome(db: Session, week: WeekPlan, outcome: dict) -> None:
+    """Lascia sulla settimana il resoconto della generazione appena finita.
+
+    In background il resoconto (`filled`, `missing`, `excluded`) lo restituiva
+    `_apply_generated_week` a un thread che lo buttava via, e la pagina annunciava
+    «Settimana pronta ✓» anche con cinque caselle vuote su nove. Sta nella colonna del
+    diario come l'errore: a generazione ferma è libera.
+    """
+    week.generation_progress = {"result": outcome}
+    db.query(WeekPlan).filter(WeekPlan.id == week.id).update(
+        {WeekPlan.generation_progress: {"result": outcome}}, synchronize_session=False
+    )
+
+
+def generation_outcome(week: WeekPlan) -> dict | None:
+    """Com'è andata l'ultima generazione riuscita: quante caselle, quante no e perché."""
+    if is_generating(week):
+        return None
+    return (week.generation_progress or {}).get("result")
+
+
 def generation_error(week: WeekPlan) -> str | None:
     """Perché l'ultima generazione non è arrivata in fondo, se è andata male.
 
@@ -1188,6 +1209,7 @@ def serialize_week(db: Session, week: WeekPlan) -> dict:
         # E qui trova com'è finita, se è finita male: la risposta alla POST che
         # l'avrebbe detto è quasi sempre già stata buttata via da un proxy.
         "generation_error": generation_error(week),
+        "generation_outcome": generation_outcome(week),
         "frequencies": frequency_report(db, week) if week.id else [],
         "meals_total": total_slots,
         "meals_filled": filled,
@@ -1501,13 +1523,17 @@ def generate_week(
 
     if background:
         ids = [(d.id, m.id, s.id) for d, m, s in prompt_rows]
+        week_id = week.id
         _in_background(
             db.get_bind(),
             f"genera-settimana-{week.id}",
-            lambda s: _run_generation(
+            on_failure=lambda s, exc: record_generation_failure(
+                s, s.get(WeekPlan, week_id), _failure_reason(exc)
+            ),
+            work=lambda s: _run_generation(
                 s,
                 s.get(User, user.id),
-                s.get(WeekPlan, week.id),
+                s.get(WeekPlan, week_id),
                 [(s.get(DayPlan, d), s.get(PlannedMeal, m), s.get(MealSlot, sl)) for d, m, sl in ids],
                 client=client,
                 prompt=prompt,
@@ -1534,7 +1560,7 @@ GENERATION_IN_BACKGROUND = True
 _THREADS: list[threading.Thread] = []
 
 
-def _in_background(bind, name: str, work) -> threading.Thread:
+def _in_background(bind, name: str, work, on_failure=None) -> threading.Thread:
     """Fa girare `work(sessione)` in un thread, con una sessione tutta sua.
 
     **La generazione non vive dentro la richiesta HTTP.** Dura minuti, e davanti c'è
@@ -1553,8 +1579,18 @@ def _in_background(bind, name: str, work) -> threading.Thread:
         session = sessionmaker(bind=bind)()
         try:
             work(session)
-        except Exception:  # noqa: BLE001 — già loggato e registrato da _run_generation
-            pass
+        except Exception as exc:  # noqa: BLE001
+            if getattr(exc, "registrata", False):
+                return  # già loggata e scritta sulla settimana da _run_generation
+            # Fallita prima di arrivarci (una riga sparita, il database giù) o mentre
+            # registrava il fallimento: prima finiva in un `pass`, senza una riga di
+            # log, e la settimana restava "in generazione" per un quarto d'ora.
+            logger.exception("Generazione in background %s fallita", name)
+            if on_failure is not None:
+                try:
+                    on_failure(session, exc)
+                except Exception:  # noqa: BLE001
+                    logger.exception("Non riesco a segnare il fallimento di %s", name)
         finally:
             session.close()
 
@@ -1603,6 +1639,7 @@ def _run_generation(
         # Sblocca la settimana — altrimenti resta ferma fino al timeout — e ricorda
         # perché, per chi la sta guardando dal polling.
         record_generation_failure(db, week, _failure_reason(exc))
+        exc.registrata = True
         raise
 
 
@@ -1687,7 +1724,13 @@ def _apply_generated_week(
                 filled += 1
 
     week.generation_started_at = None
-    clear_generation_progress(db, week)
+    esito = {"filled": filled, "missing": len(index), "excluded": excluded}
+    # Il resoconto resta solo se c'è qualcosa da dire: una settimana piena è «pronta»,
+    # e il diario di questa generazione non deve sopravviverle.
+    if esito["missing"]:
+        store_generation_outcome(db, week, esito)
+    else:
+        clear_generation_progress(db, week)
 
     if filled == 0:
         # Niente commit: a rimettere in ordine la settimana — sbloccarla e segnare
@@ -1710,12 +1753,7 @@ def _apply_generated_week(
     rebuild_shopping_list(db, user.id)
     db.commit()
 
-    return {
-        "filled": filled,
-        "missing": len(index),
-        "excluded": excluded,
-        "notes": data.get("ingredient_reuse_notes"),
-    }
+    return {**esito, "notes": data.get("ingredient_reuse_notes")}
 
 
 def _single_meal_frequencies(

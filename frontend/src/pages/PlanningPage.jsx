@@ -61,6 +61,21 @@ function etichettaSettimana(offset) {
 // stato (e segnare com'è andata), avanti quanto si vuole pianificare — e si modifica
 // sempre, passato compreso: quello che è stato comprato sta in dispensa, e la
 // dispensa la corregge chi apre il frigo.
+// Il messaggio di fine generazione. «Settimana pronta ✓» solo se lo è davvero: con
+// caselle rimaste vuote (il modello ne ha saltate, o conteneva un alimento escluso) lo
+// si dice, invece di farle scoprire scorrendo la griglia.
+function esitoGenerazione(esito) {
+  const { filled = 0, missing = 0, excluded = [] } = esito || {};
+  if (!missing) return ['Settimana pronta ✓'];
+  const scartati = excluded.length
+    ? ` (${excluded.length} scartati perché contenevano un alimento escluso)`
+    : '';
+  return [
+    `Generati ${filled} pasti, ${missing} rimasti vuoti${scartati}: rigenera quelli`,
+    'error',
+  ];
+}
+
 export default function PlanningPage() {
   const { addToast } = useApp();
   const navigate = useNavigate();
@@ -85,7 +100,9 @@ export default function PlanningPage() {
   const [daEliminare, setDaEliminare] = useState(null);
   const [eliminando, setEliminando] = useState(false);
   // Serve a distinguere "non sta generando" da "ha appena finito", per il messaggio.
-  const wasGenerating = useRef(false);
+  // Tiene l'id della settimana che generava: con un booleano, passare a un'altra
+  // settimana durante la generazione annunciava «Settimana pronta ✓» a vuoto.
+  const wasGenerating = useRef(null);
   // La home ha un pulsante «Genera 6 pasti» che porta qui: la scelta di cosa
   // generare si fa in questa dialog e da nessun'altra parte, perché è la schermata
   // dove si vede cosa si sta per pagare. Arrivarci e trovare la pagina ferma
@@ -135,12 +152,22 @@ export default function PlanningPage() {
     });
   };
 
+  // La settimana che l'utente sta guardando adesso. Le risposte arrivano quando
+  // vogliono: premere la freccia prima che la settimana di prima abbia risposto
+  // lasciava la griglia di A sotto il titolo di B, e i pulsanti agivano sui pasti di A.
+  const settimanaVista = useRef(lunediIso);
+  settimanaVista.current = lunediIso;
+  const mostra = useCallback((data) => {
+    if (data?.week_start_date && data.week_start_date !== settimanaVista.current) return;
+    setWeek(data);
+  }, []);
+
   const load = useCallback(
     async ({ silent = false } = {}) => {
       if (!silent) setLoading(true);
       try {
         const data = await api.getWeekByDate(lunediIso);
-        setWeek(data);
+        mostra(data);
         setError(null);
         return data;
       } catch (e) {
@@ -154,7 +181,7 @@ export default function PlanningPage() {
         if (!silent) setLoading(false);
       }
     },
-    [lunediIso, addToast]
+    [lunediIso, addToast, mostra]
   );
 
   // Tornando sulla settimana corrente si rimette l'indirizzo corto: è quello che sta
@@ -230,36 +257,29 @@ export default function PlanningPage() {
   // l'abbiamo scoperto.
   useEffect(() => {
     if (!week?.is_generating) {
-      if (wasGenerating.current) {
-        wasGenerating.current = false;
-        if (week?.generation_error) addToast(week.generation_error, 'error');
-        else addToast('Settimana pronta ✓');
+      if (week && wasGenerating.current === week.id) {
+        wasGenerating.current = null;
+        if (week.generation_error) addToast(week.generation_error, 'error');
+        else addToast(...esitoGenerazione(week.generation_outcome));
       }
       return;
     }
-    wasGenerating.current = true;
+    wasGenerating.current = week.id;
     const timer = setInterval(() => load({ silent: true }), 4000);
     return () => clearInterval(timer);
-  }, [week?.is_generating, week?.generation_error, load, addToast]);
+  }, [week, load, addToast]);
 
   const generate = async (selezione) => {
     setGenerating(true);
     setDialogo(null);
     try {
       const data = await api.generateWeek(week.id, selezione);
-      setWeek(data);
+      mostra(data);
       // Di norma il server risponde subito (202) e il lavoro va avanti per conto suo:
       // la settimana arriva con `is_generating` acceso, il polling qui sopra la segue
       // e l'esito lo annuncia lui. Il resoconto con i conti c'è solo quando il server
       // ha aspettato il modello — un'istanza configurata in primo piano.
-      if (!data.is_generating) {
-        const { filled, missing } = data.generation || {};
-        addToast(
-          missing
-            ? `Generati ${filled} pasti (${missing} non riusciti, riprova)`
-            : `${filled} ricette pronte ✓`
-        );
-      }
+      if (!data.is_generating) addToast(...esitoGenerazione(data.generation));
     } catch (e) {
       // La richiesta può morire molto prima della generazione: dura minuti, e davanti
       // c'è un proxy che chiude (nginx a 300s, Cloudflare a 100s). Un errore qui non
@@ -347,7 +367,7 @@ export default function PlanningPage() {
   const toggleDaySkip = async (day) => {
     setBusyDayId(day.id);
     try {
-      setWeek(await api.setDaySkipped(day.id, !day.is_skipped));
+      mostra(await api.setDaySkipped(day.id, !day.is_skipped));
       addToast(
         day.is_skipped
           ? `${day.day_name} torna in programma ✓`

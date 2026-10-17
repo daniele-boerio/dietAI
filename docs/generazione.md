@@ -137,6 +137,18 @@ parsabile ma di forma sbagliata sollevava fuori di lì e lasciava la settimana f
 "sto generando" per un quarto d'ora), e il fallimento **si logga** — è l'unico posto
 dove quel messaggio arriva a qualcuno che possa leggerlo.
 
+Lo stesso vale per una generazione riuscita **a metà**. In background il resoconto
+(`filled`, `missing`, `excluded`) lo restituiva `_apply_generated_week` a un thread che
+lo buttava via, e la pagina diceva «Settimana pronta ✓» con cinque caselle vuote su
+nove. Ora, se qualcosa manca, `store_generation_outcome` lo lascia nella colonna del
+diario e `serialize_week` lo espone come `generation_outcome`: il toast dice quanti
+pasti sono rimasti vuoti e quanti sono stati scartati per gli esclusi. E `_in_background`
+non ingoia più niente: un fallimento prima di arrivare a `_run_generation` (una riga
+sparita, il database giù) o mentre si registrava l'errore finiva in un `pass` senza log,
+con la settimana "in generazione" per un quarto d'ora; ora si logga e si segna
+(`on_failure`). Nella pagina, l'annuncio è legato alla settimana che generava, e le
+risposte di una settimana da cui si è già usciti non sovrascrivono quella a schermo.
+
 **La generazione si può guardare mentre succede.** Dura minuti e si paga: una
 schermata ferma non permette di distinguere un modello che ragiona da uno piantato.
 `ai_client` accetta un `on_progress(kind, delta)` che riceve i pezzi già in streaming

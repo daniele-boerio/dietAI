@@ -28,7 +28,9 @@ def lavori(monkeypatch, client, diet):
 
     in_coda = []
     monkeypatch.setattr(
-        planner, "_in_background", lambda bind, name, work: in_coda.append((bind, work))
+        planner,
+        "_in_background",
+        lambda bind, name, work, on_failure=None: in_coda.append((bind, work)),
     )
     return in_coda
 
@@ -126,3 +128,22 @@ def test_un_eccezione_nel_thread_vero_non_esce(tmp_path):
     thread.join(timeout=5)
     assert not thread.is_alive()
     assert WeekPlan  # il modulo resta importabile: nessun effetto collaterale
+
+
+def test_un_fallimento_prima_di_cominciare_si_logga_e_si_segna(tmp_path, caplog):
+    """Prima finiva in un `pass`: nessuna riga di log e la settimana "in generazione"
+    per un quarto d'ora."""
+    from sqlalchemy import create_engine
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'vuoto.db'}")
+    segnati = []
+
+    def lavoro(session):
+        raise RuntimeError("riga sparita")
+
+    planner._in_background(
+        engine, "prova", lavoro, on_failure=lambda s, exc: segnati.append(str(exc))
+    ).join(timeout=5)
+
+    assert segnati == ["riga sparita"]
+    assert "Generazione in background prova fallita" in caplog.text

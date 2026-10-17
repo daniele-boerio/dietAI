@@ -112,3 +112,15 @@ def test_le_glosse_che_cambiano_l_alimento_restano_nel_nome():
     assert normalize_name("latte (senza lattosio)") == "latte senza lattosio"
     # Le altre glosse continuano a sparire.
     assert normalize_name("pasta corta (penne)") == "pasta"
+
+
+def test_la_settimana_ricorda_quante_caselle_sono_rimaste_vuote(client, diet, fake_ai):
+    """In background il resoconto si perdeva e la pagina diceva «pronta» a vuoto."""
+    _escludi(client, "zucchine")
+    week = client.get("/api/planning/weeks/current").json()
+    client.post(f"/api/planning/weeks/{week['id']}/generate")
+
+    esito = client.get("/api/planning/weeks/current").json()["generation_outcome"]
+    assert esito["filled"] == DAYS
+    assert esito["missing"] == DAYS * 2
+    assert len(esito["excluded"]) == DAYS * 2

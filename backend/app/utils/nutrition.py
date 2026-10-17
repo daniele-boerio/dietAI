@@ -193,6 +193,24 @@ def compute_plan(
     if goal not in GOALS:
         raise ValueError(f"Obiettivo non valido: {goal!r}")
 
+    altezza_m = height_cm / 100
+    bmi = weight_kg / altezza_m**2
+    # Un calcolo automatico non deve aiutare a restringere chi non deve: sotto il
+    # normopeso «dimagrire» può alimentare un disturbo alimentare, e sotto i 18 anni
+    # la formula non è validata e un deficit va deciso da un medico. Il questionario
+    # lo dice invece di eseguire.
+    if goal == "dimagrire" and bmi < 18.5:
+        raise ValueError(
+            f"Con questi dati il BMI è {bmi:.1f}, già sotto il normopeso: non calcolo "
+            "una dieta per dimagrire. Scegli «mantenere» e, se il peso ti preoccupa, "
+            "parlane con un medico o un nutrizionista."
+        )
+    if goal == "dimagrire" and age < 18:
+        raise ValueError(
+            "Sotto i 18 anni un deficit calorico va deciso con un pediatra o un "
+            "nutrizionista: scegli «mantenere»."
+        )
+
     bmr = basal_metabolic_rate(sex, age, height_cm, weight_kg)
     tdee = bmr * ACTIVITY_LEVELS[activity][0]
     target = tdee * (1 + GOALS[goal][0])
@@ -201,8 +219,12 @@ def compute_plan(
     # sicurezza: sono i due modi in cui un calcolo automatico può fare danno.
     calories = int(round(max(target, bmr, _MIN_CALORIES[sex])))
 
+    # Con l'obesità i grammi per chilo si contano sul peso a BMI 25, non su quello
+    # totale: 2 g/kg su 150 kg sono quasi 300 g al giorno, un carico eccessivo per un
+    # rene che nessuno ha controllato.
+    peso_di_riferimento = min(weight_kg, 25 * altezza_m**2) if bmi >= 30 else weight_kg
     protein_g = round(min(
-        _PROTEIN_PER_KG[goal] * weight_kg,
+        _PROTEIN_PER_KG[goal] * peso_di_riferimento,
         calories * _MAX_PROTEIN_SHARE / KCAL_PER_G["protein_g"],
     ), 1)
     fat_g = round(calories * _FAT_SHARE / KCAL_PER_G["fat_g"], 1)
@@ -234,6 +256,7 @@ def compute_plan(
     )
 
     return {
+        "bmi": round(bmi, 1),
         "bmr": int(round(bmr)),
         "tdee": int(round(tdee)),
         "daily_calories": calories,

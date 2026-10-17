@@ -273,3 +273,42 @@ def test_i_totali_sbloccati_arrivano_fino_ai_pasti(client):
 def test_un_pasto_inventato_dal_client_e_un_400(client):
     res = client.post("/api/diet/questionnaire", json={**RISPOSTE, "meals": ["brunch"]})
     assert res.status_code == 400
+
+
+def test_sotto_il_normopeso_non_si_calcola_una_dieta_per_dimagrire(client):
+    res = client.post(
+        "/api/diet/questionnaire/preview",
+        json={**_BASE_SOTTOPESO, "goal": "dimagrire"},
+    )
+    assert res.status_code == 400
+    assert "BMI" in res.json()["detail"]
+    # Mantenere invece sì: la persona esiste, e mangiare le serve.
+    assert client.post(
+        "/api/diet/questionnaire/preview", json={**_BASE_SOTTOPESO, "goal": "mantenere"}
+    ).status_code == 200
+
+
+def test_un_minorenne_non_riceve_un_deficit(client):
+    res = client.post(
+        "/api/diet/questionnaire/preview",
+        json={**_BASE_SOTTOPESO, "weight_kg": 60, "age": 16, "goal": "dimagrire"},
+    )
+    assert res.status_code == 400
+
+
+def test_con_l_obesita_le_proteine_si_contano_sul_peso_di_riferimento():
+    from app.utils.nutrition import compute_plan
+
+    piano = compute_plan(
+        sex="uomo", age=40, height_cm=180, weight_kg=150,
+        activity="sedentario", goal="dimagrire",
+    )
+    # 2 g/kg sul peso a BMI 25 (81 kg), non sui 150 kg.
+    assert piano["protein_g"] <= 2 * 25 * 1.8**2 + 0.1
+    assert piano["bmi"] == 46.3
+
+
+_BASE_SOTTOPESO = {
+    "sex": "donna", "age": 25, "height_cm": 170, "weight_kg": 45,
+    "activity": "sedentario", "goal": "mantenere", "meals_count": 4,
+}

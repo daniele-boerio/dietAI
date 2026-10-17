@@ -151,7 +151,8 @@ paragrafo nel documento, scrivendo anche cosa non andava con la versione di prim
 **Dieta** (`docs/dieta.md`)
 - Il questionario produce una `DietPlan` identica alle altre; il conto lo fa
   `utils/nutrition.py`, mai il modello, con i pavimenti (metabolismo basale, minimo per
-  sesso). `/questionnaire/preview` calcola senza salvare.
+  sesso); «dimagrire» si rifiuta sotto BMI 18,5 e sotto i 18 anni, e con BMI ≥ 30 le
+  proteine si contano sul peso a BMI 25. `/questionnaire/preview` calcola senza salvare.
 - I pasti si dividono con l'aritmetica di `lib/macros.js` (resto sulla quota più
   grande): la somma è esattamente il totale.
 - Col lucchetto chiuso il totale del giorno è invariante e le modifiche si

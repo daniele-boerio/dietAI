@@ -13,7 +13,11 @@ carboidrati per differenza), non il modello: è gratis, istantaneo, riproducibil
 verificabile, mentre chiedere gli stessi numeri a un modello costerebbe una chiamata e
 darebbe risposte diverse a parità di risposte. Due pavimenti che non si tolgono: non
 si scende mai sotto il metabolismo basale né sotto il minimo per sesso, perché un
-calcolo automatico che sbaglia in difetto fa danno. Le risposte restano in
+calcolo automatico che sbaglia in difetto fa danno. E due rifiuti: «dimagrire» non si
+calcola sotto BMI 18,5 né sotto i 18 anni (un deficit lì può alimentare un disturbo
+alimentare o va deciso da un medico, e la formula sotto i 18 non è validata), e con BMI
+≥ 30 le proteine si contano sul peso a BMI 25 — 2 g/kg su 150 kg erano quasi 300 g al
+giorno. Guardie in `tests/test_questionario.py`. Le risposte restano in
 `parsed_data["profile"]` (esposto come `profile` da `_serialize_diet`): il peso
 cambia, e riaprire il questionario già compilato deve costare tre secondi.
 

@@ -191,6 +191,10 @@ def meal_payload(
         titolo = meal.deviation_notes
     else:
         return None
+    if valori.get("calories") is None:
+        # Senza calorie non è un pasto consumato con dei numeri, è un buco: mandarlo
+        # come 0 kcal faceva vedere a healthAI una giornata a digiuno.
+        return None
 
     payload = {
         "date": day.date.isoformat(),
@@ -236,13 +240,20 @@ def desired_payloads(
     )
     out: dict[int, dict | None] = {}
     for day, meal, slot in rows:
-        recipe = db.get(Recipe, meal.recipe_id) if meal.recipe_id else None
-        valori = None
-        # Il conto sugli ingredienti serve solo a chi parte: un pasto non consumato
-        # non costa né una query né, tanto meno, una chiamata al modello.
-        if recipe is not None and recipe.is_custom and meal.is_followed is True and not meal.is_skipped:
-            valori = _valori_ricetta(db, recipe, impara)
-        out[meal.id] = meal_payload(day, meal, slot, recipe, valori)
+        try:
+            recipe = db.get(Recipe, meal.recipe_id) if meal.recipe_id else None
+            valori = None
+            # Il conto sugli ingredienti serve solo a chi parte: un pasto non consumato
+            # non costa né una query né, tanto meno, una chiamata al modello.
+            if recipe is not None and recipe.is_custom and meal.is_followed is True and not meal.is_skipped:
+                valori = _valori_ricetta(db, recipe, impara)
+            out[meal.id] = meal_payload(day, meal, slot, recipe, valori)
+        except Exception:  # noqa: BLE001
+            # Un pasto con un dato storto (una stima con "circa 400" al posto di un
+            # numero) faceva fallire il giro intero, ogni minuto, e a healthAI non
+            # arrivava più niente. Si salta lui solo — healthAI tiene quello che ha —
+            # e il log dice quale.
+            logger.exception("healthAI: pasto %s non preparabile, lo salto", meal.id)
     return out
 
 
@@ -376,12 +387,19 @@ def sync(
     desiderati = desired_payloads(db, admin.id, oggi, giorni or config.HEALTHAI_DAYS)
     righe = {r.meal_id: r for r in db.query(HealthSync).filter(HealthSync.user_id == admin.id)}
 
+    # Quali dei pasti già mandati e ora fuori finestra esistono ancora: una query sola,
+    # non una per riga a ogni minuto (le righe crescono con lo storico).
+    fuori = set(righe) - set(desiderati)
+    ancora = {
+        mid for (mid,) in db.query(PlannedMeal.id).filter(PlannedMeal.id.in_(fuori))
+    } if fuori else set()
+
     da_guardare = set(desiderati) | set(righe)
     for meal_id in sorted(da_guardare):
         row = righe.get(meal_id)
         if meal_id in desiderati:
             payload = desiderati[meal_id]
-        elif db.get(PlannedMeal, meal_id) is not None:
+        elif meal_id in ancora:
             # C'è ancora, ma è uscito dalla finestra: quello che healthAI ha resta lì.
             continue
         else:
@@ -402,6 +420,10 @@ def sync(
             continue
 
         metodo = "DELETE" if payload is None else "POST"
+        # Quello che è già deciso si salva prima di parlare con healthAI: la chiamata
+        # può durare secondi e non deve tenere aperta una transazione, e un errore a
+        # metà giro non deve far perdere gli esiti dei pasti già mandati.
+        db.commit()
         esito = send(metodo, meal_id, payload)
         if row is None:
             row = HealthSync(meal_id=meal_id, user_id=admin.id, attempts=0)

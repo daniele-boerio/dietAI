@@ -521,3 +521,33 @@ def test_il_token_non_finisce_nei_log(client, db, settimana, caplog):
         g = healthai.sync(db, oggi=planner.today(), giorni=30, ora=ORA)
     assert g.falliti == 1
     assert "token-di-prova" not in caplog.text
+
+
+def test_un_pasto_storto_non_ferma_gli_altri(client, db, settimana, posta):
+    """Una stima con un valore non numerico faceva fallire il giro intero, ogni minuto."""
+    from app.models import PlannedMeal
+
+    colazione, pranzo = pasto(settimana, 0, "Colazione"), pasto(settimana, 0, "Pranzo")
+    segui(client, colazione["id"], seguito=False)
+    segui(client, pranzo["id"])
+    storto = db.get(PlannedMeal, colazione["id"])
+    storto.eaten_nutrition = {"calories": "circa 400", "protein_g": 20}
+    db.commit()
+
+    giro(db, posta)
+
+    assert posta.metodi() == [("POST", pranzo["id"])]
+
+
+def test_una_stima_senza_calorie_non_parte_come_zero(client, db, settimana, posta):
+    from app.models import PlannedMeal
+
+    cena = pasto(settimana, 0, "Cena")
+    segui(client, cena["id"], seguito=False)
+    meal = db.get(PlannedMeal, cena["id"])
+    meal.eaten_nutrition = {"protein_g": 20}
+    db.commit()
+
+    giro(db, posta)
+
+    assert posta.chiamate == []

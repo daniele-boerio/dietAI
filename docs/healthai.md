@@ -86,3 +86,12 @@ distinzione che hanno in DietAI (vedi `docs/macro.md`): `0` = stimato, non ce n'
 
 Guardie in `tests/test_healthai.py`: il payload, ogni transizione, l'ultima azione che
 vince, le attese, il 401 e il 422 non ritentati, il token che non finisce nei log.
+
+**Un pasto storto non ferma il giro, e un pasto senza calorie non parte.** Il giro
+preparava tutti i payload della finestra in un colpo: una stima con «circa 400» al posto
+di un numero faceva fallire `float()` e con lei l'intero giro, ogni minuto, e a healthAI
+non arrivava più niente. Ora `desired_payloads` salta il pasto che non riesce a preparare
+(lo dice nel log, con l'id) e lascia a healthAI quello che ha. Una stima senza calorie è
+un buco, non un pasto a 0 kcal: `meal_payload` non la manda. E il giro committa prima di
+ogni chiamata HTTP — niente transazione aperta mentre si aspetta healthAI, e un errore a
+metà non fa perdere gli esiti già ottenuti.

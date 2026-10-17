@@ -76,32 +76,77 @@ def _serialize_diet(db: Session, diet: DietPlan) -> dict:
     }
 
 
-def _replace_meals(db: Session, diet: DietPlan, meals: list[dict]) -> None:
-    """Riscrive i pasti della dieta.
+def _slot_fields(index: int, meal: dict) -> dict:
+    return {
+        "name": (meal.get("name") or f"Pasto {index + 1}").strip()[:100],
+        "order_index": index,
+        "target_calories": int(meal.get("calories") or 0),
+        "target_protein_g": float(meal.get("protein_g") or 0),
+        "target_carbs_g": float(meal.get("carbs_g") or 0),
+        "target_fat_g": float(meal.get("fat_g") or 0),
+        "notes": (meal.get("notes") or None),
+        "auto_generate": bool(meal.get("auto_generate", True)),
+        "servings": max(1, min(8, int(meal.get("servings") or 1))),
+        "batch_days": max(1, min(4, int(meal.get("batch_days") or 1))),
+    }
 
-    Cancellare e ricreare (invece di aggiornare) fa cascatare via i PlannedMeal che
-    puntavano a pasti non più esistenti: la griglia settimanale si ricostruisce da
-    sola alla lettura successiva.
+
+def _replace_meals(db: Session, diet: DietPlan, meals: list[dict]) -> None:
+    """Scrive i pasti di una dieta **appena creata** (PDF, questionario, a mano).
+
+    Una dieta nuova non ha caselle attaccate: quelle delle settimane le riporta sui
+    suoi pasti `realign_to_diet`. Per correggere la dieta attiva c'è
+    `update_meals_in_place`, perché cancellare i suoi pasti porterebbe via in
+    CASCADE tutte le caselle del piano, passate comprese.
     """
     db.query(MealSlot).filter(MealSlot.diet_plan_id == diet.id).delete()
     db.flush()
 
     for index, meal in enumerate(sorted(meals, key=lambda m: m.get("order", 0))):
-        db.add(
-            MealSlot(
-                diet_plan_id=diet.id,
-                name=(meal.get("name") or f"Pasto {index + 1}").strip()[:100],
-                order_index=index,
-                target_calories=int(meal.get("calories") or 0),
-                target_protein_g=float(meal.get("protein_g") or 0),
-                target_carbs_g=float(meal.get("carbs_g") or 0),
-                target_fat_g=float(meal.get("fat_g") or 0),
-                notes=(meal.get("notes") or None),
-                auto_generate=bool(meal.get("auto_generate", True)),
-                servings=max(1, min(8, int(meal.get("servings") or 1))),
-                batch_days=max(1, min(4, int(meal.get("batch_days") or 1))),
-            )
-        )
+        db.add(MealSlot(diet_plan_id=diet.id, **_slot_fields(index, meal)))
+    db.flush()
+
+
+def update_meals_in_place(db: Session, diet: DietPlan, meals: list[dict]) -> None:
+    """Corregge i pasti della dieta tenendo le righe che esistono già.
+
+    Prima questa rotta cancellava i `MealSlot` e li ricreava: `PlannedMeal.meal_slot_id`
+    è in CASCADE, e ritoccare 20 kcal della merenda svuotava il piano di tutte le
+    settimane — ricette, «l'ho seguito», stime, dispensa scalata — e al giro dopo
+    healthAI cancellava anche i pasti già mandati. Ora ogni pasto si abbina al suo
+    `MealSlot` per id (o, se manca, per nome) e si aggiorna; si cancella solo il pasto
+    che l'utente ha tolto, che per definizione non deve più stare in griglia.
+    """
+    liberi = {s.id: s for s in meal_slots_of(db, diet.id)}
+
+    ordinati = sorted(meals, key=lambda m: m.get("order", 0))
+    abbinati: list[MealSlot | None] = [liberi.pop(m.get("id"), None) for m in ordinati]
+    for i, meal in enumerate(ordinati):
+        if abbinati[i] is not None:
+            continue
+        chiave = planner._slot_key(meal.get("name"))
+        for slot_id, slot in list(liberi.items()):
+            if planner._slot_key(slot.name) == chiave:
+                abbinati[i] = liberi.pop(slot_id)
+                break
+
+    for slot in liberi.values():
+        db.delete(slot)
+    db.flush()
+
+    # `uq_meal_slot_order` vieta due pasti sulla stessa posizione anche per un attimo:
+    # prima si spostano tutti fuori dall'intervallo, poi si scrivono gli indici veri.
+    for n, slot in enumerate(s for s in abbinati if s is not None):
+        slot.order_index = -1 - n
+    db.flush()
+
+    for index, (meal, slot) in enumerate(zip(ordinati, abbinati)):
+        campi = _slot_fields(index, meal)
+        if slot is None:
+            db.add(MealSlot(diet_plan_id=diet.id, **campi))
+        else:
+            for chiave, valore in campi.items():
+                setattr(slot, chiave, valore)
     db.flush()
 
 
@@ -379,7 +424,7 @@ def update_diet_meals(
         raise HTTPException(404, "Dieta non trovata")
 
     meals = [m.model_dump() for m in body.meals]
-    _replace_meals(db, diet, meals)
+    update_meals_in_place(db, diet, meals)
     diet.total_daily_calories = sum(m["calories"] for m in meals)
     db.commit()
     return _serialize_diet(db, diet)

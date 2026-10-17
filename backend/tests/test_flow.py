@@ -145,6 +145,40 @@ def test_modificare_la_dieta_riallinea_le_settimane(client, diet):
     assert all(len(d["meals"]) == 2 for d in week["days"])
 
 
+@pytest.mark.parametrize("con_id", [True, False])
+def test_correggere_un_pasto_non_svuota_il_piano(client, diet, fake_ai, con_id):
+    """Ritoccare i target della dieta attiva non cancella le caselle del piano.
+
+    Prima la rotta ricreava i `MealSlot` e il CASCADE portava via ricette, «l'ho
+    seguito» e stime di tutte le settimane. Senza `id` (un client vecchio) il pasto si
+    riconosce dal nome.
+    """
+    week = client.get("/api/planning/weeks/current").json()
+    client.post(f"/api/planning/weeks/{week['id']}/generate")
+    week = client.get("/api/planning/weeks/current").json()
+    pranzo = week["days"][0]["meals"][1]
+    client.put(
+        f"/api/planning/meals/{pranzo['id']}/followed", json={"is_followed": True}
+    )
+
+    meals = [dict(m) for m in diet["meals"]]
+    if not con_id:
+        for m in meals:
+            m.pop("id")
+    meals[2]["calories"] += 20
+    # Anche l'ordine cambia: le posizioni si scambiano senza urtare il vincolo unico.
+    meals[0]["order"], meals[2]["order"] = meals[2]["order"], meals[0]["order"]
+    res = client.put(f"/api/diet/{diet['id']}/meals", json={"meals": meals})
+    assert res.status_code == 200, res.text
+    assert {m["id"] for m in res.json()["meals"]} == {m["id"] for m in diet["meals"]}
+
+    dopo = client.get("/api/planning/weeks/current").json()
+    assert dopo["meals_filled"] == DAYS * 3
+    seguito = client.get(f"/api/planning/meals/{pranzo['id']}").json()
+    assert seguito["is_followed"] is True
+    assert seguito["recipe"]["title"] == pranzo["recipe"]["title"]
+
+
 # ── Generazione ────────────────────────────────────────────────────────────────
 
 

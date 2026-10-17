@@ -132,6 +132,7 @@ export default function DietPage() {
     setBusy(true);
     try {
       const payload = finali.map((m, i) => ({
+        id: m.id ?? null,
         name: m.name,
         order: i,
         calories: Number(m.calories) || 0,

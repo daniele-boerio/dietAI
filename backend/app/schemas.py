@@ -56,6 +56,9 @@ class UserPasswordResetRequest(BaseModel):
 
 
 class MealSlotInput(BaseModel):
+    # Il pasto che si sta correggendo, se esiste già: l'editor lo rimanda così il
+    # salvataggio aggiorna quella riga invece di ricrearla (vedi `update_meals_in_place`).
+    id: int | None = None
     name: str = Field(min_length=1, max_length=100)
     order: int = Field(ge=0, le=20)
     calories: int = Field(ge=0, le=5000)

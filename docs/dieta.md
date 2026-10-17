@@ -78,6 +78,17 @@ li accetta come `targets` e ci divide sopra i pasti: lì i pavimenti della formu
 sotto il metabolismo basale) **non si applicano**, perché difendono un calcolo
 automatico, non discutono i numeri di chi li sta scrivendo a mano.
 
+**Salvare l'editor corregge i pasti, non li ricrea** (`update_meals_in_place` in
+`routers/diet.py`). Prima `PUT /api/diet/{id}/meals` cancellava i `MealSlot` della
+dieta e li riscriveva: `PlannedMeal.meal_slot_id` è in CASCADE, e ritoccare 20 kcal
+della merenda svuotava il piano di **tutte** le settimane, passate comprese — ricette,
+«l'ho seguito», stime di «ho mangiato altro», dispensa scalata — e al giro dopo
+healthAI cancellava i pasti già mandati. Il toast intanto diceva «le ricette restano».
+Ora l'editor rimanda l'`id` di ogni pasto, e il server aggiorna quella riga (senza
+`id` la riconosce dal nome); si cancella solo il pasto tolto dall'utente. `_replace_meals`
+resta per le diete appena create, che non hanno caselle attaccate. Guardia:
+`test_correggere_un_pasto_non_svuota_il_piano` in `tests/test_flow.py`.
+
 **Le frequenze settimanali sono un dato della dieta, non una regola a parole.** «Pesce
 2-3 volte, carne rossa al massimo una»: le diete dei nutrizionisti sono scritte così,
 e fin qui il vincolo poteva vivere solo nelle regole libere, cioè in un prompt che il

@@ -173,7 +173,11 @@ export default function YearHeatmap() {
 
           <div className="card heatmap-card">
             <div className="heatmap-scroll" ref={scroller}>
-              <div className="heatmap">
+              <div
+                className="heatmap"
+                role="img"
+                aria-label={`Calendario dell'anno: ${data.counts.full} giorni seguiti, ${data.counts.partial} in parte, ${data.counts.missed} non seguiti`}
+              >
                 <div className="heatmap-months">
                   <div className="heatmap-gutter" />
                   {calendar.columns.map((_, i) => (

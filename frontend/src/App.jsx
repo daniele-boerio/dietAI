@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useState } from 'react';
+import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import {
   CalendarDays,
@@ -67,13 +67,25 @@ function AuthenticatedApp() {
   const { pathname } = useLocation();
   const [toasts, setToasts] = useState([]);
 
-  const addToast = useCallback((message, type = 'success') => {
-    const id = Date.now() + Math.random();
-    setToasts((prev) => [...prev, { id, message, type }]);
-    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3600);
-  }, []);
+  const closeToast = useCallback(
+    (id) => setToasts((prev) => prev.filter((t) => t.id !== id)),
+    []
+  );
 
-  const ctx = { addToast };
+  // Gli errori restano più a lungo: sono l'unico segno che un'azione non è andata, e
+  // tre secondi e mezzo non bastano a leggerli (tanto meno con un lettore di schermo).
+  // Si chiudono anche a mano.
+  const addToast = useCallback(
+    (message, type = 'success') => {
+      const id = Date.now() + Math.random();
+      setToasts((prev) => [...prev, { id, message, type }]);
+      setTimeout(() => closeToast(id), type === 'error' ? 8000 : 3600);
+    },
+    [closeToast]
+  );
+
+  // Un oggetto nuovo a ogni render ridisegnava ogni pagina a ogni avviso.
+  const ctx = useMemo(() => ({ addToast }), [addToast]);
 
   // Finché mancano la API key o la dieta non c'è niente da pianificare: l'app
   // mostra solo il percorso guidato, non una interfaccia piena di stati vuoti.
@@ -92,7 +104,7 @@ function AuthenticatedApp() {
             rotte e l'onboarding restava sull'indirizzo `/login`. */}
         {pathname === '/login' && <Navigate to="/" replace />}
         <OnboardingPage />
-        <Toast toasts={toasts} />
+        <Toast toasts={toasts} onClose={closeToast} />
       </AppContext.Provider>
     );
   }
@@ -133,11 +145,16 @@ function AuthenticatedApp() {
   return (
     <AppContext.Provider value={ctx}>
       <div className="app-layout">
+        {/* Da tastiera il primo Tab porta qui: senza, per arrivare alla pagina si
+            attraversava tutta la navigazione a ogni cambio di schermata. */}
+        <a className="skip-link" href="#contenuto">
+          Vai al contenuto
+        </a>
         {/* La stecca di icone è del monitor: sul telefono si nasconde e al suo
             posto ci sono le schede in fondo. Prima qui c'era un cassetto che entrava
             da sinistra, aperto da un pulsante in una barra in alto: due elementi
             fermi per arrivare dove adesso si arriva con un pollice. */}
-        <nav className="sidebar">
+        <nav className="sidebar" aria-label="Navigazione principale">
           <div className="sidebar-logo">
             <Sprout />
             <span>DietAI</span>
@@ -200,7 +217,11 @@ function AuthenticatedApp() {
           </div>
         </nav>
 
-        <main className={`main-content ${senzaSchede ? 'senza-schede' : ''}`}>
+        <main
+          id="contenuto"
+          tabIndex={-1}
+          className={`main-content ${senzaSchede ? 'senza-schede' : ''}`}
+        >
           {/* Un errore in una pagina non deve spegnere l'app: senza questa rete
               resterebbe una finestra vuota, nera col tema scuro, e sul telefono
               nemmeno un modo per capire cosa sia successo. */}
@@ -240,7 +261,7 @@ function AuthenticatedApp() {
             nascoste dal foglio di stile sopra i 769px: sul monitor il loro posto ce
             l'ha già la stecca di icone a sinistra. */}
         {!senzaSchede && (
-          <nav className="tabbar">
+          <nav className="tabbar" aria-label="Schede">
             {schede.map(({ to, icon: Icon, label, end }) => (
               <NavLink
                 key={to}
@@ -256,7 +277,7 @@ function AuthenticatedApp() {
         )}
       </div>
 
-      <Toast toasts={toasts} />
+      <Toast toasts={toasts} onClose={closeToast} />
     </AppContext.Provider>
   );
 }

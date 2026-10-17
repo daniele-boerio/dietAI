@@ -33,7 +33,9 @@
 
   --text-primary: #f5f2ea;
   --text-secondary: #a8a398;
-  --text-muted: #6e6a62;
+  /* Almeno 4,5:1 sulle card: il #6e6a62 di prima stava a 3,2 ed era il colore di
+     metà delle etichette (schede in basso, piedi dei grafici, icone dei pasti). */
+  --text-muted: #928d82;
 
   /* Due token e non uno solo. `--accent` è il colore che l'accento ha quando fa
      da **testo o icona** sul fondo della pagina; `--accent-fill` è la tinta piena
@@ -99,19 +101,23 @@
   --border-light: #cec5b1;
 
   --text-primary: #14130f;
-  --text-secondary: #6e6a62;
-  --text-muted: #8a8479;
+  /* Come al buio: entrambi oltre 4,5:1 sulla carta crema, e il secondario più scuro
+     dell'attenuato perché la gerarchia resti la stessa. */
+  --text-secondary: #55514a;
+  --text-muted: #625d53;
 
   --accent: #57680e;
   --accent-fill: #d9f24e;
   --accent-soft: rgba(87, 104, 14, 0.12);
   --accent-contrast: #14130f;
 
-  --terracotta: #c4542a;
-  --terracotta-soft: rgba(196, 84, 42, 0.12);
+  /* Più scura che al buio: si usa anche come testo, e #c4542a sulla crema stava
+     sotto 4:1. Come riempimento sotto il bianco ci guadagna. */
+  --terracotta: #a8441f;
+  --terracotta-soft: rgba(168, 68, 31, 0.12);
 
   --success: #57680e;
-  --warning: #96731a;
+  --warning: #7d5f12;
   --danger: #b3392b;
   --danger-soft: rgba(179, 57, 43, 0.1);
   --danger-contrast: #ffffff;
@@ -480,7 +486,7 @@ textarea {
   min-height: 52px;
   padding: 4px 2px;
   border-radius: 14px;
-  font-size: 0.63rem;
+  font-size: 0.7rem;
   line-height: 1;
   color: var(--text-muted);
   transition: color var(--transition);
@@ -4207,6 +4213,21 @@ textarea:focus {
   border-color: var(--accent);
 }
 
+/* Il focus da tastiera si vede ovunque. Sui campi c'era solo il bordo da 1px che
+   cambiava colore — nel tema chiaro quasi invisibile — e pulsanti e schede si
+   affidavano al contorno del browser, che su queste superfici sparisce. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
 /* Sui dispositivi touch i campi vanno a 16px esatti.
    È la regola meno intuitiva di tutto il foglio: iOS ingrandisce la pagina quando
    si mette a fuoco un campo con testo sotto i 16px — e poi NON la rimpicciolisce
@@ -6183,14 +6204,43 @@ input[type="range"]:disabled {
   gap: 8px;
 }
 
+.toast-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .toast {
-  padding: 13px 19px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 13px 12px 13px 19px;
   border-radius: 14px;
   font-size: 0.86rem;
   font-weight: 500;
   box-shadow: var(--shadow-popup);
   animation: slideIn 0.25s ease;
   max-width: 340px;
+}
+
+.toast-close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-left: auto;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  opacity: 0.75;
+  cursor: pointer;
+}
+
+.toast-close:hover,
+.toast-close:focus-visible {
+  opacity: 1;
 }
 
 .toast-success {
@@ -7127,4 +7177,49 @@ input[type="range"]:disabled {
   .shopping-pantry {
     font-size: 0.8rem;
   }
+}
+
+/* Chi ha chiesto al sistema meno movimento non deve vedere scivolare avvisi e
+   pannelli: restano gli stati, spariscono le animazioni. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Il link per saltare la navigazione: fuori schermo finché non ha il focus. */
+.skip-link {
+  position: absolute;
+  left: 12px;
+  top: -60px;
+  z-index: 2000;
+  padding: 10px 14px;
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.skip-link:focus {
+  top: calc(12px + env(safe-area-inset-top));
+}
+
+main:focus {
+  outline: none;
+}
+
+/* Bersagli di almeno 24px anche col mouse (WCAG 2.5.8): stelle, comandi della card
+   e «salta giorno» stavano fra 18 e 22. Sul telefono il blocco `pointer: coarse` li
+   porta già oltre. */
+.star-rating button,
+.meal-action,
+.day-skip {
+  min-width: 24px;
+  min-height: 24px;
 }

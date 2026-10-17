@@ -124,7 +124,7 @@ export default function WeekGenerateDialog({
           </div>
         </div>
 
-        <div className="gen-days">
+        <div className="gen-days" role="group" aria-label="Giorni da generare">
           {listaGiorni.map((g) => {
             const vuoto = g.da_fare === 0;
             const on = giorni.includes(g.dow) && !vuoto;
@@ -134,6 +134,14 @@ export default function WeekGenerateDialog({
                 className={`gen-day ${on ? 'on' : ''} ${g.passato ? 'passato' : ''}`}
                 onClick={() => toggleGiorno(g.dow)}
                 disabled={busy || vuoto}
+                aria-pressed={on}
+                aria-label={`${g.nome} ${Number(g.date.slice(8, 10))}: ${
+                  g.saltato
+                    ? 'giornata saltata'
+                    : vuoto
+                      ? 'niente da generare'
+                      : plurale(g.da_fare, 'pasto', 'pasti') + ' da generare'
+                }`}
                 title={
                   g.saltato
                     ? 'Giornata saltata'
@@ -162,7 +170,7 @@ export default function WeekGenerateDialog({
 
       <div className="gen-section">
         <span className="field-label">Pasti</span>
-        <div className="meal-pick-list">
+        <div className="meal-pick-list" role="group" aria-label="Pasti da generare">
           {listaPasti.map((p) => {
             const bloccato = p.mio || p.da_fare === 0;
             const on = scelti.includes(p.id) && !bloccato;
@@ -172,6 +180,7 @@ export default function WeekGenerateDialog({
                 className={`meal-pick ${on ? 'on' : ''}`}
                 onClick={() => togglePasto(p.id)}
                 disabled={busy || bloccato}
+                aria-pressed={on}
               >
                 <i>{on && <Check size={13} />}</i>
                 <span className="meal-pick-name">{p.nome}</span>

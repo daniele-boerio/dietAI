@@ -289,3 +289,23 @@ sul telefono sta sotto la ricetta invece che di fianco.
   accendevano a vicenda a seconda della scheda aperta. `/settings` rimanda alla prima
   scheda (`/settings/preferences`) così quella aperta è sempre nell'indirizzo; i vecchi
   `/settings/diet` e `/settings/pantry` rimandano alle pagine nuove.
+
+## Accessibilità
+
+Le regole nate dall'audit WCAG 2.2, ognuna con quello che non andava prima:
+- **Modali**: tutte da `components/Modal.jsx` (`role="dialog"`, focus dentro e di
+  nuovo sul pulsante di partenza, Tab che gira, Esc, resto dell'app `inert`). Prima
+  erano `div` sopra la pagina e il focus restava dietro l'overlay.
+- **Avvisi**: `Toast` tiene sempre montate due regioni live, «status» e «alert» per gli
+  errori, in un portal fuori da `#root` (che la modale rende inert); gli errori restano
+  8 secondi e si chiudono a mano. Prima il contenitore nasceva col primo avviso e il
+  lettore di schermo non lo annunciava.
+- **Stato dei controlli**: la spunta della spesa è un `checkbox` con `aria-checked`;
+  ✓/✗, stelle e giorni/pasti della generazione hanno `aria-pressed`, il ⋯ `aria-expanded`.
+- **Mai solo colore**: pallini dei giorni, spia di aderenza, heatmap e barra dei macro
+  sono `role="img"` con il riassunto a parole.
+- **Contrasto**: `--text-muted` e `--text-secondary` oltre 4,5:1 in tutti e due i temi;
+  nel chiaro `--terracotta` e `--warning` più scuri, perché si usano anche come testo.
+- **Tastiera**: `:focus-visible` globale (sui campi un anello, non solo il bordo da
+  1px), link «Vai al contenuto», `nav` con un nome; bersagli di almeno 24px.
+- **Movimento**: `prefers-reduced-motion` spegne animazioni e transizioni.

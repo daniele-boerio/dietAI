@@ -118,6 +118,8 @@ export default function MealCard({
             <button
               className={`meal-action ok ${meal.is_followed === true ? 'on' : ''}`}
               title="L'ho seguito"
+              aria-label="L'ho seguito"
+              aria-pressed={meal.is_followed === true}
               disabled={skipped || busy}
               onClick={() => onFollowed(meal, true)}
             >
@@ -126,6 +128,8 @@ export default function MealCard({
             <button
               className={`meal-action no ${meal.is_followed === false ? 'on' : ''}`}
               title="Ho mangiato altro"
+              aria-label="Ho mangiato altro"
+              aria-pressed={meal.is_followed === false}
               disabled={skipped || busy}
               onClick={() => onFollowed(meal, false)}
             >
@@ -134,6 +138,8 @@ export default function MealCard({
             <button
               className={`meal-action more ${altro ? 'on' : ''}`}
               title="Altro"
+              aria-label="Altre azioni sul pasto"
+              aria-expanded={altro}
               disabled={busy}
               onClick={() => setAltro((v) => !v)}
             >

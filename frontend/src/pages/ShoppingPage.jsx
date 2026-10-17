@@ -404,8 +404,13 @@ export default function ShoppingPage() {
                           key={item.id}
                           className={`shopping-item ${item.is_checked ? 'checked' : ''}`}
                         >
+                          {/* Una casella da spuntare, e il lettore di schermo deve
+                              saperlo: lo stato «preso» era solo il riquadro lime e il
+                              testo barrato, che non si sentono. */}
                           <button
                             className="shopping-tick"
+                            role="checkbox"
+                            aria-checked={!!item.is_checked}
                             onClick={() => toggleItem(item)}
                           >
                             <span className="shopping-check">

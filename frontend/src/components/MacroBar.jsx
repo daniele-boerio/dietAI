@@ -10,7 +10,14 @@ export default function MacroBar({ protein, carbs, fat, legend = false, classNam
 
   return (
     <div className={className}>
-      <div className="macro-bar">
+      <div
+        className="macro-bar"
+        role="img"
+        aria-label={`Proteine ${formatNumber(protein, 1)} g, carboidrati ${formatNumber(
+          carbs,
+          1
+        )} g, grassi ${formatNumber(fat, 1)} g`}
+      >
         <span className="macro-p" style={{ width: pct(protein) }} />
         <span className="macro-c" style={{ width: pct(carbs) }} />
         <span className="macro-f" style={{ width: pct(fat) }} />

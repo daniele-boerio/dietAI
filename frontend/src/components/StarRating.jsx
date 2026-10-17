@@ -4,7 +4,7 @@ import { Star } from 'lucide-react';
 // quindi vale la pena metterlo dove si vede (card e dettaglio).
 export default function StarRating({ value, onChange, size = 'sm', readOnly = false }) {
   return (
-    <div className={`star-rating ${size === 'lg' ? 'lg' : ''}`}>
+    <div className={`star-rating ${size === 'lg' ? 'lg' : ''}`} role="group" aria-label="Voto">
       {[1, 2, 3, 4, 5].map((n) => (
         <button
           key={n}
@@ -16,6 +16,8 @@ export default function StarRating({ value, onChange, size = 'sm', readOnly = fa
             onChange?.(n === value ? n : n);
           }}
           title={`${n} su 5`}
+          aria-label={`${n} su 5`}
+          aria-pressed={value === n}
         >
           <Star fill={value >= n ? 'currentColor' : 'none'} />
         </button>

@@ -95,6 +95,18 @@ function MealRow({ meal }) {
   );
 }
 
+// Le barre dicono l'aderenza col colore: a parole, quante giornate in ogni stato.
+function riassuntoAderenza(giorni) {
+  const conti = {};
+  giorni.forEach((g) => {
+    conti[g.state] = (conti[g.state] || 0) + 1;
+  });
+  const parti = Object.entries(conti)
+    .filter(([stato]) => ETICHETTE_ADERENZA[stato])
+    .map(([stato, n]) => `${n} ${ETICHETTE_ADERENZA[stato].toLowerCase()}`);
+  return `Ultime quattro settimane: ${parti.join(', ') || 'niente segnato'}`;
+}
+
 export default function DashboardPage() {
   const { addToast } = useApp();
   const navigate = useNavigate();
@@ -476,7 +488,11 @@ export default function DashboardPage() {
             {/* Altezza = quanto pesava il piano di quel giorno sul suo target,
                 colore = com'è andata davvero. Due domande, due canali: una giornata
                 pianificata benissimo e mai seguita si legge alta e spenta. */}
-            <div className="spark">
+            <div
+              className="spark"
+              role="img"
+              aria-label={riassuntoAderenza(adherence.days)}
+            >
               {adherence.days.map((g) => (
                 <span
                   key={g.date}

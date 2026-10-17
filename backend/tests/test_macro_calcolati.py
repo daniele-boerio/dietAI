@@ -338,3 +338,27 @@ def test_la_ricetta_ricalcolata_dopo_la_chat(db, client):
         "ingredients": [{"name": "pasta", "quantity": 50, "unit": "g"}],
     })
     assert db.get(Recipe, r.id).calories == 178
+
+
+@pytest.mark.parametrize(
+    ("nome", "per_pezzo", "quantita", "unita", "grammi"),
+    [
+        ("mozzarella", 125.0, 2, "fette", 50.0),
+        ("melanzane", 300.0, 3, "fette", 90.0),
+        ("aglio", 40.0, 2, "spicchi", 10.0),
+        ("basilico", None, 4, "foglie", 2.0),
+        ("formaggio", None, 1, "cucchiai", 6.0),
+        ("farina", None, 3, "cucchiaini", 9.0),
+        ("formaggio spalmabile", None, 1, "cucchiai", 15.0),
+        ("polpo", 800.0, 2, "fette", None),
+    ],
+)
+def test_fette_spicchi_e_cucchiai_pesano_il_giusto(nome, per_pezzo, quantita, unita, grammi):
+    """Una fetta non è il pezzo intero: 2 fette di mozzarella erano 250 g."""
+    from app.models import Ingredient
+    from app.services.macros import grams_of
+
+    ingrediente = Ingredient(name=nome, category="altro", grams_per_unit=per_pezzo)
+    assert grams_of(ingrediente, quantita, unita) == pytest.approx(grammi) if grammi else (
+        grams_of(ingrediente, quantita, unita) is None
+    )

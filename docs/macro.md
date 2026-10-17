@@ -102,3 +102,12 @@ deploy della migrazione 0030: il seed riempie il catalogo da solo, poi
 totali delle settimane passate e l'aderenza: è voluto, dicono il vero.
 
 **E quelle già in programma si ritoccano a mano.** `python -m app.refit_macros` (anteprima senza `--yes`) applica `fit_to_target` alle ricette da oggi in avanti non segnate né saltate (`services/refit.py`): il passato non si riscrive, una ricetta usata anche fuori dal gruppo si copia prima di toccarla, quelle scritte a mano e quelle con ingredienti senza composizione si saltano, e quelle che nemmeno ritoccando tornano nel target si elencano da rigenerare. Guardia in `tests/test_refit.py`.
+
+**Una fetta non è il pezzo intero** (`grams_of` in `services/macros.py`). Fette, spicchi
+e foglie diventavano «1 unità» e si pesavano con `grams_per_unit`, cioè col pezzo
+intero: «2 fette di mozzarella» erano 250 g, «3 fette di melanzana» 900 g, e il ritocco
+correggeva le altre righe su numeri falsi. Ora hanno un peso tipico per famiglia di
+alimenti (`_PEZZI_DI_PEZZO`); dove non c'è, il conto non si chiude e restano i macro
+dichiarati, come per ogni ingrediente che non si sa contare. Allo stesso modo un
+cucchiaio di polvere non pesa come uno d'acqua (`_CUCCHIAIO_DI`: parmigiano 6 g,
+farina 9 g, zucchero 12 g). Guardia `test_fette_spicchi_e_cucchiai_pesano_il_giusto`.

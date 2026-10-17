@@ -159,10 +159,70 @@ def has_details(ingredient: Ingredient | None) -> bool:
     )
 
 
+# Fette, spicchi e foglie sono un pezzo di un pezzo: pesarle con `grams_per_unit`
+# (quello della mozzarella intera, della melanzana intera) faceva «2 fette di
+# mozzarella» = 250 g e «3 fette di melanzana» = 900 g, e il ritocco correggeva le
+# altre righe su numeri falsi. Il peso tipico di una fetta per famiglia di alimenti;
+# dove non c'è, il conto non si chiude (None) e restano i macro dichiarati.
+_PEZZI_DI_PEZZO: dict[str, tuple[tuple[tuple[str, ...], float], ...]] = {
+    "fette": (
+        (("pan carrè", "pancarrè", "pane in cassetta"), 25.0),
+        (("pane",), 30.0),
+        (("prosciutto", "bresaola", "speck", "salame", "mortadella", "tacchino",
+          "pollo", "fesa", "coppa", "pancetta"), 15.0),
+        (("mozzarella",), 25.0),
+        (("formaggio", "provola", "scamorza", "emmental", "fontina", "sottiletta",
+          "asiago", "edamer", "groviera"), 20.0),
+        (("melanzan", "zucchin"), 30.0),
+        (("pomodor",), 20.0),
+        (("limone", "arancia", "lime"), 10.0),
+        (("ananas",), 80.0),
+        (("salmone",), 20.0),
+    ),
+    "spicchi": ((("aglio",), 5.0), (("arancia", "mandarino", "clementina"), 10.0)),
+    "foglie": (
+        (("basilico", "salvia", "alloro", "menta", "prezzemolo", "rosmarino"), 0.5),
+        (("lattuga", "insalata", "verza", "cavolo", "bietol", "spinac"), 10.0),
+    ),
+}
+
+# Cucchiai e cucchiaini sono volumi, e le polveri pesano meno dell'acqua: un cucchiaio
+# di parmigiano grattugiato sono 6 g, non 15. Grammi per cucchiaio raso.
+_CUCCHIAIO_DI: tuple[tuple[tuple[str, ...], float], ...] = (
+    # «formaggio» da solo è quello da grattugia: la normalizzazione ci porta parmigiano
+    # e grana (`_DA_GRATTUGIA`). Uno spalmabile no, e pesa come l'acqua.
+    (("parmigiano", "grana", "pecorino", "grattugiat"), 6.0),
+    (("farina", "amido", "fecola"), 9.0),
+    (("zucchero",), 12.0),
+    (("cacao",), 6.0),
+    (("pangrattato",), 6.0),
+    (("fiocchi d'avena", "avena"), 6.0),
+    (("semi", "sesamo", "chia", "lino"), 9.0),
+)
+_CUCCHIAINO = 1 / 3
+
+
+def _peso_da_tabella(nome: str, tabella) -> float | None:
+    for parole, grammi in tabella:
+        if any(p in nome for p in parole):
+            return grammi
+    return None
+
+
 def grams_of(ingredient: Ingredient, quantity: float, unit: str) -> float | None:
     """Quanti grammi sono `quantity` `unit` di quell'ingrediente. None = non si sa."""
-    if normalize_unit(unit) in _SENZA_PESO:
+    unita = normalize_unit(unit)
+    if unita in _SENZA_PESO:
         return 0.0
+    nome = (ingredient.name or "").lower()
+    if unita in _PEZZI_DI_PEZZO:
+        grammi = _peso_da_tabella(nome, _PEZZI_DI_PEZZO[unita])
+        return (quantity or 0.0) * grammi if grammi is not None else None
+    if unita in ("cucchiai", "cucchiaini"):
+        grammi = 6.0 if nome == "formaggio" else _peso_da_tabella(nome, _CUCCHIAIO_DI)
+        if grammi is not None:
+            fattore = 1.0 if unita == "cucchiai" else _CUCCHIAINO
+            return (quantity or 0.0) * grammi * fattore
     base_qty, base = to_base(quantity or 0.0, unit)
     if base == "g":
         return base_qty

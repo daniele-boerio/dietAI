@@ -330,7 +330,7 @@ class RecipeIngredient(Base):
         index=True,
     )
     ingredient_id = Column(
-        Integer, ForeignKey("ingredients.id", ondelete="CASCADE"), nullable=False
+        Integer, ForeignKey("ingredients.id", ondelete="CASCADE"), nullable=False, index=True
     )
     quantity = Column(Float, nullable=False)
     unit = Column(String, nullable=False)  # "g", "ml", "unità", "cucchiai", ...
@@ -409,9 +409,9 @@ class PlannedMeal(Base):
         index=True,
     )
     meal_slot_id = Column(
-        Integer, ForeignKey("meal_slots.id", ondelete="CASCADE"), nullable=False
+        Integer, ForeignKey("meal_slots.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    recipe_id = Column(Integer, ForeignKey("recipes.id", ondelete="SET NULL"))
+    recipe_id = Column(Integer, ForeignKey("recipes.id", ondelete="SET NULL"), index=True)
     source = Column(
         String, nullable=False, default="ai_generated", server_default="ai_generated"
     )
@@ -440,7 +440,7 @@ class PlannedMeal(Base):
     # casella aveva la sua riga di ricetta bastava; ora che lo stesso piatto in due
     # giorni è una riga sola, "stessa ricetta" non identifica più niente.
     skipped_to_meal_id = Column(
-        Integer, ForeignKey("planned_meals.id", ondelete="SET NULL")
+        Integer, ForeignKey("planned_meals.id", ondelete="SET NULL"), index=True
     )
 
     __table_args__ = (
@@ -556,7 +556,7 @@ class PantryItem(Base):
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     ingredient_id = Column(
-        Integer, ForeignKey("ingredients.id", ondelete="CASCADE"), nullable=False
+        Integer, ForeignKey("ingredients.id", ondelete="CASCADE"), nullable=False, index=True
     )
     quantity_available = Column(Float)
     unit = Column(String)
@@ -745,7 +745,7 @@ class ShoppingListItem(Base):
         index=True,
     )
     ingredient_id = Column(
-        Integer, ForeignKey("ingredients.id", ondelete="CASCADE"), nullable=False
+        Integer, ForeignKey("ingredients.id", ondelete="CASCADE"), nullable=False, index=True
     )
     total_quantity = Column(Float, nullable=False)
     unit = Column(String, nullable=False)

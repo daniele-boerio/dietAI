@@ -63,8 +63,9 @@ def test_per_due_persone_la_spesa_raddoppia(client, diet, genera):
     genera()
     una = pasta_in_lista(client)["quantity"]
 
+    # Correggere la dieta non svuota più il piano: la stessa ricetta, per due persone,
+    # raddoppia la spesa senza rigenerare niente.
     imposta(client, diet, "Pranzo", servings=2)
-    genera()
     assert pasta_in_lista(client)["quantity"] == 2 * una
 
 
@@ -123,7 +124,6 @@ def test_il_batch_conta_ogni_giorno_nella_spesa(client, diet, genera):
     genera()
     senza = pasta_in_lista(client)["quantity"]
     imposta(client, diet, "Pranzo", batch_days=3)
-    genera()
     # Lo stesso piatto per tre giorni si compra tre volte: è cucinato una volta, ma
     # mangiato tre.
     assert pasta_in_lista(client)["quantity"] == senza

@@ -22,6 +22,7 @@ from ..schemas import (
 from ..services import macros, planner, prompts
 from ..services.ai_client import get_client
 from ..services.exclusions import recipe_violations
+from ..services.ownership import own_meal, own_week
 from ..services.planner import (
     clear_meal_cell,
     current_week_start,
@@ -54,35 +55,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/planning", tags=["Pianificazione"])
 
 
-def _get_week(db: Session, user_id: int, week_id: int) -> WeekPlan:
-    week = (
-        db.query(WeekPlan)
-        .filter(WeekPlan.id == week_id, WeekPlan.user_id == user_id)
-        .first()
-    )
-    if not week:
-        raise HTTPException(404, "Settimana non trovata")
-    return week
-
-
-def _get_meal(
-    db: Session, user_id: int, meal_id: int
-) -> tuple[PlannedMeal, DayPlan, WeekPlan]:
-    """Recupera il pasto verificando che la catena pasto → giorno → settimana sia dell'utente.
-
-    Il filtro su user_id sta qui e non nel chiamante apposta: dimenticarlo in uno
-    solo degli endpoint significherebbe far modificare i piani altrui.
-    """
-    row = (
-        db.query(PlannedMeal, DayPlan, WeekPlan)
-        .join(DayPlan, DayPlan.id == PlannedMeal.day_plan_id)
-        .join(WeekPlan, WeekPlan.id == DayPlan.week_plan_id)
-        .filter(PlannedMeal.id == meal_id, WeekPlan.user_id == user_id)
-        .first()
-    )
-    if not row:
-        raise HTTPException(404, "Pasto non trovato")
-    return row
+# Il controllo di proprietà sta in `services/ownership.py`: qui solo i nomi di sempre.
+_get_week = own_week
+_get_meal = own_meal
 
 
 # ── Settimane ──────────────────────────────────────────────────────────────────

@@ -277,7 +277,8 @@ threadpool. La regola non ha eccezioni e `tests/test_concurrency.py` la fa rispe
 - **Ogni query su dati personali va filtrata per `user_id`.** Gli account sono due e
   non devono vedersi: un endpoint che dimentica il filtro è un bug di sicurezza, non di
   stile. Per i pasti si passa da `_get_meal()`, che risale la catena pasto → giorno →
-  settimana. Le rotte da amministratore passano da `get_current_admin`.
+  settimana (`services/ownership.py`, guardia su tutte le rotte in
+  `tests/test_isolamento_rotte.py`). Le rotte da amministratore passano da `get_current_admin`.
 - **Lo schema lo gestisce Alembic**, non l'app: nessun `create_all` all'avvio. Cambiato
   un modello, serve `alembic revision --autogenerate -m "..."` e la migrazione va **riletta**.
 - I modelli usano `JSONType` (`JSON` con variante `JSONB` su Postgres): serve a far

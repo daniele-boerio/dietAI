@@ -23,6 +23,7 @@ from ..schemas import ChatMessageRequest
 from ..services import prompts
 from ..services.ai_client import _extract_json, get_client
 from ..services.exclusions import ExcludedFoodError, check_recipe
+from ..services.ownership import own_meal, own_week
 from ..services.planner import DAY_NAMES, build_context, meal_context_for_chat
 from ..services.recipes import (
     fork_recipe_for_meal,
@@ -98,17 +99,9 @@ def _needs_marker_retry(answer: str, marker: str) -> bool:
     return marker not in answer and bool(_RECIPE_DUMP.search(answer))
 
 
-def _get_meal(db: Session, user_id: int, meal_id: int) -> tuple[PlannedMeal, DayPlan, WeekPlan]:
-    row = (
-        db.query(PlannedMeal, DayPlan, WeekPlan)
-        .join(DayPlan, DayPlan.id == PlannedMeal.day_plan_id)
-        .join(WeekPlan, WeekPlan.id == DayPlan.week_plan_id)
-        .filter(PlannedMeal.id == meal_id, WeekPlan.user_id == user_id)
-        .first()
-    )
-    if not row:
-        raise HTTPException(404, "Pasto non trovato")
-    return row
+# Il controllo di proprietà sta in `services/ownership.py`.
+_get_meal = own_meal
+_get_week = own_week
 
 
 def _serialize_message(message: MealChatMessage) -> dict:
@@ -277,17 +270,6 @@ def clear_history(
 
 
 # ── Chat della spesa: cambia un ingrediente in tutte le ricette della settimana ─
-
-
-def _get_week(db: Session, user_id: int, week_id: int) -> WeekPlan:
-    week = (
-        db.query(WeekPlan)
-        .filter(WeekPlan.id == week_id, WeekPlan.user_id == user_id)
-        .first()
-    )
-    if not week:
-        raise HTTPException(404, "Settimana non trovata")
-    return week
 
 
 def _meal_label(day: DayPlan, slot: MealSlot) -> str:

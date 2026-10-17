@@ -312,3 +312,12 @@ _BASE_SOTTOPESO = {
     "sex": "donna", "age": 25, "height_cm": 170, "weight_kg": 45,
     "activity": "sedentario", "goal": "mantenere", "meals_count": 4,
 }
+
+
+def test_la_divisione_dei_pareggi_e_quella_dell_anteprima():
+    """Stessa aritmetica di lib/macros.js: un pareggio va sulla quota che sceglie JS."""
+    from app.utils.nutrition import _share_out
+
+    # Math.round porta 1000.5 a 1001; il resto (-1) va sulla quota più grande.
+    assert _share_out(2001, [1, 1], 0) == [1000, 1001]
+    assert sum(_share_out(1234.5, [3, 2, 1], 1)) == 1234.5

@@ -17,6 +17,7 @@ Il percorso: BMR (Mifflin-St Jeor) → × fattore di attività = fabbisogno gior
 per differenza → divisione tra i pasti.
 """
 
+import math
 # Fattori LAF (livello di attività fisica) di uso corrente. Le etichette sono quelle
 # che legge l'utente: la domanda "quanto ti muovi" va posta in italiano, non in numeri.
 ACTIVITY_LEVELS = {
@@ -102,12 +103,24 @@ def _share_out(total: float, weights: list[float], decimals: int) -> list[float]
     aggiunge o toglie un pasto dall'editor si aspetta la stessa aritmetica.
     """
     weight_sum = sum(weights) or 1.0
-    shares = [round(total * w / weight_sum, decimals) for w in weights]
-    drift = round(total - sum(shares), decimals)
+    shares = [_round_js(total * w / weight_sum, decimals) for w in weights]
+    drift = _round_js(total - sum(shares), decimals)
     if drift and shares:
         biggest = shares.index(max(shares))
-        shares[biggest] = round(shares[biggest] + drift, decimals)
+        shares[biggest] = _round_js(shares[biggest] + drift, decimals)
     return [int(v) if decimals == 0 else v for v in shares]
+
+
+def _round_js(value: float, decimals: int) -> float:
+    """Arrotonda come `Math.round` in `lib/macros.js`, operazione per operazione.
+
+    `round()` di Python porta i pareggi al pari, `Math.round` in su: 2001 kcal su due
+    pasti uguali erano [1001, 1000] qui e [1000, 1001] nell'anteprima, e il commento
+    «quello che si vede è quello che verrà salvato» non era vero. Le stesse operazioni
+    IEEE danno lo stesso numero da tutte e due le parti.
+    """
+    factor = 10**decimals
+    return math.floor(value * factor + 0.5) / factor
 
 
 def default_selection(meals_count: int) -> list[str]:

@@ -108,6 +108,12 @@ def issue_refresh_token(
     """
     raw_token = secrets.token_urlsafe(32)
     now = datetime.now(timezone.utc)
+    # La tabella non si puliva mai: una riga per refresh, per 90 giorni. Gli scaduti
+    # non servono a niente; quelli usati restano fino alla scadenza, perché è
+    # ritrovandoli che si riconosce un cookie copiato.
+    db.query(RefreshToken).filter(
+        RefreshToken.user_id == user_id, RefreshToken.expires_at < now
+    ).delete(synchronize_session=False)
 
     db.add(
         RefreshToken(

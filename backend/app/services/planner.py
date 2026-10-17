@@ -424,7 +424,9 @@ class GenerationProgress:
             )
             session.commit()
         except Exception:
-            logger.debug("Diario della generazione non scritto", exc_info=True)
+            # A livello warning: in produzione (INFO) un diario fermo sembrava una
+            # generazione bloccata, e il perché non compariva da nessuna parte.
+            logger.warning("Diario della generazione non scritto", exc_info=True)
             session.rollback()
         finally:
             session.close()

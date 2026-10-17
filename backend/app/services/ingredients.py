@@ -656,6 +656,10 @@ def _merge_rows(db: Session, canonical: Ingredient, doppione: Ingredient) -> Non
         )
         if not gemella:
             item.ingredient_id = canonical.id
+            # Subito sul database: la sessione non fa autoflush, e il doppione dopo di
+            # questo (stesso utente) non vedrebbe la riga appena spostata — ne
+            # sposterebbe una seconda e `uq_pantry_item` farebbe fallire tutto.
+            db.flush()
             continue
         if item.quantity_available and gemella.quantity_available:
             somma, unit = to_base(item.quantity_available, item.unit or "unità")
@@ -688,6 +692,7 @@ def _merge_rows(db: Session, canonical: Ingredient, doppione: Ingredient) -> Non
                 db.delete(row)
             else:
                 row.ingredient_id = canonical.id
+                db.flush()  # come sopra: il prossimo doppione deve vederla
 
     db.flush()
     db.delete(doppione)

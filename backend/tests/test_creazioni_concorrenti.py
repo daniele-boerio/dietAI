@@ -51,3 +51,28 @@ def test_una_settimana_creata_in_parallelo_si_rilegge(client, diet, db, monkeypa
     assert res.status_code == 200, res.text
     assert len(chiamate) == 2
     assert db.query(WeekPlan).count() == 1
+
+
+def test_due_doppioni_nella_stessa_dispensa_si_fondono(client, db):
+    """Due doppioni dello stesso alimento, entrambi in dispensa: il secondo non vedeva
+    la riga appena spostata dal primo e la fusione finiva su uq_pantry_item."""
+    from app.models import PantryItem, User
+
+    utente = db.query(User).first()
+    nomi = ["pesce spada", "pesce spada surgelato", "pesce spada fresco"]
+    righe = []
+    for nome in nomi:
+        ing = Ingredient(name=nome, category="pesce")
+        db.add(ing)
+        db.flush()
+        righe.append(ing)
+    for ing in righe[1:]:
+        db.add(PantryItem(user_id=utente.id, ingredient_id=ing.id, quantity_available=200, unit="g"))
+    db.commit()
+
+    ingredients.merge_duplicates(db)
+    db.commit()
+
+    scorte = db.query(PantryItem).filter(PantryItem.user_id == utente.id).all()
+    assert len(scorte) == 1
+    assert scorte[0].quantity_available == 400

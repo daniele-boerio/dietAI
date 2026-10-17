@@ -5,6 +5,7 @@ dall'applicazione: all'avvio non si crea nessuna tabella.
 """
 
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,7 +21,23 @@ from .routers import config as config_router
 
 logging.basicConfig(level=logging.INFO)
 
-app = FastAPI(title="DietAI API")
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    """I due giri ogni minuto partono con l'app (`on_event` è deprecato).
+
+    Il promemoria serale (`services/push.py`) e l'invio a healthAI
+    (`services/healthai.py`, che senza HEALTHAI_URL e HEALTHAI_TOKEN non parte). Sono
+    thread `daemon`: muoiono col processo. I test li spengono con DIETAI_SCHEDULER=0.
+    """
+    from .services.healthai import start_scheduler as start_healthai
+    from .services.push import start_scheduler as start_promemoria
+
+    start_promemoria(SessionLocal)
+    start_healthai(SessionLocal)
+    yield
+
+
+app = FastAPI(title="DietAI API", lifespan=_lifespan)
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -65,16 +82,6 @@ app.include_router(tracking.router)
 app.include_router(push.router)
 
 
-# Il giro dei promemoria serali: un thread che controlla ogni minuto chi ha un
-# promemoria arrivato all'ora (vedi `services/push.py`). Parte con l'app e muore con
-# lei; i test lo spengono con DIETAI_SCHEDULER=0.
-@app.on_event("startup")
-def _avvia_promemoria() -> None:
-    from .services.push import start_scheduler
-
-    start_scheduler(SessionLocal)
-
-
 # I log dell'app (`app.*`) a livello info, sull'output del container. Uvicorn configura
 # solo i suoi logger: senza questo, per i moduli dell'app valeva il default di Python
 # (solo avvisi ed errori), e un «pasto inviato a healthAI» o un «healthAI spento» non
@@ -85,16 +92,6 @@ if not _log_app.handlers:
     _gestore.setFormatter(logging.Formatter("%(levelname)s:     %(name)s: %(message)s"))
     _log_app.addHandler(_gestore)
     _log_app.setLevel(logging.INFO)
-
-
-# Il giro di healthAI: ogni minuto porta i pasti consumati dell'amministratore al server
-# dei suoi dati di salute (vedi `services/healthai.py`). Senza HEALTHAI_URL e
-# HEALTHAI_TOKEN non parte; i test lo spengono come i promemoria.
-@app.on_event("startup")
-def _avvia_healthai() -> None:
-    from .services.healthai import start_scheduler as start_healthai
-
-    start_healthai(SessionLocal)
 
 
 # Tutte le rotte sono `def`, non `async def`: il lavoro dell'app è sincrono e

@@ -19,11 +19,11 @@ il banco giusto lo sceglie l'utente dalla lista (dove la scelta resta).
 
 Oltre a togliere parole, `normalize_name` **unisce** quello che per la dieta e per la
 spesa è lo stesso alimento, col nome che usa la dieta: i formati della pasta
-(`_PASTA_TYPES`: penne, fusilli, spaghetti, e anche "pasta integrale" → `pasta`), i
-pesci bianchi (`_PESCE_MAGRO` → `filetto di pesce magro`), i formaggi da grattugia
+(`_PASTA_NAMES`: penne, fusilli, spaghetti, e anche "pasta integrale" → `pasta`), i
+pesci bianchi (`_PESCE_NAMES` → `filetto di pesce magro`), i formaggi da grattugia
 (`_DA_GRATTUGIA`: parmigiano, grana padano → `formaggio`). Sono liste da allargare col
 bilancino, perché **unire due alimenti diversi è un danno che si disfa a mano**:
-`riso`, `cous cous`, `farro`, `orzo` finiti dentro `_PASTA_TYPES` hanno reso "pasta"
+`riso`, `cous cous`, `farro`, `orzo` finiti dentro `_PASTA_NAMES` hanno reso "pasta"
 mezzo ricettario, e la fusione cancella la riga di anagrafica — il nome originale
 resta solo nel testo della ricetta. Le unificazioni confrontano il **nome intero** e
 non una parola in mezzo, o "grana padano" diventa "formaggio padano".

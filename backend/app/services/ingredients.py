@@ -428,7 +428,7 @@ def normalize_name(name: str, rules: NormalizationRules | None = None) -> str:
 
     Oltre a togliere il rumore, unisce sulla stessa riga le cose che per la dieta e
     per la spesa sono lo stesso alimento: i formati della pasta (spaghetti, penne e
-    anche "pasta integrale" → `pasta`), i pesci bianchi (`_PESCE_MAGRO`), i formaggi da
+    anche "pasta integrale" → `pasta`), i pesci bianchi (`_PESCE_NAMES`), i formaggi da
     grattugia (`_DA_GRATTUGIA` → `formaggio`), il colore dei peperoni, e il singolare
     di quello che il catalogo chiama al plurale (`_CATALOG_FORMS`: "peperone" →
     "peperoni"). **Un altro cereale non è pasta**: riso, cous cous, farro e orzo

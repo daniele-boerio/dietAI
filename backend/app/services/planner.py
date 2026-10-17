@@ -481,7 +481,7 @@ def record_generation_failure(db: Session, week: WeekPlan, reason: str) -> None:
 
     Serve perché la risposta HTTP quasi mai arriva a destinazione: una generazione dura
     minuti e la richiesta muore molto prima, tagliata dal proxy che sta davanti (nginx
-    a 300s, Cloudflare a 100s). Il messaggio d'errore finiva così in una risposta che
+    a 300 s, e un proxy davanti può chiudere anche prima). Il messaggio d'errore finiva così in una risposta che
     nessuno leggeva, e da fuori restava solo una settimana vuota senza spiegazioni —
     mentre il frontend, che segue il polling e non la risposta, annunciava pure
     "Settimana pronta ✓". Il motivo resta scritto qui finché non si riprova.
@@ -1598,7 +1598,7 @@ def _in_background(bind, name: str, work, on_failure=None) -> threading.Thread:
     """Fa girare `work(sessione)` in un thread, con una sessione tutta sua.
 
     **La generazione non vive dentro la richiesta HTTP.** Dura minuti, e davanti c'è
-    un proxy che chiude molto prima (nginx a 300 s, Cloudflare a 100): la POST restava
+    un proxy che chiude molto prima (nginx a 300 s, e un proxy davanti può chiudere anche prima): la POST restava
     appesa per tutto quel tempo su una connessione già morta, tenendo occupato un
     worker del threadpool. Lo stato, il diario e l'errore stavano già sul `WeekPlan`
     proprio per questo; adesso ci sta anche il lavoro, e la POST risponde subito 202.

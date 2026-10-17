@@ -64,10 +64,14 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
 │       ├── merge_recipes.py    # `python -m app.merge_recipes`: fonde le ricette identiche
 │       ├── recompute_macros.py # `python -m app.recompute_macros`: ricalcola i macro dell'archivio
 │       ├── healthai_sync.py    # `python -m app.healthai_sync`: rimanda a healthAI i pasti consumati
+│       ├── refit_macros.py     # `python -m app.refit_macros`: ritocca le grammature fuori dal ±10%
+│       ├── repair_cereals.py   # `python -m app.repair_cereals`: disfa i cereali fusi in "pasta"
 │       ├── routers/            # auth, admin, diet, config, planning, recipes, chat, shopping, tracking, push
 │       ├── services/
 │       │   ├── accounts.py     # chi è l'amministratore, creazione di un account
 │       │   ├── ai_client.py    # due backend (openrouter/anthropic) dietro una interfaccia
+│       │   ├── exclusions.py   # alimenti esclusi controllati sulle ricette del modello
+│       │   ├── ownership.py    # own_meal/own_week: il filtro per utente in un posto solo
 │       │   ├── catalog.py      # catalogo modelli del provider (per il selettore)
 │       │   ├── pdf.py          # estrazione testo dal PDF della dieta
 │       │   ├── prompts.py      # TUTTI i prompt stanno qui
@@ -76,6 +80,7 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
 │       │   ├── ingredients.py  # normalizzazione nomi, anagrafica
 │       │   ├── shopping.py     # aggregazione lista, costo, spesa fatta
 │       │   ├── macros.py       # macro calcolati dagli ingredienti, ritocco grammature
+│       │   ├── refit.py        # ritocco delle grammature delle ricette già in piano
 │       │   ├── push.py         # notifiche push e promemoria serale (thread ogni minuto)
 │       │   ├── weight.py       # storico del peso, proposta di ricalcolo
 │       │   ├── usage.py        # registro delle chiamate AI e conto per utente
@@ -83,6 +88,9 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
 │       │   └── tracking.py     # pianificato vs target
 │       └── utils/
 │           ├── units.py        # conversione unità (g/ml/unità)
+│           ├── clock.py        # «oggi» e «adesso» in ora italiana
+│           ├── giro_unico.py   # advisory lock: un giro dei thread alla volta fra processi
+│           ├── cuisines.py     # catalogo delle cucine, quote e sorteggio per giorno
 │           ├── seasonality.py  # stagionalità prodotti italiani
 │           ├── nutrition.py    # questionario → calorie e macro (Mifflin-St Jeor)
 │           ├── pricing.py      # catalogo ingredienti: categoria + prezzo medio
@@ -96,10 +104,11 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
     ├── lib/macros.js           # ripartizione calorie/macro tra i pasti (+ test)
     ├── lib/generation.js       # cosa c'è da generare in settimana: la conta della dialog (+ test)
     ├── lib/nutrients.js        # fibre, zuccheri, saturi, alcol, caffeina: la riga sotto i macro (+ test)
+    ├── lib/…                   # navigation (useGoBack), pantry, push, quote, schermo, today
     ├── components/             # WeekGrid, WeekGenerateDialog, MealCard, DayDots, MealChat, RecipeView, MacroBar,
     │                           # Questionnaire (dieta calcolata, onboarding + /diet)...
     └── pages/                  # Dashboard, Planning, MealDetail, Shopping, Pantry,
-                                # Recipes, Tracking, Diet, Settings, Altro (la quinta
+                                # Recipes, RecipeDetail, Tracking, Diet, Settings, Altro (la quinta
                                 # scheda del telefono), Onboarding, Login
 ```
 
@@ -181,7 +190,7 @@ paragrafo nel documento, scrivendo anche cosa non andava con la versione di prim
   prima una copia (`fork_recipe_for_meal`) e poi si riaccorpa (`settle_recipe`).
 
 **Spesa e dispensa** (`docs/spesa.md`)
-- La lista è una funzione: quello che le ricette da oggi a domenica otto
+- La lista è una funzione: quello che le ricette da oggi alla domenica della settimana prossima
   (`shopping_horizon`) chiedono e la dispensa non ha. Chi tocca il piano chiama
   `rebuild_shopping_list(db, user_id)`, e chi la mostra (pagina, home, chat) la ricalcola.
 - Il prezzo scritto a mano (`paid_price`) è un fatto e non si ricalcola; il prezzo al
@@ -215,7 +224,9 @@ paragrafo nel documento, scrivendo anche cosa non andava con la versione di prim
   selezione di giorni e pasti (`days`, `slot_ids`) filtra senza spezzarla. La conta in
   `lib/generation.js` deve dare lo stesso numero del server: se una casella si genera
   lo decide solo `planner.is_generable`, esposto come `generable` sul pasto.
-- Il ragionamento si chiede in token (un quarto di `max_tokens`), mai `effort: high`.
+- Il ragionamento si chiede in token (un quarto di `max_tokens`), mai `effort: high`, su
+  OpenRouter. Il ramo SDK Anthropic usa `thinking: adaptive` con `effort: high`: non
+  verificato col budget, vedi `docs/generazione.md`.
 - Stato, diario ed errore della generazione stanno sul `WeekPlan`, non nella pagina:
   ciò che può fallire sta dentro il `try` e il fallimento si registra e si logga.
 - La generazione della settimana gira in un thread con una sessione sua

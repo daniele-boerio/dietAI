@@ -121,7 +121,7 @@ riavviato a metà non blocca la settimana per sempre.
 **E anche com'è finita è stato del server**, per la stessa ragione portata fino in
 fondo: la risposta della POST quasi mai arriva a destinazione. Una generazione dura
 minuti e davanti c'è un proxy che chiude molto prima — nginx a `proxy_read_timeout
-300s`, Cloudflare a 100 secondi e basta — quindi il messaggio d'errore finiva scritto
+300s`, e un proxy davanti può chiudere anche prima — quindi il messaggio d'errore finiva scritto
 su una connessione morta, e uvicorn non ne lasciava traccia nemmeno nell'access log
 (salta la riga quando il client si è già disconnesso, `h11_impl.py`). Da fuori restava
 una settimana vuota senza spiegazioni, e la pagina, che segue il polling e non la
@@ -195,3 +195,13 @@ come prima. `test_generazione_in_background.py` riaccende il background, mette i
 lavoro in coda invece di lanciarlo — SQLite in memoria ha una connessione sola, e due
 thread insieme proverebbero il driver invece dell'app — e prova il thread vero a parte,
 su un database suo.
+
+**Aperto: `effort: high` sul ramo Anthropic.** La regola «il ragionamento si chiede in
+token, mai `effort: high`» nasce da OpenRouter, dove l'effort alto si mangiava il budget
+prima che il modello scrivesse la risposta (vedi sopra e `ai_client.py`). Il backend
+SDK Anthropic (`_AnthropicBackend.complete`) con `thinking` manda invece
+`thinking: adaptive` + `output_config.effort: high`, e la guardia
+`test_reasoning_budget.py` copre solo la strada OpenRouter. Non è stato verificato se lì
+lo stesso rischio esista: chi passa ad `AI_PROVIDER=anthropic` deve controllarlo (una
+generazione di settimana piena che finisce per «length») prima di fidarsene.
+

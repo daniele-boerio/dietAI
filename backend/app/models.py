@@ -415,13 +415,13 @@ class PlannedMeal(Base):
     source = Column(
         String, nullable=False, default="ai_generated", server_default="ai_generated"
     )
-    # Un pasto ricorrente non viene rigenerato: viene ricopiato ogni settimana.
     # Cosa è stato tolto dalla dispensa quando il pasto è stato segnato come seguito:
     # [{ingredient_id, name, quantity, unit, label}]. NULL = mai scalato. Serve a due
     # cose: non scalare due volte se si ripreme il pulsante, e rimettere ESATTAMENTE
     # quello che si era tolto se il pasto viene poi corretto in "ho mangiato altro"
     # (la dispensa poteva averne meno di quanto la ricetta ne chiedeva).
     pantry_used = Column(JSONType)
+    # Un pasto ricorrente non viene rigenerato: viene ricopiato ogni settimana.
     is_recurring = Column(Boolean, nullable=False, default=False, server_default="false")
     recurring_rule = Column(JSONType)  # {"type":"daily"} | {"type":"weekly","day":5}
     is_followed = Column(Boolean)  # NULL = non ancora tracciato

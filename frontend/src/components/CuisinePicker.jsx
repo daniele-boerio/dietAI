@@ -121,7 +121,8 @@ export default function CuisinePicker({ value, onChange, disabled }) {
   };
 
   const una = scelteInOrdine.length === 1;
-  // Il tetto è quello del server (`cuisines.MAX_CUCINE`): oltre, le quote diventano
+  // Il tetto deve restare uguale a quello del server (`cuisines.MAX_CUCINE`, scritto
+  // a mano in tutti e due i posti): oltre, le quote diventano
   // così piccole che sorteggiarle su una settimana non vuol dire più niente. Le
   // pastiglie si spengono invece di sparire, o la ricerca risponderebbe «nessun
   // risultato» a una cucina che c'è.

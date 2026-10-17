@@ -211,3 +211,18 @@ def test_senza_selezione_genera_tutta_la_settimana(client, diet, fake_ai):
 
     res = client.post(f"/api/planning/weeks/{week['id']}/generate")
     assert res.json()["generation"]["filled"] == DAYS * len(SLOTS)
+
+
+def test_il_campo_generable_e_quello_che_la_generazione_riempie(client, diet, fake_ai):
+    """`generable` lo leggono la dialog e la home: deve contare proprio le caselle che
+    `generate_week` riempie, compresi saltati e pasti fissi."""
+    week = client.get("/api/planning/weeks/current").json()
+    client.put(f"/api/planning/days/{week['days'][2]['id']}/skip", json={"is_skipped": True})
+    week = client.get("/api/planning/weeks/current").json()
+
+    promesse = sum(
+        1 for d in week["days"] for m in d["meals"] if m["generable"] and not m["recipe"]
+    )
+    res = _genera(client, week["id"])
+    assert res.status_code == 200, res.text
+    assert res.json()["generation"]["filled"] == promesse

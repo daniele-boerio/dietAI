@@ -213,7 +213,8 @@ paragrafo nel documento, scrivendo anche cosa non andava con la versione di prim
 **Generazione** (`docs/generazione.md`)
 - Una chiamata sola per settimana (anti-spreco); di default riempie solo i buchi, e la
   selezione di giorni e pasti (`days`, `slot_ids`) filtra senza spezzarla. La conta in
-  `lib/generation.js` deve dare lo stesso numero del server.
+  `lib/generation.js` deve dare lo stesso numero del server: se una casella si genera
+  lo decide solo `planner.is_generable`, esposto come `generable` sul pasto.
 - Il ragionamento si chiede in token (un quarto di `max_tokens`), mai `effort: high`.
 - Stato, diario ed errore della generazione stanno sul `WeekPlan`, non nella pagina:
   ciò che può fallire sta dentro il `try` e il fallimento si registra e si logga.

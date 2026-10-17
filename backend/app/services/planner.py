@@ -583,6 +583,18 @@ def _is_fixed(meal: PlannedMeal, slot: MealSlot) -> bool:
     return meal.is_recurring or meal.source == "user_custom" or not slot.auto_generate
 
 
+def is_generable(day: DayPlan, meal: PlannedMeal, slot: MealSlot) -> bool:
+    """Questa casella la può riempire una generazione? La regola, in un posto solo.
+
+    Era scritta tre volte — qui in `generate_week`, in `lib/generation.js` e nel conto
+    della home — e il numero sul pulsante («Genera 9 pasti») è una promessa su quanto
+    si sta per pagare: la prossima condizione andava aggiunta in tre posti, uno dei
+    quali lavorava su dict serializzati. Ora la calcola solo il server, e
+    `serialize_meal` la espone come `generable`.
+    """
+    return not day.is_skipped and not meal.is_skipped and not _is_fixed(meal, slot)
+
+
 # ── Pasti ricorrenti ───────────────────────────────────────────────────────────
 
 
@@ -1126,6 +1138,7 @@ def serialize_meal(
         },
         # "lo gestisco io": niente da generare, ma i macro contano nella giornata
         "self_managed": not slot.auto_generate,
+        "generable": is_generable(day, meal, slot),
         # Per quante persone si cucina: la ricetta è per una, e chi la cucina per due
         # deve leggerlo accanto agli ingredienti.
         "servings": slot.servings or 1,
@@ -1417,7 +1430,7 @@ def generate_week(
     # generarci una ricetta vorrebbe dire pagare una chiamata per un piatto che nessuno
     # cucinerà. Vale anche per "Rigenera tutto", che altrimenti li ripescherebbe.
     rows = [(d, m, s) for d, m, s in rows if not d.is_skipped and not m.is_skipped]
-    generabili = [(d, m, s) for d, m, s in rows if not _is_fixed(m, s)]
+    generabili = [(d, m, s) for d, m, s in rows if is_generable(d, m, s)]
 
     # La selezione fatta nella dialog. Sono filtri e non validazioni: un giorno o un
     # pasto che non esistono semplicemente non selezionano niente, e la lista vuota —

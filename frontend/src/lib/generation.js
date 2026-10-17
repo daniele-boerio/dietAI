@@ -9,15 +9,17 @@
  * la risposta arriva minuti dopo su una connessione che il proxy ha già chiuso.
  */
 
-// Le stesse condizioni di `generate_week`, nello stesso ordine: giorno saltato,
-// pasto rimandato altrove, pasto che prepara l'utente, pasto fisso (ricorrente o
-// scritto a mano, che la generazione non tocca mai).
+// Se una casella si può generare lo decide il server (`planner.is_generable`, esposto
+// come `generable`): la regola era scritta tre volte, e il numero sul pulsante è una
+// promessa su quanto si paga. Le condizioni qui sotto restano solo per una risposta
+// che il campo non lo porta (una pagina aperta prima del deploy).
 export const generabile = (day, meal) =>
-  !day.is_skipped &&
-  !meal.is_skipped &&
-  !meal.self_managed &&
-  !meal.is_recurring &&
-  meal.source !== 'user_custom';
+  meal.generable ??
+  (!day.is_skipped &&
+    !meal.is_skipped &&
+    !meal.self_managed &&
+    !meal.is_recurring &&
+    meal.source !== 'user_custom');
 
 // La data di oggi in Italia, come `planner.today()` sul server. `toISOString()` passa
 // da UTC e a fine giornata direbbe domani; il fuso del dispositivo, fuori dall'Italia,

@@ -15,6 +15,7 @@ import { api, formatDate, formatMoney, formatNumber } from '../api';
 import { useApp } from '../App';
 import EatenInsteadDialog from '../components/EatenInsteadDialog';
 import EmptyState from '../components/EmptyState';
+import LoadError from '../components/LoadError';
 import MacroBar from '../components/MacroBar';
 import { nonScalatiDallaDispensa, scalatiDallaDispensa } from '../lib/pantry';
 import { useTelefono } from '../lib/schermo';
@@ -105,18 +106,34 @@ export default function DashboardPage() {
   // Il pasto appena segnato «ho mangiato altro»: la modale chiede cosa.
   const [altro, setAltro] = useState(null);
 
+  const [error, setError] = useState(null);
+  // Il pasto che si sta segnando: due tocchi rapidi su «l'ho seguito» mandavano due
+  // richieste e due avvisi sulla dispensa.
+  const [segnando, setSegnando] = useState(null);
+
   const load = () =>
     api
       .getDashboard()
-      .then(setData)
-      .catch((e) => addToast(e.message, 'error'))
+      .then((d) => {
+        setData(d);
+        setError(null);
+      })
+      // Senza dati la pagina diceva «Nessuna dieta attiva»: a chi apre l'app senza
+      // rete chiedeva di caricare una dieta che ha già.
+      .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
 
   useEffect(() => {
     load();
+    // Riaperta dal background (su iPhone succede di continuo) la home mostrava
+    // l'«oggi» di ieri: si rilegge quando torna visibile.
+    const torna = () => document.visibilityState === 'visible' && load();
+    document.addEventListener('visibilitychange', torna);
+    return () => document.removeEventListener('visibilitychange', torna);
   }, []);
 
   const markFollowed = async (mealId, followed) => {
+    if (segnando) return;
     // Già «ho mangiato altro»: ripremerlo riapre la domanda invece di rimandarlo al
     // server, che cancellerebbe la nota scritta.
     const prima = data?.today?.meals?.find((m) => m.meal_id === mealId);
@@ -124,6 +141,7 @@ export default function DashboardPage() {
       setAltro({ id: mealId, slot_name: prima.slot_name, deviation_notes: prima.deviation_notes });
       return;
     }
+    setSegnando(mealId);
     try {
       const updated = await api.setFollowed(mealId, followed);
       if (followed === false) setAltro(updated);
@@ -142,11 +160,24 @@ export default function DashboardPage() {
       load();
     } catch (e) {
       addToast(e.message, 'error');
+    } finally {
+      setSegnando(null);
     }
   };
 
   if (loading) return <div className="spinner" />;
-  if (!data?.has_diet) {
+  if (!data) {
+    return (
+      <LoadError
+        message={error}
+        onRetry={() => {
+          setLoading(true);
+          load();
+        }}
+      />
+    );
+  }
+  if (!data.has_diet) {
     return (
       <EmptyState
         icon={ChefHat}

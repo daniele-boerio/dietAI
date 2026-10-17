@@ -2,20 +2,19 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChefHat, Heart, Search, UtensilsCrossed } from 'lucide-react';
 import { api } from '../api';
-import { useApp } from '../App';
 import EmptyState from '../components/EmptyState';
+import LoadError from '../components/LoadError';
 import MacroBar from '../components/MacroBar';
 import StarRating from '../components/StarRating';
 
 const DIFFICULTIES = [
-  { key: '', label: 'Tutte' },
+  { key: '', label: 'Ogni difficoltà' },
   { key: 'easy', label: 'Facili' },
   { key: 'medium', label: 'Medie' },
   { key: 'hard', label: 'Impegnative' },
 ];
 
 export default function RecipesPage() {
-  const { addToast } = useApp();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -23,9 +22,14 @@ export default function RecipesPage() {
   const [onlyFavorites, setOnlyFavorites] = useState(false);
   const [minRating, setMinRating] = useState(null);
   const [page, setPage] = useState(1);
+  const [error, setError] = useState(null);
+  const [tentativo, setTentativo] = useState(0);
 
   useEffect(() => {
     setLoading(true);
+    // Una risposta lenta per «pas» non deve arrivare dopo quella per «pasta» e
+    // rimettere a schermo i risultati vecchi.
+    let superata = false;
     // Debounce sulla ricerca: si scrive più in fretta di quanto il server risponda.
     const t = setTimeout(() => {
       api
@@ -37,12 +41,20 @@ export default function RecipesPage() {
           is_favorite: onlyFavorites || null,
           rating_min: minRating,
         })
-        .then(setData)
-        .catch((e) => addToast(e.message, 'error'))
-        .finally(() => setLoading(false));
+        .then((d) => {
+          if (superata) return;
+          setData(d);
+          setError(null);
+        })
+        // Un errore non è «Nessuna ricetta… genera un piano»: lo si dice per quello che è.
+        .catch((e) => !superata && setError(e.message))
+        .finally(() => !superata && setLoading(false));
     }, 250);
-    return () => clearTimeout(t);
-  }, [search, difficulty, onlyFavorites, minRating, page, addToast]);
+    return () => {
+      superata = true;
+      clearTimeout(t);
+    };
+  }, [search, difficulty, onlyFavorites, minRating, page, tentativo]);
 
   const totalPages = data ? Math.ceil(data.total / data.per_page) : 1;
 
@@ -65,6 +77,7 @@ export default function RecipesPage() {
               type="text"
               className="search-field-input"
               placeholder="Cerca una ricetta..."
+              aria-label="Cerca una ricetta"
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
@@ -77,11 +90,11 @@ export default function RecipesPage() {
 
       <div className="filters">
         <button
-          className={`chip ${!onlyFavorites && minRating === null && difficulty === null ? 'active' : ''}`}
+          className={`chip ${!onlyFavorites && minRating === null && difficulty === '' ? 'active' : ''}`}
           onClick={() => {
             setOnlyFavorites(false);
             setMinRating(null);
-            setDifficulty(null);
+            setDifficulty('');
             setPage(1);
           }}
         >
@@ -125,6 +138,8 @@ export default function RecipesPage() {
 
       {loading ? (
         <div className="spinner" />
+      ) : error && !data ? (
+        <LoadError message={error} onRetry={() => setTentativo((n) => n + 1)} />
       ) : !data || data.items.length === 0 ? (
         <EmptyState
           icon={ChefHat}

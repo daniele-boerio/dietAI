@@ -15,6 +15,7 @@ import {
 import { api, formatNumber } from '../api';
 import { useApp } from '../App';
 import FrequenciesCard from '../components/FrequenciesCard';
+import LoadError from '../components/LoadError';
 import Questionnaire from '../components/Questionnaire';
 import {
   addMeal,
@@ -52,6 +53,7 @@ export default function DietPage() {
   const [diet, setDiet] = useState(null);
   const [meals, setMeals] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   const [file, setFile] = useState(null);
 
@@ -77,7 +79,13 @@ export default function DietPage() {
         setMeals(d.meals);
         setTarget(dailyTotals(d.meals));
       })
-      .catch(() => setDiet(null))
+      // Solo il 404 vuol dire «nessuna dieta». Un 500 o la rete giù diventavano la
+      // pagina vuota di chi la dieta non ce l'ha, e caricare un PDF da lì archiviava
+      // quella vera.
+      .catch((e) => {
+        if (e.status === 404) setDiet(null);
+        else setError(e.message);
+      })
       .finally(() => setLoading(false));
 
   useEffect(() => {
@@ -272,6 +280,15 @@ export default function DietPage() {
 
       {loading ? (
         <div className="spinner" />
+      ) : error ? (
+        <LoadError
+          message={error}
+          onRetry={() => {
+            setError(null);
+            setLoading(true);
+            load();
+          }}
+        />
       ) : (
         /* A sinistra i numeri della dieta, che sono la dieta; a destra quello che le
            sta intorno — le regole scritte a parole, il questionario, il PDF nuovo. In
@@ -493,7 +510,7 @@ export default function DietPage() {
             </div>
 
             <aside className="page-aside">
-            <FrequenciesCard diet={diet} onSaved={setDiet} />
+            {diet && <FrequenciesCard diet={diet} onSaved={setDiet} />}
 
             <DietRulesCard />
 

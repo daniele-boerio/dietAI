@@ -54,7 +54,10 @@ async function raw(path, options = {}, allowRefresh = true) {
     const detail = Array.isArray(err.detail)
       ? err.detail.map((d) => d.msg || '').filter(Boolean).join(' · ')
       : err.detail;
-    throw new Error(detail || `Errore ${res.status}`);
+    const errore = new Error(detail || `Errore ${res.status}`);
+    // Chi deve distinguere «non c'è» (404) da «non sono riuscito a chiederlo» lo legge qui.
+    errore.status = res.status;
+    throw errore;
   }
   return res;
 }

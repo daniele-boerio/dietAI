@@ -266,7 +266,11 @@ sul telefono sta sotto la ricetta invece che di fianco.
   `LoadError` (messaggio + Riprova), mai `return null`: col tema scuro il vuoto è uno
   schermo nero, e il toast dell'errore dopo tre secondi non c'è più. Per lo stesso
   motivo le rotte stanno dentro un `ErrorBoundary`: un errore in un componente
-  staccherebbe l'intero albero React lasciando la finestra nera.
+  staccherebbe l'intero albero React lasciando la finestra nera. E un errore non è
+  uno stato vuoto: Dashboard, Dispensa, Ricette e Dieta mostravano «nessuna dieta»,
+  «dispensa vuota», «nessuna ricetta» quando la richiesta falliva — la home senza rete
+  chiedeva di caricare una dieta che c'era già. I dati non ancora arrivati sono `null`,
+  non `[]`; per «non c'è» vale solo il 404 (`err.status`, da `api.js`).
 - La griglia settimanale (≥1100px) allinea le righe sciogliendo `.day-column` con
   `display: contents`, e **ogni cella dichiara riga e colonna** (inline, da `WeekGrid`).
   Non affidarsi al posizionamento automatico: il cursore di CSS Grid non torna

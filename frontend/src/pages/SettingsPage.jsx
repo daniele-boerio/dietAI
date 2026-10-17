@@ -8,6 +8,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import AiUsageCard from '../components/AiUsageCard';
 import CuisinePicker from '../components/CuisinePicker';
 import IngredientInput from '../components/IngredientInput';
+import LoadError from '../components/LoadError';
 import ModelPicker from '../components/ModelPicker';
 import NormalizationSettings from '../components/NormalizationSettings';
 import ReminderSettings from '../components/ReminderSettings';
@@ -96,7 +97,8 @@ function BaseTab() {
   const [draft, setDraft] = useState('');
 
   useEffect(() => {
-    api.getBaseIngredients().then(setItems).catch(() => {});
+    // Una lista che non si carica non è una lista vuota: lo si dice.
+    api.getBaseIngredients().then(setItems).catch((e) => addToast(e.message, 'error'));
   }, []);
 
   const add = async () => {
@@ -152,7 +154,7 @@ function ExcludedTab() {
   const [reason, setReason] = useState('');
 
   useEffect(() => {
-    api.getExcluded().then(setItems).catch(() => {});
+    api.getExcluded().then(setItems).catch((e) => addToast(e.message, 'error'));
   }, []);
 
   const add = async () => {
@@ -236,12 +238,23 @@ const BUDGET = [
 function PreferencesTab() {
   const { addToast } = useApp();
   const [prefs, setPrefs] = useState(null);
+  const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   const attesa = useRef(null); // il timer del salvataggio differito
   const inSospeso = useRef(null); // quello che deve ancora arrivare al server
 
+  const carica = () =>
+    api
+      .getPreferences()
+      .then((p) => {
+        setPrefs(p);
+        setError(null);
+      })
+      // Prima restava lo spinner per sempre.
+      .catch((e) => setError(e.message));
+
   useEffect(() => {
-    api.getPreferences().then(setPrefs).catch(() => {});
+    carica();
     // Cambiare scheda entro i 700ms non deve far sparire la scelta: si scrive
     // subito invece di annullare il timer e basta. Una preferenza che si disfa da
     // sé a seconda di quanto in fretta si è cliccato altrove è il tipo di guasto
@@ -252,7 +265,7 @@ function PreferencesTab() {
     };
   }, []);
 
-  if (!prefs) return <div className="spinner" />;
+  if (!prefs) return error ? <LoadError message={error} onRetry={carica} /> : <div className="spinner" />;
 
   const scrivi = async (next) => {
     clearTimeout(attesa.current);
@@ -412,18 +425,28 @@ function PreferencesTab() {
 function ModelsTab() {
   const { addToast } = useApp();
   const [config, setConfig] = useState(null);
+  const [error, setError] = useState(null);
   const [models, setModels] = useState([]);
   const [busy, setBusy] = useState(false);
 
+  const carica = () =>
+    api
+      .getAiConfig()
+      .then((c) => {
+        setConfig(c);
+        setError(null);
+      })
+      .catch((e) => setError(e.message));
+
   useEffect(() => {
-    api.getAiConfig().then(setConfig).catch(() => {});
+    carica();
     api
       .getAiModels()
       .then((d) => setModels(d.models))
       .catch(() => setModels([]));
   }, []);
 
-  if (!config) return <div className="spinner" />;
+  if (!config) return error ? <LoadError message={error} onRetry={carica} /> : <div className="spinner" />;
 
   const change = async (role, model) => {
     const payload = Object.fromEntries(

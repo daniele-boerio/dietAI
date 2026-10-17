@@ -4,13 +4,17 @@ import { useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { useApp } from '../App';
 import IngredientInput from '../components/IngredientInput';
+import LoadError from '../components/LoadError';
 
 // La dispensa non è una configurazione: è quello che c'è in casa adesso, e cambia ogni
 // settimana. Sta accanto alla spesa perché ne è l'altra metà — la lista è ciò che manca,
 // questa è ciò che c'è già, e la seconda si sottrae dalla prima.
 export default function PantryPage() {
   const { addToast } = useApp();
-  const [items, setItems] = useState([]);
+  // null finché non è arrivata: una dispensa vuota e una che non si è caricata sono
+  // due cose diverse, e la seconda non deve dire «la lista comprende tutto».
+  const [items, setItems] = useState(null);
+  const [error, setError] = useState(null);
   const [draft, setDraft] = useState('');
   const [quantity, setQuantity] = useState('');
   const [unit, setUnit] = useState('g');
@@ -22,17 +26,24 @@ export default function PantryPage() {
   const [params] = useSearchParams();
   const fix = params.get('fix');
 
-  const load = () => api.getPantry().then(setItems).catch(() => {});
-
-  useEffect(() => {
+  const load = () =>
     api
       .getPantry()
       .then((rows) => {
         setItems(rows);
-        const target = rows.find((r) => String(r.ingredient_id) === fix);
-        if (target) setEditing(target.id);
+        setError(null);
+        return rows;
       })
-      .catch(() => {});
+      .catch((e) => {
+        setError(e.message);
+        return null;
+      });
+
+  useEffect(() => {
+    load().then((rows) => {
+      const target = rows?.find((r) => String(r.ingredient_id) === fix);
+      if (target) setEditing(target.id);
+    });
   }, [fix]);
 
   // La dispensa a fine settimana è lunga: la riga da correggere va portata sotto gli
@@ -56,6 +67,10 @@ export default function PantryPage() {
       addToast(e.message, 'error');
     }
   };
+
+  if (items === null) {
+    return error ? <LoadError message={error} onRetry={load} /> : <div className="spinner" />;
+  }
 
   return (
     // La riga di una scorta è corta — nome, reparto, quantità — e su un monitor una
@@ -85,10 +100,11 @@ export default function PantryPage() {
             type="number"
             inputMode="decimal"
             placeholder="Quantità"
+            aria-label="Quantità"
             value={quantity}
             onChange={(e) => setQuantity(e.target.value)}
           />
-          <select value={unit} onChange={(e) => setUnit(e.target.value)}>
+          <select value={unit} onChange={(e) => setUnit(e.target.value)} aria-label="Unità">
             <option value="g">g</option>
             <option value="ml">ml</option>
             <option value="unità">unità</option>
@@ -134,16 +150,22 @@ export default function PantryPage() {
                   className="icon-button"
                   onClick={() => setEditing(i.id)}
                   title="Modifica nome e quantità"
+                  aria-label={`Modifica ${i.name}`}
                 >
                   <Pencil size={15} />
                 </button>
                 <button
                   className="icon-button danger"
                   onClick={async () => {
-                    await api.removePantryItem(i.id);
-                    load();
+                    try {
+                      await api.removePantryItem(i.id);
+                      load();
+                    } catch (e) {
+                      addToast(e.message, 'error');
+                    }
                   }}
                   title="Togli dalla dispensa"
+                  aria-label={`Togli ${i.name} dalla dispensa`}
                 >
                   <Trash2 size={15} />
                 </button>
@@ -211,18 +233,19 @@ function PantryRowEditor({ item, onDone, onCancel, innerRef }) {
         type="number"
         inputMode="decimal"
         placeholder="Quantità"
+        aria-label="Quantità"
         value={quantity}
         onChange={(e) => setQuantity(e.target.value)}
       />
-      <select value={unit} onChange={(e) => setUnit(e.target.value)}>
+      <select value={unit} onChange={(e) => setUnit(e.target.value)} aria-label="Unità">
         <option value="g">g</option>
         <option value="ml">ml</option>
         <option value="unità">unità</option>
       </select>
-      <button className="pantry-edit-ok" onClick={save} disabled={busy} title="Salva">
+      <button className="pantry-edit-ok" onClick={save} disabled={busy} title="Salva" aria-label="Salva">
         <Check size={16} />
       </button>
-      <button className="pantry-edit-no" onClick={onCancel} disabled={busy} title="Annulla">
+      <button className="pantry-edit-no" onClick={onCancel} disabled={busy} title="Annulla" aria-label="Annulla">
         <X size={16} />
       </button>
       {/* La scadenza su una riga sua, sotto: è facoltativa e la si segna di rado — le

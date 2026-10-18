@@ -7,24 +7,18 @@ from sqlalchemy.orm import Session
 
 from ..auth import get_current_user_id
 from ..database import get_db
-from ..models import Recipe, ShoppingList, ShoppingListItem, WeekPlan, WeightEntry
+from ..models import WeekPlan, WeightEntry
 from ..schemas import WeightEntryIn
-from ..services import planner, weight
+from ..services import planner, tracking, weight
 from ..services.planner import (
-    DAY_NAMES,
     current_week_start,
     get_active_diet,
     get_or_create_week,
     monday_of,
-    next_week_start,
     refresh_week_statuses,
-    serialize_week,
-    week_meals,
 )
-from ..services.shopping import rebuild_shopping_list
 from ..services.tracking import (
     diet_targets,
-    recent_adherence,
     weekly_tracking,
     year_adherence,
 )
@@ -146,138 +140,9 @@ def list_weeks(
     ]
 
 
-def _da_generare_da_oggi(week_data: dict, today: date) -> int:
-    """Le caselle vuote che la dialog di generazione propone: da oggi in avanti.
-
-    Il pulsante della home diceva `meals_total - meals_filled`, cioè contava anche i
-    pasti vuoti dei giorni già passati: «Genera 12 pasti», e la dialog che apriva ne
-    proponeva 9, perché riempire un pasto passato è una chiamata pagata per niente.
-    Generabile o no lo dice `planner.is_generable` (il campo `generable`), come per
-    la generazione e per `lib/generation.js`.
-    """
-    oggi = today.isoformat()
-    return sum(
-        1
-        for d in week_data["days"]
-        if d["date"] >= oggi
-        for m in d["meals"]
-        if m["generable"] and not m["recipe"]
-    )
-
-
 @router.get("/dashboard")
 def dashboard(
     user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
 ):
     """Riepilogo della home: cosa si mangia oggi, a che punto è il piano e la spesa."""
-    refresh_week_statuses(db, user_id)
-
-    diet = get_active_diet(db, user_id)
-    if not diet:
-        return {"has_diet": False}
-
-    week = get_or_create_week(db, user_id, current_week_start())
-    week_data = serialize_week(db, week)
-
-    today = planner.today()
-    today_meals = []
-    for day, meal, slot in week_meals(db, week):
-        if day.date != today:
-            continue
-        recipe = db.get(Recipe, meal.recipe_id) if meal.recipe_id else None
-        today_meals.append(
-            {
-                "meal_id": meal.id,
-                "slot_name": slot.name,
-                "slot_order": slot.order_index,
-                "target_calories": slot.target_calories,
-                "is_followed": meal.is_followed,
-                # "Ho mangiato altro": la ricetta è scritta ma è stata rimandata. La
-                # home la mostra spenta, non tra i piatti di oggi da preparare.
-                "is_skipped": meal.is_skipped,
-                # «Ho mangiato altro: cosa?»: il testo e la stima. Il totale di oggi
-                # conta la stima al posto del piatto rimandato, contro il target pieno
-                # della giornata — prima il pasto usciva da tutte e due le cifre, e
-                # «1400 / 1400» nascondeva la pizza al posto della cena.
-                "deviation_notes": meal.deviation_notes if meal.is_followed is False else None,
-                "eaten_nutrition": meal.eaten_nutrition if meal.is_followed is False else None,
-                # "Lo prepari tu": niente ricetta, ma i macro contano lo stesso nel
-                # totale del giorno — dati per centrati sul target.
-                "self_managed": not slot.auto_generate,
-                # La home mette in disparte i pasti già decisi (vedi «Non generati»):
-                # per dirlo le serve sapere anche quali sono fissi.
-                "is_recurring": meal.is_recurring,
-                "recipe": (
-                    {
-                        "id": recipe.id,
-                        "title": recipe.title,
-                        "calories": recipe.calories,
-                        "protein_g": recipe.protein_g,
-                        "carbs_g": recipe.carbs_g,
-                        "fat_g": recipe.fat_g,
-                        "prep_time_min": recipe.prep_time_min,
-                        "cook_time_min": recipe.cook_time_min,
-                    }
-                    if recipe
-                    else None
-                ),
-            }
-        )
-
-    # Ricalcolata, come la pagina Spesa: la lista è una funzione del piano e della
-    # dispensa, e letta così com'era la home poteva contare articoli già in dispensa.
-    lst = rebuild_shopping_list(db, user_id)
-    db.commit()
-    items = (
-        db.query(ShoppingListItem)
-        .filter(ShoppingListItem.shopping_list_id == lst.id)
-        .all()
-    )
-
-    next_week = (
-        db.query(WeekPlan)
-        .filter(WeekPlan.user_id == user_id, WeekPlan.week_start_date == next_week_start())
-        .first()
-    )
-
-    return {
-        "has_diet": True,
-        "today": {
-            "date": today.isoformat(),
-            "day_name": DAY_NAMES[today.weekday()],
-            "meals": sorted(today_meals, key=lambda m: m["slot_order"]),
-        },
-        "week": {
-            "id": week.id,
-            "week_start_date": week.week_start_date.isoformat(),
-            "status": week.status,
-            "meals_total": week_data["meals_total"],
-            "meals_filled": week_data["meals_filled"],
-            "meals_to_generate": _da_generare_da_oggi(week_data, today),
-        },
-        "shopping": {
-            "completed_at": lst.completed_at.isoformat() if lst.completed_at else None,
-            "total_items": len(items),
-            "checked_items": sum(1 for i in items if i.is_checked),
-        },
-        "next_week": (
-            {
-                "id": next_week.id,
-                "week_start_date": next_week.week_start_date.isoformat(),
-                "status": next_week.status,
-            }
-            if next_week
-            else None
-        ),
-        "diet": {
-            "daily_calories": diet.total_daily_calories,
-            "meals_count": len(diet_targets(db, diet.id)),
-        },
-        # Le ultime quattro settimane in una barra al giorno: la spia in colonna
-        # destra della home, che dice se la dieta la si sta seguendo davvero.
-        "adherence": recent_adherence(db, user_id),
-        "recipes_count": db.query(Recipe).filter(Recipe.user_id == user_id).count(),
-        "favorites_count": db.query(Recipe)
-        .filter(Recipe.user_id == user_id, Recipe.is_favorite.is_(True))
-        .count(),
-    }
+    return tracking.dashboard(db, user_id)

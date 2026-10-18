@@ -97,7 +97,7 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
 │       │   ├── weight.py       # storico del peso, proposta di ricalcolo
 │       │   ├── usage.py        # registro delle chiamate AI e conto per utente
 │       │   ├── healthai.py     # pasti consumati → healthAI (thread ogni minuto, confronto di stati)
-│       │   └── tracking.py     # pianificato vs target
+│       │   └── tracking.py     # pianificato vs target, aderenza, riepilogo della home
 │       └── utils/
 │           ├── units.py        # conversione unità (g/ml/unità)
 │           ├── clock.py        # «oggi» e «adesso» in ora italiana

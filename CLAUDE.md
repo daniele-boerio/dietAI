@@ -26,7 +26,7 @@ con questo file e con `docs/`, valgono questi.
 ```
 Traefik (Coolify) → Nginx (container frontend, :80)
                         ├─ /          → build React statica
-                        └─ /api/*     → proxy_pass → backend:8000 (FastAPI)
+                        └─ /api/*     → proxy_pass → dietai-backend:8000 (FastAPI)
                                                         ├─ PostgreSQL (risorsa Coolify separata)
                                                         └─ provider AI (OpenRouter o Anthropic, con la key dell'utente)
 ```

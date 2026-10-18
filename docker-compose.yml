@@ -6,7 +6,7 @@ services:
     environment:
       - SERVICE_FQDN_FRONTEND
     depends_on:
-      - backend
+      - dietai-backend
     healthcheck:
       # 127.0.0.1 e non localhost: nginx.conf fa solo `listen 80` (IPv4), mentre dentro
       # il container localhost risolve prima su ::1 e busybox wget non ripiega su IPv4.
@@ -17,9 +17,12 @@ services:
 
   # ── Backend (FastAPI) ──
   # Nessun dominio pubblico: ci parla solo nginx, via rete Docker interna.
+  # `dietai-backend` e non `backend`: su Coolify le app condividono la rete, e il nome
+  # del servizio diventa un nome DNS per tutte. Con `backend`, un'altra app che chiama
+  # il *suo* backend poteva finire su questo (e nginx di qui su quello di un'altra).
   # Il Postgres NON è qui: è una risorsa separata (Coolify), e le DB_* vanno
   # impostate nelle Environment Variables. In locale c'è docker-compose.dev.yml.
-  backend:
+  dietai-backend:
     build: ./backend
     environment:
       # I default (${VAR:-valore}) non sono decorativi: senza, una variabile non

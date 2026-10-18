@@ -76,7 +76,14 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
 │       │   ├── catalog.py      # catalogo modelli del provider (per il selettore)
 │       │   ├── pdf.py          # estrazione testo dal PDF della dieta
 │       │   ├── prompts.py      # TUTTI i prompt stanno qui
-│       │   ├── planner.py      # settimane, generazione, ricorrenti, contesto
+│       │   ├── planner/        # pacchetto; `__init__` re-esporta tutto (`from ..services.planner import ...`)
+│       │   │   ├── settimane.py   # «oggi», dieta attiva, struttura e riallineamento delle caselle
+│       │   │   ├── stato.py       # stato, diario, esito ed errore della generazione
+│       │   │   ├── pasti.py       # fissi, ricorrenti, cestino, saltati, forget_tracking
+│       │   │   ├── contesto.py    # build_context: il contesto comune dei prompt
+│       │   │   ├── frequenze.py   # frequenze settimanali e gruppi del batch
+│       │   │   ├── lettura.py     # serialize_meal / serialize_week
+│       │   │   └── generazione.py # generate_week (thread), regenerate_meal
 │       │   ├── recipes.py      # creazione/serializzazione ricette
 │       │   ├── ingredients.py  # normalizzazione nomi, anagrafica
 │       │   ├── shopping.py     # aggregazione lista, costo, spesa fatta

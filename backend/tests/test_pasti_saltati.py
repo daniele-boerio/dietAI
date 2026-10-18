@@ -10,6 +10,7 @@ from datetime import date, timedelta
 
 import pytest
 
+from app.models import PlannedMeal
 from app.services import planner
 from tests.test_flow import DAYS, FakeModel  # noqa: F401
 
@@ -170,15 +171,23 @@ def test_il_pasto_saltato_si_compra_dove_si_è_accodato(client, settimana_genera
     assert lst["covers_to"] >= nxt["days"][0]["date"]
 
 
-def test_i_totali_del_giorno_scendono_col_pasto_saltato(client, settimana_generata):
+def test_il_pasto_saltato_conta_quello_mangiato_al_suo_posto(client, db, settimana_generata):
+    """Nella griglia come nella home: target pieno, e la cena saltata vale la stima."""
     cena = pasto(settimana_generata, 0, "Cena")
     client.put(f"/api/planning/meals/{cena['id']}/followed", json={"is_followed": False})
 
     day = client.get("/api/planning/weeks/current").json()["days"][0]
-    # 1700 - 600: cala il pianificato ma anche il target, o il giorno sembrerebbe
-    # un fallimento invece di una cena in meno messa in programma.
+    # Senza stima la cena conta zero, ma il target resta quello della dieta.
     assert day["totals"]["calories"] == 1100
-    assert day["totals"]["target_calories"] == 1100
+    assert day["totals"]["target_calories"] == 1700
+
+    db.get(PlannedMeal, cena["id"]).eaten_nutrition = {
+        "calories": 900, "protein_g": 30, "carbs_g": 100, "fat_g": 35,
+    }
+    db.commit()
+    day = client.get("/api/planning/weeks/current").json()["days"][0]
+    assert day["totals"]["calories"] == 1100 + 900
+    assert day["totals"]["target_calories"] == 1700
 
 
 def test_il_tracking_non_conta_il_pasto_saltato(client, settimana_generata):

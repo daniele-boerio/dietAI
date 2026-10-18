@@ -112,9 +112,10 @@ def serialize_week(db: Session, week: WeekPlan) -> dict:
         # rappresenti quello che si mangia davvero e non solo quello che ha scritto l'AI.
         def _macros(meal: dict) -> dict:
             # Un pasto saltato conserva la ricetta per memoria, ma non è stato
-            # mangiato: contarlo gonfierebbe la giornata di un piatto mai cucinato.
+            # mangiato: conta quello che si è mangiato al suo posto, la stima di «ho
+            # mangiato altro: cosa?» (zero se non si sa, o «non ho mangiato niente»).
             if meal["is_skipped"]:
-                return {}
+                return meal["eaten_nutrition"] or {}
             if meal["recipe"]:
                 return meal["recipe"]
             return meal["target"] if meal["self_managed"] else {}
@@ -125,11 +126,11 @@ def serialize_week(db: Session, week: WeekPlan) -> dict:
             "protein_g": round(sum(c.get("protein_g", 0) for c in contributi), 1),
             "carbs_g": round(sum(c.get("carbs_g", 0) for c in contributi), 1),
             "fat_g": round(sum(c.get("fat_g", 0) for c in contributi), 1),
-            # Anche il target scende: un pasto saltato non è un buco da colmare, è un
-            # pasto che quel giorno non era in programma mangiare.
-            "target_calories": sum(
-                m["target"]["calories"] for m in entry["meals"] if not m["is_skipped"]
-            ),
+            # Il target è quello pieno della giornata, come nella home (`lib/today.js`):
+            # la dieta non cambia perché una cena è andata diversamente. Prima il pasto
+            # saltato usciva da tutte e due le cifre, e una pizza al posto della cena
+            # dava «1100 / 1100», come se la giornata fosse andata a puntino.
+            "target_calories": sum(m["target"]["calories"] for m in entry["meals"]),
         }
 
     # "Da riempire" conta solo le caselle che l'AI deve generare: includere quelle

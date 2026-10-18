@@ -53,9 +53,13 @@ griglia della settimana, dal dettaglio o dalla chat) mette `PlannedMeal.is_skipp
 libera di quello stesso pasto — più avanti in settimana, o sulla prossima se la
 settimana è piena (`skip_meal`). Non si sposta nient'altro: gli altri giorni restano
 dove sono. La casella saltata **conserva la `recipe_id` come memoria** di cosa c'era in
-programma, ma smette di contare ovunque — spesa, totali del giorno (cala anche il
-target, non è un buco da colmare), tracking e generazione la filtrano tutti su
-`is_skipped`. Il totale della spesa però non cala: la ricetta si compra dove si è
+programma, ma la sua ricetta smette di contare ovunque — spesa, totali del giorno,
+tracking e generazione la filtrano tutti su `is_skipped`. Nei totali del giorno della
+griglia, come nella home (`lib/today.js`), al suo posto conta quello che si è mangiato
+davvero (`eaten_nutrition`, zero se non si sa), e il target resta quello **pieno**
+della dieta. Prima il pasto saltato usciva da tutte e due le cifre: una pizza al posto
+della cena dava «1100 / 1100», come se la giornata fosse andata a puntino, e la griglia
+diceva una cosa diversa dalla home. Il totale della spesa però non cala: la ricetta si compra dove si è
 accodata, che è il punto (il piatto si cucina lo stesso, un altro giorno).
 `is_followed = True` annulla il rinvio (`unskip_meal`): la ricetta torna e la casella
 dove si era accodata si svuota. `skip_day` fa lo stesso per l'intera giornata (weekend

@@ -192,7 +192,9 @@ paragrafo nel documento, scrivendo anche cosa non andava con la versione di prim
   Correggere la dieta attiva aggiorna i `MealSlot` sul posto (`update_meals_in_place`):
   ricrearli porta via in CASCADE tutto il piano.
 - «Ho mangiato altro» (`PlannedMeal.is_skipped`) conserva la ricetta come memoria e la
-  accoda (`skipped_to_meal_id`); la casella saltata non conta più da nessuna parte.
+  accoda (`skipped_to_meal_id`); la sua ricetta non conta più da nessuna parte. Nei
+  totali del giorno (griglia e home) conta la stima di cosa si è mangiato, contro il
+  target pieno della dieta.
   Non confonderlo con `DayPlan.is_skipped` né con il cestino (`clear_meal_cell`).
 - Un piatto nuovo in una casella azzera il tracking con `forget_tracking` (segno, nota,
   stima, `pantry_used`): i vincoli `ck_planned_meal_*` (migrazione 0035) rifiutano gli

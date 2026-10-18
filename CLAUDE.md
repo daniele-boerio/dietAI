@@ -355,7 +355,10 @@ con la chiave dell'admin, e il percorso comincia dalla dieta.
 
 ## Deploy (Coolify)
 
-Push sul branch principale → Coolify ricostruisce via Docker Compose. Variabili da
+Push sul branch principale → Coolify ricostruisce via Docker Compose. In parallelo la
+CI di GitHub (`.github/workflows/ci.yml`) lancia pytest, vitest, la build e le
+migrazioni su un Postgres vero con `alembic check`: non ferma il deploy, ma dice se
+quel push era rotto. Variabili da
 impostare: `DB_*`, `SECRET_KEY`, `ENCRYPTION_KEY`, `SEED_USER_EMAIL`,
 `SEED_USER_PASSWORD`, `COOKIE_SECURE=true`; per healthAI `HEALTHAI_URL` e
 `HEALTHAI_TOKEN` (facoltative). Solo il frontend ha un dominio pubblico.

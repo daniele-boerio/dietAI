@@ -20,6 +20,10 @@ description: Committare, pubblicare e mantenere DietAI in produzione su Coolify 
 
 ## Deploy (Coolify)
 
+Dopo il push guarda anche la CI (`gh run list --limit 3`, `gh run watch`): pytest,
+vitest, build e migrazioni su Postgres con `alembic check`. Coolify deploya comunque,
+quindi una CI rossa va sistemata subito con un altro commit.
+
 Push su `main` → Coolify ricostruisce via `docker-compose.yml` (frontend Nginx +
 backend; il Postgres è una risorsa Coolify separata). Il backend all'avvio fa
 `alembic upgrade head`, poi `python -m app.seed` (idempotente, non blocca l'avvio),

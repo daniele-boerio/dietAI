@@ -83,7 +83,7 @@ sotto il metabolismo basale) **non si applicano**, perché difendono un calcolo
 automatico, non discutono i numeri di chi li sta scrivendo a mano.
 
 **Salvare l'editor corregge i pasti, non li ricrea** (`update_meals_in_place` in
-`routers/diet.py`). Prima `PUT /api/diet/{id}/meals` cancellava i `MealSlot` della
+`services/diet.py`). Prima `PUT /api/diet/{id}/meals` cancellava i `MealSlot` della
 dieta e li riscriveva: `PlannedMeal.meal_slot_id` è in CASCADE, e ritoccare 20 kcal
 della merenda svuotava il piano di **tutte** le settimane, passate comprese — ricette,
 «l'ho seguito», stime di «ho mangiato altro», dispensa scalata — e al giro dopo
@@ -127,7 +127,7 @@ dieta nuova senza frequenze sue **eredita quelle della precedente**
 peso non ha cambiato idea sul pesce. Guardie in `tests/test_frequenze.py`.
 
 **I numeri del PDF passano dagli stessi limiti dell'editor** (`_numero` in
-`routers/diet.py`). Il PDF lo legge il modello, e quello che restituiva entrava così
+`services/diet.py`). Il PDF lo legge il modello, e quello che restituiva entrava così
 com'era: «650 kcal» in stringa era un 500, un negativo o 50000 kcal diventavano i
 target. Ora si prende la cifra, la si tiene nei limiti di `MealSlotInput`, e il totale
 del giorno è la somma dei pasti — non il `daily_calories` letto a parte, che poteva non

@@ -182,6 +182,9 @@ paragrafo nel documento, scrivendo anche cosa non andava con la versione di prim
 - «Ho mangiato altro» (`PlannedMeal.is_skipped`) conserva la ricetta come memoria e la
   accoda (`skipped_to_meal_id`); la casella saltata non conta più da nessuna parte.
   Non confonderlo con `DayPlan.is_skipped` né con il cestino (`clear_meal_cell`).
+- Un piatto nuovo in una casella azzera il tracking con `forget_tracking` (segno, nota,
+  stima, `pantry_used`): i vincoli `ck_planned_meal_*` (migrazione 0035) rifiutano gli
+  stati incoerenti, e porzioni, batch, macro e quantità fuori regola.
 - «Lo faccio io» (`auto_generate=False`): mai generato, mai in spesa, ma i macro
   **contano**. I pasti fissi (`_is_fixed`) non si rigenerano; togliere il fisso svuota
   le copie future (`stop_recurring_forward`).

@@ -764,6 +764,22 @@ def stop_recurring_forward(
 # ── Pasti saltati ──────────────────────────────────────────────────────────────
 
 
+def forget_tracking(meal: PlannedMeal) -> None:
+    """Il pasto torna «non ancora tracciato»: nella casella c'è un altro piatto.
+
+    Il segno, la nota, la stima di «cosa ho mangiato» e la memoria di cosa era uscito
+    dalla dispensa vanno via insieme, perché descrivevano il piatto di prima. Prima ogni
+    rotta azzerava il suo pezzo — assegnare una ricetta toglieva il segno ma lasciava la
+    stima, generare lasciava `pantry_used` — e i vincoli della migrazione 0035
+    (`ck_planned_meal_*`) adesso lo impediscono. Quello che era stato scalato resta
+    scalato: mangiato è mangiato.
+    """
+    meal.is_followed = None
+    meal.deviation_notes = None
+    meal.eaten_nutrition = None
+    meal.pantry_used = None
+
+
 def forget_queued_meal(db: Session, meal: PlannedMeal) -> None:
     """Questa casella non è più «il piatto che avevo rimandato».
 
@@ -780,9 +796,7 @@ def _empty_meal(db: Session, meal: PlannedMeal) -> None:
     """Svuota una casella: la ricetta se n'è andata da un'altra parte."""
     meal.recipe_id = None
     meal.source = "ai_generated"
-    meal.is_followed = None
-    meal.deviation_notes = None
-    meal.eaten_nutrition = None
+    forget_tracking(meal)
     meal.skipped_to_meal_id = None
     forget_queued_meal(db, meal)
 
@@ -851,9 +865,7 @@ def skip_meal(
     target = free[0]
     target.recipe_id = meal.recipe_id
     target.source = meal.source
-    target.is_followed = None
-    target.deviation_notes = None
-    target.eaten_nutrition = None
+    forget_tracking(target)
     # Dove è finito il piatto, scritto invece che indovinato: annullare il salto deve
     # svuotare **questa** casella, non un'altra che per caso ha lo stesso piatto — e da
     # quando lo stesso piatto in due giorni è una riga di ricetta sola, "stessa ricetta"
@@ -1736,14 +1748,14 @@ def _apply_generated_week(
                 continue
             meal.recipe_id = recipe.id
             meal.source = "ai_generated"
-            meal.is_followed = None
+            forget_tracking(meal)
             filled += 1
             # Il batch: la stessa ricetta nei giorni dopo, cucinata una volta sola.
             for seguace_id in (followers or {}).get(meal.id, []):
                 seguace = db.get(PlannedMeal, seguace_id)
                 seguace.recipe_id = recipe.id
                 seguace.source = "ai_generated"
-                seguace.is_followed = None
+                forget_tracking(seguace)
                 forget_queued_meal(db, seguace)
                 filled += 1
 
@@ -1929,8 +1941,7 @@ def regenerate_meal(
 
     meal.recipe_id = recipe.id
     meal.source = "ai_generated"
-    meal.is_followed = None
-    meal.pantry_used = None  # Reset since we're getting a new recipe
+    forget_tracking(meal)
     # Qui dentro c'è un piatto nuovo, scelto adesso: se questa casella era la coda di un
     # pasto rimandato, non lo è più.
     forget_queued_meal(db, meal)

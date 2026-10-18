@@ -105,6 +105,20 @@ guarda la settimana — e passa da una conferma, perché a due centimetri c'è �
 seguito». Toglie solo quella casella: le copie di un pasto fisso già messe nelle
 settimane dopo si levano dal dettaglio, togliendo «Fisso», e la conferma lo dice.
 
+**Un piatto nuovo azzera il tracking, tutto insieme.** Segno «l'ho seguito», nota,
+stima di «cosa ho mangiato» e memoria della dispensa scalata (`pantry_used`)
+descrivono il piatto che c'era: quando nella casella ne arriva un altro (assegnato,
+generato, rigenerato, accodato da un salto) se ne vanno tutti con
+`planner.forget_tracking`. Prima ogni rotta azzerava il suo pezzo — assegnare una
+ricetta toglieva il segno ma lasciava la stima, generare lasciava `pantry_used` — e
+gli stati incoerenti restavano lì. Dalla migrazione `0035` il database li rifiuta
+(`ck_planned_meal_skipped_to`, `_eaten`, `_pantry`), insieme a porzioni e batch sotto
+1 e a target, macro e quantità negative; la migrazione prima ripulisce le righe fuori
+regola, poi aggiunge i vincoli, così non può fallire sui dati vecchi. Un JSON azzerato
+può essere SQL NULL o il JSON `null`, e i vincoli accettano tutti e due. Conseguenza
+pratica: in «ho mangiato altro» la dispensa si rimette **prima** del salto, perché
+`skip_meal` scrive sul database.
+
 **Lo stesso piatto è una ricetta sola.** Il ricettario è l'archivio dei piatti, non il
 diario delle caselle: la colazione che si ripete sette giorni è un piatto. Prima ogni
 casella si portava dietro la sua riga — `create_recipe` una per pasto generato,

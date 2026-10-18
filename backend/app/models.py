@@ -140,6 +140,14 @@ class MealSlot(Base):
 
     __table_args__ = (
         UniqueConstraint("diet_plan_id", "order_index", name="uq_meal_slot_order"),
+        # Migrazione 0035: prima i limiti stavano solo negli schemi degli input, e una
+        # porzione a 0 azzerava la spesa di quel pasto senza dire niente.
+        CheckConstraint("servings >= 1 AND batch_days >= 1", name="ck_meal_slot_counts"),
+        CheckConstraint(
+            "target_calories >= 0 AND target_protein_g >= 0 AND target_carbs_g >= 0 "
+            "AND target_fat_g >= 0",
+            name="ck_meal_slot_targets",
+        ),
     )
 
 
@@ -306,6 +314,10 @@ class Recipe(Base):
         CheckConstraint(
             "rating IS NULL OR (rating >= 1 AND rating <= 5)", name="ck_recipe_rating"
         ),
+        CheckConstraint(
+            "calories >= 0 AND protein_g >= 0 AND carbs_g >= 0 AND fat_g >= 0",
+            name="ck_recipe_macros",
+        ),
     )
 
 
@@ -327,6 +339,10 @@ class RecipeIngredient(Base):
     quantity = Column(Float, nullable=False)
     unit = Column(String, nullable=False)  # "g", "ml", "unità", "cucchiai", ...
     notes = Column(String)  # "a dadini", "tritato", ...
+
+    __table_args__ = (
+        CheckConstraint("quantity >= 0", name="ck_recipe_ingredient_quantity"),
+    )
 
 
 # ─────────────────────────── Pianificazione ───────────────────────────
@@ -440,6 +456,23 @@ class PlannedMeal(Base):
         CheckConstraint(
             "source IN ('ai_generated','user_custom','from_favorites')",
             name="ck_planned_meal_source",
+        ),
+        # Gli stati che stanno insieme solo in un modo (migrazione 0035). Un JSON
+        # azzerato dall'ORM può essere SQL NULL o il JSON `null`: valgono tutti e due.
+        # `IS TRUE`/`IS FALSE` e non `=`, perché un CHECK che vale NULL passa.
+        CheckConstraint(
+            "skipped_to_meal_id IS NULL OR is_skipped IS TRUE",
+            name="ck_planned_meal_skipped_to",
+        ),
+        CheckConstraint(
+            "eaten_nutrition IS NULL OR CAST(eaten_nutrition AS TEXT) = 'null' "
+            "OR is_followed IS FALSE",
+            name="ck_planned_meal_eaten",
+        ),
+        CheckConstraint(
+            "pantry_used IS NULL OR CAST(pantry_used AS TEXT) = 'null' "
+            "OR is_followed IS TRUE",
+            name="ck_planned_meal_pantry",
         ),
     )
 
@@ -558,6 +591,10 @@ class PantryItem(Base):
 
     __table_args__ = (
         UniqueConstraint("user_id", "ingredient_id", name="uq_pantry_item"),
+        CheckConstraint(
+            "quantity_available IS NULL OR quantity_available >= 0",
+            name="ck_pantry_quantity",
+        ),
     )
 
 
@@ -751,5 +788,9 @@ class ShoppingListItem(Base):
     __table_args__ = (
         UniqueConstraint(
             "shopping_list_id", "ingredient_id", "unit", name="uq_shopping_item"
+        ),
+        CheckConstraint(
+            "total_quantity >= 0 AND (bought_quantity IS NULL OR bought_quantity > 0)",
+            name="ck_shopping_item_quantity",
         ),
     )

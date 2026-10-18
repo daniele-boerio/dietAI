@@ -28,6 +28,7 @@ from ..services.planner import (
     current_week_start,
     ensure_not_skipped,
     forget_queued_meal,
+    forget_tracking,
     generate_week,
     generation_error,
     get_or_create_week,
@@ -273,10 +274,10 @@ def assign_meal(
     else:
         raise HTTPException(400, "Serve recipe_id oppure una ricetta completa.")
 
-    meal.is_followed = None
     # Il piatto è un altro: quello che era stato scalato dalla dispensa resta scalato
-    # (mangiato è mangiato), ma non ha più senso rimetterlo se domani si corregge.
-    meal.pantry_used = None
+    # (mangiato è mangiato), ma non ha più senso rimetterlo se domani si corregge — e la
+    # stima di «cosa ho mangiato» descriveva il piatto di prima.
+    forget_tracking(meal)
     # E se questa casella era la coda di un pasto rimandato, adesso non lo è più:
     # annullare quel salto non deve portarsi via la ricetta appena scelta.
     forget_queued_meal(db, meal)
@@ -492,9 +493,11 @@ def set_followed(
             # della spesa non si scalerebbe più nemmeno a dispensa piena.
             meal.pantry_used = pantry_used or None
     else:
+        # Prima la dispensa, poi il salto: `skip_meal` scrive sul database, e un pasto
+        # «non seguito» con ancora `pantry_used` è uno stato che il vincolo rifiuta.
+        tolto, meal.pantry_used = meal.pantry_used, None
+        restore_to_pantry(db, user_id, tolto)
         moved = skip_meal(db, user_id, meal, day, week)
-        restore_to_pantry(db, user_id, meal.pantry_used)
-        meal.pantry_used = None
     db.commit()
 
     rebuild_shopping_list(db, user_id)

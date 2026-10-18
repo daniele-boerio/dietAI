@@ -35,6 +35,7 @@ const OnboardingPage = lazy(() => import('./pages/OnboardingPage'));
 import Toast from './components/Toast';
 import ThemeToggle from './components/ThemeToggle';
 import ErrorBoundary from './components/ErrorBoundary';
+import LoadError from './components/LoadError';
 
 // ── Contesto globale: toast e poco altro ──
 // Lo stato del server non si tiene qui: ogni pagina carica quello che le serve e lo
@@ -44,12 +45,24 @@ const AppContext = createContext();
 export const useApp = () => useContext(AppContext);
 
 export default function App() {
-  const { user, loading } = useAuth();
+  const { user, loading, startupError, retry } = useAuth();
 
   if (loading) {
     return (
       <div className="auth-layout">
         <div className="spinner" />
+      </div>
+    );
+  }
+
+  // Non si sa se la sessione c'è: senza rete il login sarebbe una bugia.
+  if (startupError) {
+    return (
+      <div className="auth-layout">
+        <LoadError
+          message={`${startupError}. Controlla la connessione e riprova.`}
+          onRetry={retry}
+        />
       </div>
     );
   }

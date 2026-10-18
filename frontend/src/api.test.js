@@ -44,12 +44,22 @@ describe('refresh della sessione', () => {
     expect(scaduta).toHaveBeenCalledOnce();
   });
 
+  it('la sessione scaduta si riconosce dallo stato, non dal testo', async () => {
+    // È quello che AuthContext guarda all'avvio: 401 = login, il resto = «riprova».
+    server({ refreshStatus: 401 });
+    setSessionExpiredHandler(() => {});
+
+    await expect(api.me()).rejects.toMatchObject({ status: 401 });
+  });
+
   it('un server giù non butta fuori chi ha una sessione valida', async () => {
     server({ refreshStatus: 502 });
     const scaduta = vi.fn();
     setSessionExpiredHandler(scaduta);
 
-    await expect(api.me()).rejects.toThrow('Server non raggiungibile');
+    const err = await api.me().catch((e) => e);
+    expect(err.message).toBe('Server non raggiungibile, riprova tra poco');
+    expect(err.status).toBeUndefined();
     expect(scaduta).not.toHaveBeenCalled();
   });
 });

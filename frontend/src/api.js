@@ -44,7 +44,9 @@ async function raw(path, options = {}, allowRefresh = true) {
     if (esito === 'ok') return raw(path, options, false); // un solo tentativo
     if (esito === 'offline') throw new Error('Server non raggiungibile, riprova tra poco');
     onSessionExpired?.();
-    throw new Error('Sessione scaduta');
+    const scaduta = new Error('Sessione scaduta');
+    scaduta.status = 401;
+    throw scaduta;
   }
 
   if (!res.ok) {

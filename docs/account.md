@@ -92,6 +92,13 @@ server la prendeva per un furto e l'utente finiva al login ogni mezz'ora. Ora:
 - `/auth/refresh` rifiuta anche un account spento, come `get_current_user`.
 Guardie in `tests/test_auth_sessione.py` e `frontend/src/api.test.js`.
 
+**All'avvio, «non so chi sei» non è «non sei nessuno».** `AuthContext` chiede `/me`
+per sapere se la sessione è viva, e prima ogni errore diventava `user = null`: senza
+rete, o col server giù per un deploy, l'app mostrava il login come se la sessione
+fosse scaduta. Ora porta al login solo un errore con `status` 401/403 (che `api.js`
+mette anche su «Sessione scaduta»); il resto mostra «Server non raggiungibile» con
+Riprova (`startupError`, `retry`).
+
 **Le scritture da un altro sito si rifiutano** (middleware in `main.py`). I cookie
 SameSite=Lax fermano le POST da domini estranei, non quelle da un sottodominio dello
 stesso dominio, che qui ospita anche altre app: una POST/PUT/PATCH/DELETE con

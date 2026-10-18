@@ -9,15 +9,34 @@ export function AuthProvider({ children }) {
   // `loading` evita il lampo della pagina di login a ogni ricarica: i cookie sono
   // httpOnly, quindi l'unico modo di sapere se la sessione è viva è chiederlo al server.
   const [loading, setLoading] = useState(true);
+  // Perché all'avvio non si è saputo chi sei, quando non è «nessuna sessione»: rete
+  // assente o server giù (un deploy dura un minuto). Prima ogni errore diventava
+  // `user = null`, cioè la pagina di login — come se la sessione fosse scaduta, e chi
+  // apriva l'app in metropolitana si vedeva chiedere la password.
+  const [startupError, setStartupError] = useState(null);
+
+  const check = useCallback(() => {
+    setLoading(true);
+    setStartupError(null);
+    api.me()
+      .then(setUser)
+      .catch((err) => {
+        setUser(null);
+        // Solo un 401/403 dice che la sessione non c'è; il resto è «non so».
+        if (err.status !== 401 && err.status !== 403) {
+          // fetch senza rete lancia un TypeError in inglese («Failed to fetch»).
+          setStartupError(
+            err instanceof TypeError ? 'Server non raggiungibile' : err.message || 'Server non raggiungibile'
+          );
+        }
+      })
+      .finally(() => setLoading(false));
+  }, []);
 
   useEffect(() => {
     setSessionExpiredHandler(() => setUser(null));
-
-    api.me()
-      .then(setUser)
-      .catch(() => setUser(null))
-      .finally(() => setLoading(false));
-  }, []);
+    check();
+  }, [check]);
 
   const login = useCallback(async (email, password) => {
     const u = await api.login(email, password);
@@ -44,7 +63,9 @@ export function AuthProvider({ children }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, refreshUser }}>
+    <AuthContext.Provider
+      value={{ user, loading, startupError, retry: check, login, logout, refreshUser }}
+    >
       {children}
     </AuthContext.Provider>
   );

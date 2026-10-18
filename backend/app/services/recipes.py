@@ -22,7 +22,7 @@ import json
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
-from ..models import Ingredient, PlannedMeal, Recipe, RecipeIngredient
+from ..models import DayPlan, Ingredient, PlannedMeal, Recipe, RecipeIngredient, WeekPlan
 from . import macros, prompts
 from .ai_client import AIError
 from .exclusions import check_recipe
@@ -461,13 +461,15 @@ def set_declared_details(recipe: Recipe, nutrition: dict) -> None:
         setattr(recipe, campo, valore)
 
 
-def recompute_nutrition(db: Session, recipe: Recipe) -> bool:
+def recompute_nutrition(db: Session, recipe: Recipe, *, force: bool = False) -> bool:
     """Rifà calorie e macro dagli ingredienti salvati. False = non si può.
 
     Le ricette scritte a mano restano coi numeri dell'utente; per le altre, se un
     ingrediente non ha composizione, restano i numeri dichiarati e lo si segna.
+    `force` vale per una ricetta dell'utente che i numeri li ha già calcolati
+    (`create_from_text`) e che si sta correggendo a mano.
     """
-    if recipe.is_custom or not macros.ATTIVO:
+    if (recipe.is_custom and not force) or not macros.ATTIVO:
         return False
     db.flush()
     items = [
@@ -794,6 +796,59 @@ def prune_unsaved(db: Session, user_id: int) -> int:
         db.delete(recipe)
     db.flush()
     return len(orfane)
+
+
+def edit_recipe(db: Session, user_id: int, recipe: Recipe, data: dict) -> None:
+    """La ricetta corretta a mano dal ricettario: testi, tempi, ingredienti.
+
+    Serve per gli errori che il modello lascia — il cavolfiore «1 unità» invece che in
+    grammi — e che prima si correggevano solo chiedendolo alla chat di un pasto. Si
+    modifica la riga stessa, non una copia: è la ricetta del ricettario, e tutti i pasti
+    che la usano la seguono (anche quelli passati — è una correzione, non un piatto
+    diverso).
+
+    I macro: chi li ha scritti a mano (`nutrition_source == "utente"`) li corregge nel
+    modulo; per le altre si rifanno dagli ingredienti nuovi, altrimenti la correzione
+    delle grammature lascerebbe le calorie di prima. Gli esclusi non si controllano:
+    gli ingredienti li scrive l'utente, come per le sue ricette.
+
+    Poi la spesa (da oggi i pasti chiedono altro) e, sui pasti di oggi in avanti già
+    seguiti, la dispensa (`rescale_pantry`), come quando la ricetta la cambia la chat.
+    """
+    from . import planner  # import tardivo: planner importa questo modulo
+    from .shopping import rebuild_shopping_list, rescale_pantry
+
+    recipe.title = _text(data["title"])[:200] or recipe.title
+    recipe.description = _text(data.get("description")) or None
+    recipe.instructions = _instructions(data["instructions"]) or recipe.instructions
+    recipe.prep_time_min = int(_num(data.get("prep_time_min")))
+    recipe.cook_time_min = int(_num(data.get("cook_time_min")))
+    recipe.difficulty = _clamp_difficulty(data.get("difficulty"))
+    replace_ingredients(db, recipe, data["ingredients"])
+
+    if recipe.nutrition_source == "utente":
+        for campo in ("calories", "protein_g", "carbs_g", "fat_g"):
+            if data.get(campo) is not None:
+                setattr(recipe, campo, data[campo])
+        recipe.calories = int(recipe.calories)
+    else:
+        recompute_nutrition(db, recipe, force=True)
+    db.flush()
+
+    seguiti = (
+        db.query(PlannedMeal)
+        .join(DayPlan, DayPlan.id == PlannedMeal.day_plan_id)
+        .join(WeekPlan, WeekPlan.id == DayPlan.week_plan_id)
+        .filter(
+            WeekPlan.user_id == user_id,
+            PlannedMeal.recipe_id == recipe.id,
+            PlannedMeal.is_followed.is_(True),
+            DayPlan.date >= planner.today(),
+        )
+    )
+    for meal in seguiti:
+        rescale_pantry(db, user_id, meal)
+    rebuild_shopping_list(db, user_id)
 
 
 def create_from_text(

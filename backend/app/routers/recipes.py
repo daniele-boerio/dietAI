@@ -16,6 +16,7 @@ from ..schemas import (
     RatingRequest,
     RecipeCreate,
     RecipeFromText,
+    RecipeUpdate,
     SubstituteRequest,
 )
 from ..services.ai_client import get_client
@@ -24,6 +25,7 @@ from ..services.ownership import own_week
 from ..services.recipes import (
     create_from_text,
     create_recipe,
+    edit_recipe,
     low_rated_clause,
     proposable_clause,
     saved_clause,
@@ -205,6 +207,22 @@ def create_custom_recipe(
     recipe = create_recipe(db, user_id, body.model_dump(), is_custom=True)
     db.commit()
     return serialize_recipe(db, recipe, full=True)
+
+
+@router.put("/{recipe_id}")
+def update_recipe(
+    recipe_id: int,
+    body: RecipeUpdate,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    """Correggere a mano una ricetta del ricettario (`recipes.edit_recipe`)."""
+    recipe = _get_recipe(db, user_id, recipe_id)
+    edit_recipe(db, user_id, recipe, body.model_dump())
+    db.commit()
+    data = serialize_recipe(db, recipe, full=True)
+    data["usage_history"] = _usage_history(db, recipe.id)
+    return data
 
 
 @router.put("/{recipe_id}/rate")

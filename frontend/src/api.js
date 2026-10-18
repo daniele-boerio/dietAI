@@ -319,6 +319,10 @@ export const api = {
 
   getRecipe: (id) => request(`/recipes/${id}`),
 
+  // La ricetta corretta a mano: risponde intera, come la GET.
+  updateRecipe: (id, payload) =>
+    request(`/recipes/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+
   // Le ricette della settimana e di quella prima che non hai ancora salvato (voto o
   // preferita): la finestra di generazione chiede se tenerne qualcuna.
   getUnsavedRecipes: (weekId) => request(`/recipes/unsaved?week_id=${weekId}`),

@@ -301,6 +301,23 @@ class RecurringRequest(BaseModel):
     recurring_rule: RecurringRule | None = None
 
 
+class RecipeUpdate(BaseModel):
+    """La ricetta corretta a mano dal ricettario. I macro contano solo per le ricette
+    coi numeri scritti dall'utente: per le altre si rifanno dagli ingredienti."""
+
+    title: str = Field(min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=1000)
+    prep_time_min: int = Field(default=0, ge=0, le=600)
+    cook_time_min: int = Field(default=0, ge=0, le=600)
+    difficulty: Literal["easy", "medium", "hard"] = "medium"
+    instructions: str = Field(min_length=1, max_length=10000)
+    ingredients: list[RecipeIngredientInput] = Field(min_length=1, max_length=60)
+    calories: int | None = Field(default=None, ge=0, le=5000)
+    protein_g: float | None = Field(default=None, ge=0, le=500)
+    carbs_g: float | None = Field(default=None, ge=0, le=1000)
+    fat_g: float | None = Field(default=None, ge=0, le=500)
+
+
 class RecipeFromText(BaseModel):
     """Una ricetta dell'utente a parole: ingredienti per tutte le porzioni, procedimento."""
 

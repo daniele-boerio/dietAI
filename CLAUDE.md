@@ -213,6 +213,8 @@ paragrafo nel documento, scrivendo anche cosa non andava con la versione di prim
   prima di generare la dialog chiede quali salvare (`/recipes/unsaved`). «Nuova
   ricetta» (`create_from_text`): la tua ricetta a parole per N porzioni, il modello la
   riduce a una porzione senza cambiarla, i macro si calcolano dagli ingredienti.
+  «Modifica» (`edit_recipe`) corregge la riga stessa: i pasti la seguono, i macro si
+  rifanno dagli ingredienti (tranne quelli scritti a mano), spesa e dispensa seguono.
 - Lo stesso piatto è una ricetta sola (`find_twin`); chi modifica da un pasto stacca
   prima una copia (`fork_recipe_for_meal`) e poi si riaccorpa (`settle_recipe`).
 

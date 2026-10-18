@@ -48,6 +48,11 @@ CORPI = {
     ("PUT", "/api/planning/meals/{meal_id}/followed"): {"is_followed": True},
     ("POST", "/api/planning/meals/{meal_id}/swap"): {"other_meal_id": 1},
     ("PUT", "/api/planning/days/{day_id}/skip"): {"is_skipped": True},
+    ("PUT", "/api/recipes/{recipe_id}"): {
+        "title": "x",
+        "instructions": "x",
+        "ingredients": [{"name": "pasta", "quantity": 80, "unit": "g"}],
+    },
     ("PUT", "/api/recipes/{recipe_id}/rate"): {"rating": 1},
     ("PUT", "/api/recipes/{recipe_id}/favorite"): {"is_favorite": True},
     ("POST", "/api/recipes/{recipe_id}/substitute"): {"ingredient_to_replace": "pasta"},

@@ -46,6 +46,17 @@ proponibile, mai ritoccata) ma coi macro **calcolati** dagli ingredienti
 nomi nuovi. Le ricette scritte a mano col form restano coi numeri dell'utente.
 Guardie in `tests/test_ricetta_da_testo.py`.
 
+**Una ricetta del ricettario si corregge a mano.** «Modifica» nel dettaglio
+(`PUT /api/recipes/{id}`, `recipes.edit_recipe`) cambia testi, tempi e ingredienti
+della riga stessa, non di una copia: tutti i pasti che la usano la seguono, anche quelli
+passati, perché è una correzione e non un piatto diverso. Prima l'unico modo era la chat
+di un pasto, e un errore del modello come il cavolfiore «1 unità» invece che in grammi
+restava lì. I macro si rifanno dagli ingredienti (`recompute_nutrition(force=True)`,
+anche sulle ricette da testo, che sono `is_custom`); solo quelle coi numeri scritti
+dall'utente (`nutrition_source == "utente"`) li correggono nel modulo. Poi si rifà la
+spesa e, sui pasti da oggi in avanti già seguiti, la dispensa (`rescale_pantry`).
+Guardie in `tests/test_modifica_ricetta.py`.
+
 **Fuori dal ±10% si ritoccano le grammature, sulle leve.** `fit_to_target` lavora sul
 dizionario del modello prima che la ricetta nasca (così il gemello si cerca sulle
 quantità vere). Si muovono solo le **leve**: la riga che porta più proteine, quella che

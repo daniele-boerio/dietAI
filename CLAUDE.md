@@ -56,6 +56,7 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
 │       ├── auth.py             # hashing, JWT, cookie, get_current_user
 │       ├── crypto.py           # Fernet per la API key del provider
 │       ├── rate_limit.py       # slowapi (AI_LIMIT = 20/minuto)
+│       ├── serve.py            # `python -m app.serve`: uvicorn su IPv4 e IPv6 (lo lancia il Dockerfile)
 │       ├── seed.py             # `python -m app.seed`: amministratore + anagrafica ingredienti
 │       ├── reset_password.py   # `python -m app.reset_password '...'`: unica via di rientro
 │       ├── make_admin.py       # `python -m app.make_admin`: rialza il flag di amministratore

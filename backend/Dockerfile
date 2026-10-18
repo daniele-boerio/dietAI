@@ -29,8 +29,8 @@ USER dietai
 # impostata esce con codice 1, e senza il `||` l'intero container non partirebbe.
 # Farlo qui evita il caso peggiore: app deployata e nessun utente per entrarci.
 #
-# `--host ::` e non 0.0.0.0: la rete di Coolify è dual-stack, `backend` risolve
-# anche in IPv6 e nginx provava prima quello. Col solo IPv4 la connessione veniva
-# rifiutata ("upstream server temporarily disabled") e nginx ripiegava sull'altro
-# indirizzo. `::` ascolta su IPv6 e, su Linux, anche su IPv4.
-CMD ["sh", "-c", "alembic upgrade head && (python -m app.seed || echo 'Seed saltato: controlla SEED_USER_PASSWORD') && uvicorn app.main:app --host :: --port 8000 --proxy-headers --forwarded-allow-ips=*"]
+# `app.serve` e non `uvicorn` dalla riga di comando: la rete di Coolify è dual-stack
+# e il server deve ascoltare su IPv4 (il controllo di salute, 127.0.0.1) e su IPv6
+# (nginx, che prova prima quello). `--host` ne accetta uno solo; il perché è in
+# app/serve.py.
+CMD ["sh", "-c", "alembic upgrade head && (python -m app.seed || echo 'Seed saltato: controlla SEED_USER_PASSWORD') && python -m app.serve"]

@@ -10,8 +10,11 @@ services:
     healthcheck:
       # 127.0.0.1 e non localhost: nginx.conf fa solo `listen 80` (IPv4), mentre dentro
       # il container localhost risolve prima su ::1 e busybox wget non ripiega su IPv4.
+      # 5s e non 30s: finché il primo controllo non passa il container è «starting», e
+      # Traefik non ci manda traffico. Con 30s ogni deploy lasciava il sito giù mezzo
+      # minuto anche con nginx già pronto.
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:80"]
-      interval: 30s
+      interval: 5s
       timeout: 5s
       retries: 3
 

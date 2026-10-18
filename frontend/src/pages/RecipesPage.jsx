@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { ChefHat, Heart, Search, UtensilsCrossed } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { ChefHat, Heart, Search, Sparkles, UtensilsCrossed } from 'lucide-react';
 import { api } from '../api';
+import { useApp } from '../App';
 import EmptyState from '../components/EmptyState';
 import LoadError from '../components/LoadError';
 import MacroBar from '../components/MacroBar';
+import Modal from '../components/Modal';
 import StarRating from '../components/StarRating';
 
 const DIFFICULTIES = [
@@ -27,6 +29,7 @@ export default function RecipesPage() {
   const [page, setPage] = useState(1);
   const [error, setError] = useState(null);
   const [tentativo, setTentativo] = useState(0);
+  const [nuova, setNuova] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -76,6 +79,10 @@ export default function RecipesPage() {
             filtrare per voto sono due gesti diversi — il primo si fa quando si sa già
             cosa si vuole, gli altri per guardarsi intorno. */}
         <div className="page-actions">
+          {/* Chiama il modello, quindi lime e scintille come ogni pulsante che lo fa. */}
+          <button className="btn btn-ai" onClick={() => setNuova(true)}>
+            <Sparkles size={16} /> Nuova ricetta
+          </button>
           <div className="search-field">
             <Search />
             <input
@@ -218,6 +225,130 @@ export default function RecipesPage() {
           )}
         </>
       )}
+
+      {nuova && <NuovaRicetta onClose={() => setNuova(false)} />}
     </>
+  );
+}
+
+const ESEMPIO_INGREDIENTI = `1 cavolfiore (circa 800 g)
+2 spicchi d'aglio
+4 cucchiai di olio extravergine
+80 g di pasta a porzione`;
+
+/**
+ * Una ricetta tua, scritta come la scriveresti su un foglio.
+ *
+ * Gli ingredienti sono per tutta la preparazione — il sugo per quattro — e quello che
+ * va a porzione lo si dice nel testo («80 g di pasta a porzione»): così si scrive una
+ * ricetta vera, senza fare divisioni a mente. Il modello la riduce a una porzione e il
+ * server ne calcola i macro dagli ingredienti; da lì è nel ricettario, pronta da
+ * mettere in un pasto con «Dal ricettario».
+ */
+function NuovaRicetta({ onClose }) {
+  const { addToast } = useApp();
+  const navigate = useNavigate();
+  const [titolo, setTitolo] = useState('');
+  const [ingredienti, setIngredienti] = useState('');
+  const [procedimento, setProcedimento] = useState('');
+  const [porzioni, setPorzioni] = useState(1);
+  const [busy, setBusy] = useState(false);
+
+  const crea = async () => {
+    setBusy(true);
+    try {
+      const ricetta = await api.createRecipeFromText({
+        title: titolo.trim(),
+        ingredients: ingredienti,
+        instructions: procedimento,
+        portions: porzioni,
+      });
+      addToast(`«${ricetta.title}» è nel ricettario ✓`);
+      navigate(`/recipes/${ricetta.id}`);
+    } catch (e) {
+      addToast(e.message, 'error');
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal title="Nuova ricetta" onClose={onClose} busy={busy} className="modal-lg">
+      <p className="modal-text">
+        Scrivi la ricetta come la fai tu, per tutte le porzioni. La riduco a una porzione
+        e ne calcolo calorie e valori, senza cambiare il piatto.
+      </p>
+
+      <div className="field">
+        <label className="field-label" htmlFor="nr-titolo">Nome (facoltativo)</label>
+        <input
+          id="nr-titolo"
+          type="text"
+          value={titolo}
+          maxLength={200}
+          placeholder="Pasta al sugo di cavolfiore"
+          onChange={(e) => setTitolo(e.target.value)}
+          disabled={busy}
+        />
+      </div>
+
+      <div className="field">
+        <label className="field-label" htmlFor="nr-porzioni">Per quante porzioni</label>
+        <input
+          id="nr-porzioni"
+          type="number"
+          min="1"
+          max="20"
+          inputMode="numeric"
+          value={porzioni}
+          onChange={(e) => setPorzioni(Math.min(20, Math.max(1, Number(e.target.value) || 1)))}
+          disabled={busy}
+          style={{ maxWidth: 120 }}
+        />
+      </div>
+
+      <div className="field">
+        <label className="field-label" htmlFor="nr-ingredienti">Ingredienti</label>
+        <textarea
+          id="nr-ingredienti"
+          rows={6}
+          value={ingredienti}
+          maxLength={4000}
+          placeholder={ESEMPIO_INGREDIENTI}
+          onChange={(e) => setIngredienti(e.target.value)}
+          disabled={busy}
+        />
+        <p className="field-hint">
+          Le quantità di tutta la preparazione. Quello che va a porzione scrivilo così:
+          «80 g di pasta a porzione».
+        </p>
+      </div>
+
+      <div className="field">
+        <label className="field-label" htmlFor="nr-procedimento">Procedimento</label>
+        <textarea
+          id="nr-procedimento"
+          rows={5}
+          value={procedimento}
+          maxLength={6000}
+          placeholder="Come lo prepari, con parole tue."
+          onChange={(e) => setProcedimento(e.target.value)}
+          disabled={busy}
+        />
+      </div>
+
+      <div className="modal-actions">
+        <button className="btn btn-secondary" onClick={onClose} disabled={busy}>
+          Annulla
+        </button>
+        <button
+          className="btn btn-primary"
+          onClick={crea}
+          disabled={busy || ingredienti.trim().length < 3}
+        >
+          {busy ? <span className="spinner-inline" /> : <Sparkles size={16} />}
+          Crea la ricetta
+        </button>
+      </div>
+    </Modal>
   );
 }

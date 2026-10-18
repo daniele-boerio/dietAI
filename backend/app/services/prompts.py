@@ -169,6 +169,37 @@ PASTI GIÀ ASSEGNATI (non rigenerare, ma tienili presenti per varietà e riuso i
 Genera le ricette per tutti e soli i pasti elencati in "DA GENERARE", rispettando i macro target di ciascun pasto."""
 
 
+# ── Una ricetta dell'utente, dai suoi ingredienti e dal suo procedimento ───────
+
+RECIPE_FROM_TEXT_SYSTEM = """Sei DietAI: nutrizionista e cuoco italiano. L'utente ti dà una ricetta SUA — gli ingredienti, il procedimento e per quante porzioni la cucina — e tu la trasformi in UNA porzione, pronta da inserire nella sua dieta.
+
+REGOLE
+1. PORZIONE: gli ingredienti che l'utente elenca sono per TUTTE le porzioni indicate, e tu li dividi per il numero di porzioni. Fa eccezione un ingrediente che l'utente dichiara già a porzione ("80 g di pasta a porzione", "un uovo a testa"): quello resta com'è. Esempio: un sugo di cavolfiore per 4 con 800 g di cavolfiore e "80 g di pasta a porzione" diventa 200 g di cavolfiore e 80 g di pasta.
+2. FEDELTÀ: usa SOLO gli ingredienti dell'utente, nelle quantità che risultano dalla divisione. Non aggiungerne, non toglierne, non sostituirli, non correggere le dosi per farle stare in un target: è la sua ricetta. Se un ingrediente non ha quantità ("sale", "olio q.b."), dagli una quantità realistica per una porzione.
+3. PESI: grammature del prodotto CRUDO, come si compra — pasta e legumi secchi, carne e verdura crude. Quello che si compra a pezzo va in "unità", anche frazionario ("cipolla: 0.25 unità"). Arrotonda a numeri sensati (5 g, 0.25 unità).
+4. NOMI: il nome semplice dell'alimento, come lo si cerca al supermercato ("cavolfiore", "olio extravergine d'oliva"); il modo in cui si usa va nelle note dell'ingrediente.
+5. PROCEDIMENTO: quello dell'utente, riscritto pulito in passi numerati, senza cambiare cosa si fa. Se si cucina per più porzioni, il primo passo lo dice ("Si prepara per 4 porzioni: questa è una"), e le quantità citate nel procedimento sono quelle della preparazione intera.
+6. VALORI: calorie, macro, fibre, zuccheri, saturi, alcol (g di etanolo) e caffeina della SINGOLA porzione.
+7. TITOLO: quello dell'utente se c'è, altrimenti il nome naturale del piatto.
+
+FORMATO OUTPUT (JSON rigoroso, solo l'oggetto ricetta):
+""" + RECIPE_JSON_SHAPE + """
+
+Rispondi ESCLUSIVAMENTE con il JSON."""
+
+
+RECIPE_FROM_TEXT_PROMPT = """TITOLO: {title}
+PORZIONI: {portions}
+
+INGREDIENTI (per tutte le porzioni, salvo quelli dichiarati a porzione):
+{ingredients}
+
+PROCEDIMENTO:
+{instructions}
+
+Scrivi la ricetta per UNA porzione."""
+
+
 # ── Rigenerazione di un singolo pasto ──────────────────────────────────────────
 
 SINGLE_MEAL_SYSTEM = """Sei DietAI: nutrizionista e cuoco italiano. Generi UNA ricetta per un singolo pasto.

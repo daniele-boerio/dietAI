@@ -17,11 +17,14 @@ stacca prima una copia. È la stessa garanzia di quando le copie si facevano sub
 (`copy_recipe` per i pasti ricorrenti), ma pagata solo quando serve davvero.
 """
 
+import json
+
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from ..models import Ingredient, PlannedMeal, Recipe, RecipeIngredient
-from . import macros
+from . import macros, prompts
+from .ai_client import AIError
 from .exclusions import check_recipe
 from .ingredients import get_or_create_ingredient
 
@@ -239,6 +242,7 @@ def create_recipe(
     *,
     is_custom: bool = False,
     generation_prompt: str | None = None,
+    computed: bool | None = None,
 ) -> Recipe:
     """Crea una ricetta dal dizionario dell'AI o dal payload dell'utente.
 
@@ -254,7 +258,14 @@ def create_recipe(
     Una ricetta del modello che contiene un alimento escluso non nasce
     (`ExcludedFoodError`): il prompt glielo chiede, ma qui lo si controlla. Quelle
     scritte dall'utente (`is_custom`) le decide lui.
+
+    `computed` dice se i macro si calcolano dagli ingredienti; di default sì per le
+    ricette del modello e no per quelle scritte a mano, che tengono i loro numeri. Una
+    ricetta dell'utente fatta pesare dal modello (`create_from_text`) è sua ma coi
+    numeri calcolati.
     """
+    if computed is None:
+        computed = not is_custom
     if not is_custom:
         check_recipe(db, user_id, data)
     nutrition = _dict(data.get("nutrition"))
@@ -270,7 +281,7 @@ def create_recipe(
     # I numeri dichiarati valgono solo se non si possono calcolare. Prima del gemello,
     # così due piatti uguali si riconoscono sui macro veri e non su quello che il
     # modello ha scritto quel giorno. Le ricette scritte a mano tengono i loro.
-    if is_custom:
+    if not computed:
         nutrition_source = "utente"
     else:
         calcolati = macros.compute(db, items)
@@ -783,3 +794,50 @@ def prune_unsaved(db: Session, user_id: int) -> int:
         db.delete(recipe)
     db.flush()
     return len(orfane)
+
+
+def create_from_text(
+    db: Session,
+    client,
+    user_id: int,
+    *,
+    title: str | None,
+    ingredients: str,
+    instructions: str,
+    portions: int,
+) -> Recipe:
+    """Una ricetta dell'utente, scritta a parole e per N porzioni, ridotta a una porzione.
+
+    Il modello divide le quantità e ripulisce il procedimento senza cambiare il piatto
+    (`RECIPE_FROM_TEXT_SYSTEM`); i macro poi si calcolano dagli ingredienti come per le
+    ricette generate, dopo aver fatto stimare la composizione dei nomi nuovi. La ricetta
+    nasce dell'utente (`is_custom`): salvata nel ricettario, proponibile per un pasto,
+    e mai ritoccata per stare in un target — è la sua.
+    """
+    db.commit()  # niente transazione aperta durante la chiamata al modello
+    data = client.generate_json(
+        prompts.RECIPE_FROM_TEXT_SYSTEM,
+        prompts.render(
+            prompts.RECIPE_FROM_TEXT_PROMPT,
+            title=(title or "").strip() or "(scegli tu)",
+            portions=portions,
+            ingredients=ingredients.strip(),
+            instructions=instructions.strip() or "(nessuno: scrivine uno semplice)",
+        ),
+        max_tokens=4000,
+    )
+    if not isinstance(data, dict) or not isinstance(data.get("ingredients"), list):
+        raise AIError("Il modello non ha restituito una ricetta leggibile. Riprova.")
+    if title and title.strip():
+        data["title"] = title.strip()
+    learn_composition(db, client, [data])
+    return create_recipe(
+        db,
+        user_id,
+        data,
+        is_custom=True,
+        computed=True,
+        generation_prompt=json.dumps(
+            {"da_testo": True, "porzioni": portions}, ensure_ascii=False
+        ),
+    )

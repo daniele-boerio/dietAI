@@ -301,6 +301,15 @@ class RecurringRequest(BaseModel):
     recurring_rule: RecurringRule | None = None
 
 
+class RecipeFromText(BaseModel):
+    """Una ricetta dell'utente a parole: ingredienti per tutte le porzioni, procedimento."""
+
+    title: str | None = Field(default=None, max_length=200)
+    ingredients: str = Field(min_length=3, max_length=4000)
+    instructions: str = Field(default="", max_length=6000)
+    portions: int = Field(default=1, ge=1, le=20)
+
+
 class SwapMealRequest(BaseModel):
     """Il pasto con cui scambiare la ricetta: della stessa settimana."""
 

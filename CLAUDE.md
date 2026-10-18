@@ -209,7 +209,9 @@ paragrafo nel documento, scrivendo anche cosa non andava con la versione di prim
 - Il ricettario mostra solo le ricette salvate (preferita, votata o scritta a mano,
   `saved_clause`); le altre si cancellano alla generazione quando nessun pasto le usa
   (`prune_unsaved`). Per un pasto si propongono preferite, voto ≥ 3 e le proprie;
-  prima di generare la dialog chiede quali salvare (`/recipes/unsaved`).
+  prima di generare la dialog chiede quali salvare (`/recipes/unsaved`). «Nuova
+  ricetta» (`create_from_text`): la tua ricetta a parole per N porzioni, il modello la
+  riduce a una porzione senza cambiarla, i macro si calcolano dagli ingredienti.
 - Lo stesso piatto è una ricetta sola (`find_twin`); chi modifica da un pasto stacca
   prima una copia (`fork_recipe_for_meal`) e poi si riaccorpa (`settle_recipe`).
 

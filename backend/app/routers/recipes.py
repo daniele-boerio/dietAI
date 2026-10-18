@@ -11,11 +11,18 @@ from ..auth import get_current_user, get_current_user_id
 from ..database import get_db
 from ..models import DayPlan, PlannedMeal, Recipe, User, WeekPlan
 from ..rate_limit import AI_LIMIT, limiter
-from ..schemas import FavoriteRequest, RatingRequest, RecipeCreate, SubstituteRequest
+from ..schemas import (
+    FavoriteRequest,
+    RatingRequest,
+    RecipeCreate,
+    RecipeFromText,
+    SubstituteRequest,
+)
 from ..services.ai_client import get_client
 from ..services.planner import DAY_NAMES
 from ..services.ownership import own_week
 from ..services.recipes import (
+    create_from_text,
     create_recipe,
     low_rated_clause,
     proposable_clause,
@@ -103,6 +110,33 @@ def list_recipes(
         "page": page,
         "per_page": per_page,
     }
+
+
+@router.post("/from-text", status_code=201)
+@limiter.limit(AI_LIMIT)
+def create_recipe_from_text(
+    request: Request,
+    body: RecipeFromText,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Una ricetta tua — ingredienti, procedimento, porzioni — pesata per una porzione.
+
+    Il modello divide le quantità, il server calcola i macro dagli ingredienti
+    (`recipes.create_from_text`). Nasce nel ricettario, pronta da mettere in un pasto.
+    """
+    client = get_client(db, user, "chat")
+    recipe = create_from_text(
+        db,
+        client,
+        user.id,
+        title=body.title,
+        ingredients=body.ingredients,
+        instructions=body.instructions,
+        portions=body.portions,
+    )
+    db.commit()
+    return serialize_recipe(db, recipe, full=True)
 
 
 @router.get("/unsaved")

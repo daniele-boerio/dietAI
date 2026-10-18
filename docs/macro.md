@@ -35,6 +35,17 @@ macro. Un totale che ne tiene fuori uno è peggio di un totale dichiarato, perch
 sembra vero. Fanno eccezione le unità che non pesano niente per la dieta (`q.b.`,
 `pizzichi`), contate zero.
 
+**Una ricetta tua, pesata dal modello.** Dal ricettario, «Nuova ricetta» prende gli
+ingredienti come li scrivi (per tutta la preparazione, con quello che va a porzione
+detto a parole: «80 g di pasta a porzione»), il procedimento e le porzioni; il modello
+divide le quantità per una porzione senza cambiare il piatto
+(`RECIPE_FROM_TEXT_SYSTEM`: niente ingredienti aggiunti, niente dosi corrette per un
+target) e `recipes.create_from_text` la crea **tua** (`is_custom`: salvata,
+proponibile, mai ritoccata) ma coi macro **calcolati** dagli ingredienti
+(`create_recipe(..., computed=True)`), dopo aver fatto stimare la composizione dei
+nomi nuovi. Le ricette scritte a mano col form restano coi numeri dell'utente.
+Guardie in `tests/test_ricetta_da_testo.py`.
+
 **Fuori dal ±10% si ritoccano le grammature, sulle leve.** `fit_to_target` lavora sul
 dizionario del modello prima che la ricetta nasca (così il gemello si cerca sulle
 quantità vere). Si muovono solo le **leve**: la riga che porta più proteine, quella che

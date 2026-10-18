@@ -326,6 +326,14 @@ export const api = {
   createRecipe: (payload) =>
     request('/recipes', { method: 'POST', body: JSON.stringify(payload) }),
 
+  // Una ricetta tua a parole — ingredienti per tutte le porzioni, procedimento — che il
+  // modello riduce a una porzione e il server pesa: risponde con la ricetta intera.
+  createRecipeFromText: ({ title, ingredients, instructions, portions }) =>
+    request('/recipes/from-text', {
+      method: 'POST',
+      body: JSON.stringify({ title: title || null, ingredients, instructions, portions }),
+    }),
+
   rateRecipe: (id, rating) =>
     request(`/recipes/${id}/rate`, { method: 'PUT', body: JSON.stringify({ rating }) }),
 

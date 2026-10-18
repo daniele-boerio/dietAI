@@ -15,6 +15,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -645,7 +646,11 @@ class AIUsage(Base):
     output_tokens = Column(Integer, nullable=False, default=0, server_default="0")
     # In dollari, come li conta il provider. NULL = né il provider né il listino lo
     # sapevano; `cost_estimated` = calcolato dal listino invece che dichiarato.
-    cost_usd = Column(Float)
+    # Numeric e non Float (migrazione 0034): le chiamate costano frazioni di centesimo
+    # e il riepilogo ne somma migliaia; in Float la somma accumula l'errore di
+    # rappresentazione. In Python resta un float (`asdecimal=False`): è un numero da
+    # mostrare, e il registro non deve far comparire Decimal nel resto del codice.
+    cost_usd = Column(Numeric(14, 8, asdecimal=False))
     cost_estimated = Column(Boolean, nullable=False, default=False, server_default="false")
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 

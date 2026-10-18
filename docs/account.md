@@ -69,6 +69,11 @@ calare da solo il conto del mese — soldi già spesi che sparivano dal totale. 
 SET NULL, e il riepilogo le raccoglie in una riga «Account cancellati». Guardia in
 `tests/test_costo_ai.py`.
 
+Il costo è `Numeric(14, 8)` dalla migrazione `0034`: una chiamata costa frazioni di
+centesimo e il riepilogo ne somma migliaia, e in `Float` ogni valore portava il suo
+errore di rappresentazione dentro la somma. In Python torna un float
+(`asdecimal=False`), perché è un numero da mostrare.
+
 Il costo lo dichiara OpenRouter nella risposta (`usage.cost`, fra i campi che l'SDK non
 conosce); in streaming serve `stream_options={"include_usage": True}`, perché l'uso
 arriva nell'ultimo pezzo senza `choices` — e la generazione della settimana, la più

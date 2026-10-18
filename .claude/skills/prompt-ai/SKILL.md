@@ -38,7 +38,7 @@ in negozio.
   `tests/test_chat.py` rende tutti i template.
 - In chat la ricetta va **dopo** il marcatore, mai nel messaggio; il messaggio è prosa.
   Se aggiungi istruzioni di formato, non indebolire quella regola né l'esempio di
-  risposta corretta. `_needs_marker_retry` in `routers/chat.py` ritenta una volta.
+  risposta corretta. `_needs_marker_retry` in `services/chat.py` ritenta una volta.
 - Cambia la forma del JSON atteso → aggiorna chi lo consuma: `planner.generate_week`,
   `recipes.create_recipe`, `RECIPE_JSON_SHAPE`, e i `FakeModel` dei test.
 - Il sorteggio (cucine, quote) lo fa **Python**, non il modello: "alterna", "varia",

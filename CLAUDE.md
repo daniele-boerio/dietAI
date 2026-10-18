@@ -91,6 +91,7 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
 │       │   ├── shopping.py     # aggregazione lista, spesa fatta, dispensa che segue i pasti
 │       │   ├── substitution.py # sostituire un ingrediente: il modello propone, Python applica
 │       │   ├── macros.py       # macro calcolati dagli ingredienti, ritocco grammature
+│       │   ├── meals.py        # azioni su un pasto: assegna, svuota, fisso, seguito, mangiato altro
 │       │   ├── refit.py        # ritocco delle grammature delle ricette già in piano
 │       │   ├── push.py         # notifiche push e promemoria serale (thread ogni minuto)
 │       │   ├── weight.py       # storico del peso, proposta di ricalcolo

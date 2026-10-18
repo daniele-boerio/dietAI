@@ -201,7 +201,7 @@ def test_il_pasto_di_un_altro_non_si_tocca(client, guest_client, settimana):
 
 
 def test_una_stima_assurda_non_conta():
-    from app.routers.planning import _eaten_estimate
+    from app.services.meals import _eaten_estimate
 
     assert _eaten_estimate({"calories": 40000, "protein_g": 1, "carbs_g": 1, "fat_g": 1}) is None
     assert _eaten_estimate({"calories": 850, "protein_g": 32, "carbs_g": 105, "fat_g": 30})

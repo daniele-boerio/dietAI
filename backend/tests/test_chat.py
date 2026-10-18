@@ -167,6 +167,40 @@ def test_la_chat_aggiorna_davvero_la_ricetta(client, meal_id, monkeypatch):
     assert meal["recipe"]["title"] == "Pasta al pesto di zucchine"
 
 
+def _scorta(client, nome):
+    return next(p for p in client.get("/api/config/pantry").json() if p["name"] == nome)
+
+
+def test_su_un_pasto_seguito_la_chat_tiene_il_segno_e_corregge_la_dispensa(
+    client, meal_id, monkeypatch
+):
+    """L'hai mangiato, quindi il segno resta; ma dalla dispensa era uscita la ricetta di
+    prima. Prima la chat del pasto lasciava la dispensa scalata sulla vecchia e quella
+    della spesa toglieva il segno."""
+    for nome in ("pasta", "zucchine"):
+        client.post("/api/config/pantry", json={"ingredient_name": nome, "quantity": 500, "unit": "g"})
+    client.put(f"/api/planning/meals/{meal_id}/followed", json={"is_followed": True})
+    prima = {n: _scorta(client, n)["quantity"] for n in ("pasta", "zucchine")}
+
+    use_chat(monkeypatch, _risposta_con_ricetta())  # pasta 90 g, zucchine 120 g
+    res = client.post(f"/api/chat/meals/{meal_id}/messages", json={"content": "Meno pasta"})
+
+    assert res.json()["recipe_updated"] is True
+    assert client.get(f"/api/planning/meals/{meal_id}").json()["is_followed"] is True
+    assert _scorta(client, "pasta")["quantity"] == pytest.approx(500 - 90)
+    assert _scorta(client, "zucchine")["quantity"] == pytest.approx(500 - 120)
+    assert prima != {n: _scorta(client, n)["quantity"] for n in ("pasta", "zucchine")}
+
+
+def test_su_un_pasto_non_seguito_la_chat_non_tocca_la_dispensa(client, meal_id, monkeypatch):
+    client.post("/api/config/pantry", json={"ingredient_name": "pasta", "quantity": 500, "unit": "g"})
+
+    use_chat(monkeypatch, _risposta_con_ricetta())
+    client.post(f"/api/chat/meals/{meal_id}/messages", json={"content": "Meno pasta"})
+
+    assert _scorta(client, "pasta")["quantity"] == pytest.approx(500)
+
+
 def test_la_lista_della_spesa_segue_la_modifica(client, meal_id, monkeypatch):
     prima = client.get("/api/shopping/current").json()
     pasta_prima = next(

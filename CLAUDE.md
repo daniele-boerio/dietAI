@@ -199,7 +199,9 @@ paragrafo nel documento, scrivendo anche cosa non andava con la versione di prim
   (`category_by_user`) e vale per tutti gli account.
 - «Ho fatto la spesa» sposta gli spuntati in dispensa; «l'ho seguito» scala la
   dispensa e scrive `pantry_used` (NULL, non `[]`, se non scala niente) e spiega gli
-  scarti (`pantry_skipped`). Cambiare una ricetta non tocca la dispensa.
+  scarti (`pantry_skipped`). Cambiare una ricetta non tocca la dispensa, tranne su un
+  pasto già seguito: lì il segno resta e la dispensa segue la ricetta nuova
+  (`rescale_pantry`, chat del pasto, chat della spesa, sostituzione).
 - Le scorte possono avere una scadenza (`PantryItem.expires_on`): nel contesto della
   generazione la dispensa va in ordine di scadenza, con la data per quello che scade
   entro una settimana.

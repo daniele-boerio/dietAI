@@ -105,6 +105,16 @@ Il piano resta modificabile sempre: passato, presente e futuro, spesa fatta o no
 cambi una ricetta già comprata l'app **non tocca la dispensa** — quello che è in casa
 resta in casa, e la scorta la corregge chi apre il frigo. È una scelta esplicita:
 indovinare cosa è rimasto sarebbe peggio che lasciar fare all'utente.
+
+L'eccezione è il pasto **già seguito**: lì non c'è niente da indovinare, la dispensa
+è già stata scalata e si sa di quanto (`pantry_used`). Se la chat del pasto, la chat
+della spesa o la sostituzione di un ingrediente ne cambiano la ricetta, il segno
+«l'ho seguito» resta — l'hai mangiato — e `rescale_pantry` rimette quello che era
+uscito e scala la ricetta nuova: un ingrediente tolto rientra, uno aggiunto esce.
+Prima la chat della spesa toglieva il segno e quella del pasto no, e in tutte e due la
+dispensa restava scalata sulla ricetta vecchia. Rigenerare il pasto è un'altra cosa
+(un piatto nuovo, non ancora mangiato) e il segno lo toglie ancora. Guardie in
+`tests/test_chat.py`.
 `refresh_week_statuses` archivia le settimane passate a ogni lettura, senza scheduler,
 ma "archiviata" è un'etichetta, non un lucchetto.
 

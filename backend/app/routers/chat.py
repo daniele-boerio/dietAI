@@ -35,6 +35,7 @@ from ..services.recipes import (
 from ..services.shopping import (
     meals_to_buy,
     rebuild_shopping_list,
+    rescale_pantry,
     serialize_shopping_list,
     shopping_list_summary,
 )
@@ -221,6 +222,7 @@ def send_message(
                     # E se la modifica ha riportato il piatto identico a uno che c'era
                     # già (o non ha cambiato niente), si torna a una riga sola.
                     recipe = settle_recipe(db, meal) or recipe
+                    rescale_pantry(db, user.id, meal)
                     recipe_updated = True
             except ExcludedFoodError as exc:
                 logger.warning("Chat: modifica rifiutata (pasto %s): %s", meal_id, exc.detail)
@@ -358,7 +360,9 @@ def _apply_recipes_update(
         # Due caselle che avevano lo stesso piatto ricevono qui la stessa identica
         # modifica: senza rimetterle insieme, il doppione rientrerebbe da qui.
         settle_recipe(db, meal)
-        meal.is_followed = None  # la ricetta è cambiata: il tracking riparte da zero
+        # Il segno «l'ho seguito» resta, come nella chat del pasto: è la dispensa a
+        # seguire la ricetta nuova.
+        rescale_pantry(db, user.id, meal)
         changed.append(_meal_label(day, slot))
     return changed
 

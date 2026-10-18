@@ -524,6 +524,26 @@ def restore_to_pantry(db: Session, user_id: int, used: list[dict]) -> None:
     db.flush()
 
 
+def rescale_pantry(db: Session, user_id: int, meal: PlannedMeal) -> None:
+    """La ricetta di un pasto già «l'ho seguito» è cambiata: la dispensa la segue.
+
+    Il pasto resta seguito — l'hai mangiato — ma quello che è uscito dalla dispensa
+    era la ricetta di prima. Si rimette quello che era stato tolto (`pantry_used`) e si
+    scala la ricetta nuova: un ingrediente rimasto uguale torna dov'era, uno tolto
+    rientra in dispensa, uno aggiunto ne esce. Prima la chat della spesa toglieva il
+    segno e quella del pasto no, e in tutte e due la dispensa restava scalata sulla
+    ricetta vecchia.
+    """
+    if meal.is_followed is not True:
+        return
+    restore_to_pantry(db, user_id, meal.pantry_used)
+    slot = db.get(MealSlot, meal.meal_slot_id)
+    used, _skipped = consume_from_pantry(
+        db, user_id, meal.recipe_id, slot.servings if slot else 1
+    )
+    meal.pantry_used = used or None
+
+
 def complete_shopping(db: Session, user_id: int, lst: ShoppingList) -> dict:
     """Spesa fatta: quello che hai spuntato passa in dispensa e la lista si svuota.
 

@@ -27,7 +27,7 @@ from ..services.recipes import (
     set_declared_details,
     settle_recipe,
 )
-from ..services.shopping import rebuild_shopping_list
+from ..services.shopping import rebuild_shopping_list, rescale_pantry
 
 logger = logging.getLogger(__name__)
 
@@ -288,6 +288,7 @@ def substitute_ingredient(
     if meal is not None:
         db.flush()
         recipe = settle_recipe(db, meal) or recipe
+        rescale_pantry(db, user.id, meal)
 
     db.commit()
 

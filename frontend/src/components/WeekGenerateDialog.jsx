@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Check, Sparkles } from 'lucide-react';
+import { AlertTriangle, Check, Heart, Sparkles } from 'lucide-react';
+import { api } from '../api';
 import { contaSelezione, daGenerare, giorniPredefiniti } from '../lib/generation';
 import Modal from './Modal';
+import StarRating from './StarRating';
 
 // I pasti che non si vogliono generare sono quasi sempre gli stessi — chi la colazione
 // se la prepara da sé lo fa tutte le settimane — quindi la scelta si ricorda. Si
@@ -28,6 +30,90 @@ const scriviEsclusi = (nomi) => {
 };
 
 const plurale = (n, uno, molti) => `${n} ${n === 1 ? uno : molti}`;
+
+/**
+ * Le ricette della settimana (e di quella prima) che non hai ancora salvato.
+ *
+ * Il ricettario tiene solo quelle che hai voluto tu — preferite, votate, scritte a
+ * mano — e le altre se ne vanno quando nessun pasto le usa più. Generare una settimana
+ * nuova è proprio quel momento, quindi la domanda sta qui: un cuore o un voto, e il
+ * piatto resta. Se non c'è niente da salvare la sezione non compare.
+ */
+function DaSalvare({ weekId }) {
+  const [ricette, setRicette] = useState([]);
+
+  useEffect(() => {
+    let attuale = true;
+    api
+      .getUnsavedRecipes(weekId)
+      .then((r) => attuale && setRicette(r))
+      // È un promemoria: se non arriva, si genera lo stesso.
+      .catch(() => {});
+    return () => {
+      attuale = false;
+    };
+  }, [weekId]);
+
+  if (!ricette.length) return null;
+
+  const aggiorna = (id, campi) =>
+    setRicette((prec) => prec.map((r) => (r.id === id ? { ...r, ...campi } : r)));
+
+  const preferita = async (r) => {
+    const next = !r.is_favorite;
+    aggiorna(r.id, { is_favorite: next });
+    try {
+      await api.favoriteRecipe(r.id, next);
+    } catch {
+      aggiorna(r.id, { is_favorite: !next });
+    }
+  };
+
+  const vota = async (r, rating) => {
+    const prima = r.rating;
+    aggiorna(r.id, { rating });
+    try {
+      await api.rateRecipe(r.id, rating);
+    } catch {
+      aggiorna(r.id, { rating: prima });
+    }
+  };
+
+  const salvate = ricette.filter((r) => r.is_favorite || r.rating).length;
+
+  return (
+    <div className="gen-section">
+      <span className="field-label">Prima di generare: tieni qualche ricetta?</span>
+      <p className="field-hint" style={{ marginTop: 0 }}>
+        Queste non le hai ancora valutate, e senza un voto o un cuore escono dal
+        ricettario.
+        {salvate > 0 && ` ${plurale(salvate, 'salvata', 'salvate')} ✓`}
+      </p>
+      <div className="save-list">
+        {ricette.map((r) => (
+          <div key={r.id} className="list-row">
+            <div className="list-row-main">
+              <strong>{r.title}</strong>
+              <span>
+                {r.day_name} · {r.calories} kcal
+              </span>
+            </div>
+            <StarRating value={r.rating} onChange={(n) => vota(r, n)} />
+            <button
+              className={`recipe-fav ${r.is_favorite ? 'on' : ''}`}
+              onClick={() => preferita(r)}
+              aria-pressed={r.is_favorite}
+              aria-label={r.is_favorite ? `Togli ${r.title} dai preferiti` : `Salva ${r.title} fra i preferiti`}
+              title={r.is_favorite ? 'Togli dai preferiti' : 'Aggiungi ai preferiti'}
+            >
+              <Heart fill={r.is_favorite ? 'currentColor' : 'none'} />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 /**
  * Cosa generare della settimana: quali giorni, quali pasti.
@@ -104,6 +190,8 @@ export default function WeekGenerateDialog({
         Spunta i giorni e i pasti: è una chiamata sola al modello, e quello che lasci
         fuori resta esattamente com'è.
       </p>
+
+      <DaSalvare weekId={week.id} />
 
       <div className="gen-section">
         <div className="gen-section-head">
@@ -224,8 +312,9 @@ export default function WeekGenerateDialog({
         <div className="notice notice-error" style={{ marginTop: 12 }}>
           <AlertTriangle />
           <div>
-            Le ricette di adesso vengono sostituite — restano nel ricettario, e i pasti
-            fissi o che prepari tu non si toccano. Per cambiarne una sola conviene
+            Le ricette di adesso vengono sostituite — nel ricettario restano solo quelle
+            che hai votato o messo fra le preferite, e i pasti fissi o che prepari tu non
+            si toccano. Per cambiarne una sola conviene
             rigenerarla dalla sua card.
           </div>
         </div>

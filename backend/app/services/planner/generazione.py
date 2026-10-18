@@ -26,6 +26,7 @@ from ..recipes import (
     create_recipe,
     fit_recipe_data,
     learn_composition,
+    prune_unsaved,
     recipe_for_prompt,
 )
 from .settimane import DAY_NAMES, current_week_start, get_active_diet, week_meals
@@ -84,6 +85,9 @@ def generate_week(
     rows = week_meals(db, week)
     if not rows:
         raise HTTPException(400, "La settimana non ha pasti da generare.")
+    # Le ricette che non hai salvato e che nessun pasto usa più se ne vanno qui: una
+    # settimana nuova è il momento in cui le vecchie smettono di servire.
+    prune_unsaved(db, week.user_id)
 
     # I giorni saltati sono passati e i pasti saltati sono già stati risolti altrove:
     # generarci una ricetta vorrebbe dire pagare una chiamata per un piatto che nessuno

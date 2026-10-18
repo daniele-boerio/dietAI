@@ -83,8 +83,11 @@ def settimana_ripetitiva(client, diet, monkeypatch):
     return res.json()
 
 
-def ricettario(client) -> list[dict]:
-    return client.get("/api/recipes?per_page=100").json()["items"]
+def ricettario(db) -> list[dict]:
+    """Le righe di ricetta in archivio, salvate o no: questi test guardano i doppioni
+    nel database, non quello che il ricettario mostra (solo le salvate)."""
+    db.expire_all()
+    return [{"id": r.id, "title": r.title} for r in db.query(Recipe).all()]
 
 
 def pasto(week: dict, dow: int, slot: str) -> dict:
@@ -94,8 +97,8 @@ def pasto(week: dict, dow: int, slot: str) -> dict:
 # ── Generazione ────────────────────────────────────────────────────────────────
 
 
-def test_lo_stesso_piatto_sette_giorni_e_una_ricetta_sola(client, settimana_ripetitiva):
-    items = ricettario(client)
+def test_lo_stesso_piatto_sette_giorni_e_una_ricetta_sola(client, db, settimana_ripetitiva):
+    items = ricettario(db)
 
     assert len(items) == 3
     assert sorted(r["title"] for r in items) == [
@@ -121,14 +124,14 @@ def test_la_spesa_conta_comunque_ogni_giorno(client, settimana_ripetitiva):
     assert items["pasta"]["quantity"] == pytest.approx(DAYS * 100)
 
 
-def test_generare_la_settimana_dopo_non_ricrea_gli_stessi_piatti(client, settimana_ripetitiva):
+def test_generare_la_settimana_dopo_non_ricrea_gli_stessi_piatti(client, db, settimana_ripetitiva):
     nxt = client.get("/api/planning/weeks/next").json()
     client.post(f"/api/planning/weeks/{nxt['id']}/generate")
 
-    assert len(ricettario(client)) == 3
+    assert len(ricettario(db)) == 3
 
 
-def test_un_pasto_fisso_non_si_ricopia_a_ogni_settimana(client, settimana_ripetitiva):
+def test_un_pasto_fisso_non_si_ricopia_a_ogni_settimana(client, db, settimana_ripetitiva):
     """`apply_recurring_meals` condivide la riga invece di clonarla ogni lunedì."""
     week = client.get("/api/planning/weeks/current").json()
     colazione = pasto(week, 0, "Colazione")
@@ -139,7 +142,7 @@ def test_un_pasto_fisso_non_si_ricopia_a_ogni_settimana(client, settimana_ripeti
 
     nxt = client.get("/api/planning/weeks/next").json()
 
-    assert len(ricettario(client)) == 3
+    assert len(ricettario(db)) == 3
     assert pasto(nxt, 3, "Colazione")["recipe"]["id"] == colazione["recipe"]["id"]
 
 
@@ -191,7 +194,7 @@ def test_la_chat_modifica_solo_il_giorno_da_cui_parte(client, settimana_ripetiti
     assert pasto(dopo, 0, "Pranzo")["recipe"]["id"] != pasto(dopo, 1, "Pranzo")["recipe"]["id"]
 
 
-def test_la_copia_si_stacca_solo_quando_serve(client, diet, monkeypatch):
+def test_la_copia_si_stacca_solo_quando_serve(client, db, diet, monkeypatch):
     """Una ricetta usata da una casella sola si modifica sul posto, senza doppioni."""
     monkeypatch.setattr(planner, "get_client", lambda db, user, role: ModelloRipetitivo(user))
     client.put("/api/auth/api-key", json={"api_key": "sk-or-chiave-finta-per-i-test"})
@@ -203,7 +206,7 @@ def test_la_copia_si_stacca_solo_quando_serve(client, diet, monkeypatch):
         json={"recipe": {**PRANZO, **PRANZO["nutrition"]}},
     )
 
-    prima = len(ricettario(client))
+    prima = len(ricettario(db))
     modificata = {**PRANZO, "title": "Pasta e zucchine al limone"}
     monkeypatch.setattr(
         chat_router,
@@ -212,11 +215,11 @@ def test_la_copia_si_stacca_solo_quando_serve(client, diet, monkeypatch):
     )
     client.post(f"/api/chat/meals/{solo_lunedi['id']}/messages", json={"content": "col limone"})
 
-    assert len(ricettario(client)) == prima
+    assert len(ricettario(db)) == prima
 
 
 def test_una_modifica_che_non_cambia_niente_non_lascia_una_copia(
-    client, settimana_ripetitiva, monkeypatch
+    client, db, settimana_ripetitiva, monkeypatch
 ):
     """Il modello può rimandare la ricetta identica: non deve nascerne una seconda."""
     week = client.get("/api/planning/weeks/current").json()
@@ -229,13 +232,13 @@ def test_una_modifica_che_non_cambia_niente_non_lascia_una_copia(
     )
     client.post(f"/api/chat/meals/{lunedi['id']}/messages", json={"content": "controlla"})
 
-    assert len(ricettario(client)) == 3
+    assert len(ricettario(db)) == 3
     dopo = client.get("/api/planning/weeks/current").json()
     assert pasto(dopo, 0, "Pranzo")["recipe"]["id"] == pasto(dopo, 1, "Pranzo")["recipe"]["id"]
 
 
 def test_la_chat_della_spesa_non_sdoppia_il_piatto_ripetuto(
-    client, settimana_ripetitiva, monkeypatch
+    client, db, settimana_ripetitiva, monkeypatch
 ):
     """Cambiare un ingrediente in tutta la lista tocca due caselle con lo stesso piatto:
     ricevono la stessa modifica, e devono restare una riga sola."""
@@ -272,7 +275,7 @@ def test_la_chat_della_spesa_non_sdoppia_il_piatto_ripetuto(
     assert res.status_code == 200, res.text
     assert len(res.json()["changed_meals"]) == 2
 
-    titoli = [r["title"] for r in ricettario(client)]
+    titoli = [r["title"] for r in ricettario(db)]
     assert titoli.count("Pasta e peperoni") == 1
     dopo = client.get("/api/planning/weeks/current").json()
     assert pasto(dopo, 0, "Pranzo")["recipe"]["id"] == pasto(dopo, 1, "Pranzo")["recipe"]["id"]

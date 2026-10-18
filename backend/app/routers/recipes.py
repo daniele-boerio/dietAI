@@ -1,6 +1,8 @@
 """Ricettario: archivio delle ricette, voti, preferiti e sostituzione ingredienti."""
 
 import logging
+from datetime import timedelta
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session
@@ -12,8 +14,12 @@ from ..rate_limit import AI_LIMIT, limiter
 from ..schemas import FavoriteRequest, RatingRequest, RecipeCreate, SubstituteRequest
 from ..services.ai_client import get_client
 from ..services.planner import DAY_NAMES
+from ..services.ownership import own_week
 from ..services.recipes import (
     create_recipe,
+    low_rated_clause,
+    proposable_clause,
+    saved_clause,
     serialize_recipe,
 )
 from ..services import substitution
@@ -59,12 +65,20 @@ def list_recipes(
     per_page: int = Query(20, ge=1, le=100),
     rating_min: int | None = Query(None, ge=1, le=5),
     is_favorite: bool | None = None,
+    # «saved» è il ricettario (preferite, votate, scritte da te), «proposable» la scelta
+    # per un pasto (niente voti bassi), «low» le votate male.
+    scope: Literal["saved", "proposable", "low"] = "saved",
     difficulty: str | None = None,
     search: str | None = None,
     user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
     query = db.query(Recipe).filter(Recipe.user_id == user_id)
+    query = query.filter(
+        {"saved": saved_clause, "proposable": proposable_clause, "low": low_rated_clause}[
+            scope
+        ]()
+    )
 
     if rating_min is not None:
         query = query.filter(Recipe.rating >= rating_min)
@@ -89,6 +103,53 @@ def list_recipes(
         "page": page,
         "per_page": per_page,
     }
+
+
+@router.get("/unsaved")
+def unsaved_recipes(
+    week_id: int,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    """Le ricette di questa settimana e della precedente che non hai ancora salvato.
+
+    Le chiede la finestra di generazione: le ricette non salvate escono dal ricettario,
+    e una settimana nuova è il momento in cui quelle vecchie smettono di servire —
+    quindi è lì che si chiede se ce n'è qualcuna da tenere.
+    """
+    week = own_week(db, user_id, week_id)
+    inizio = week.week_start_date - timedelta(days=7)
+    fine = week.week_start_date + timedelta(days=6)
+    rows = (
+        db.query(Recipe, DayPlan)
+        .join(PlannedMeal, PlannedMeal.recipe_id == Recipe.id)
+        .join(DayPlan, DayPlan.id == PlannedMeal.day_plan_id)
+        .join(WeekPlan, WeekPlan.id == DayPlan.week_plan_id)
+        .filter(
+            WeekPlan.user_id == user_id,
+            Recipe.user_id == user_id,
+            DayPlan.date >= inizio,
+            DayPlan.date <= fine,
+            ~saved_clause(),
+        )
+        .order_by(DayPlan.date)
+        .all()
+    )
+    visti: dict[int, dict] = {}
+    for recipe, day in rows:
+        visti.setdefault(
+            recipe.id,
+            {
+                "id": recipe.id,
+                "title": recipe.title,
+                "calories": recipe.calories,
+                "date": day.date.isoformat(),
+                "day_name": DAY_NAMES[day.day_of_week],
+                "rating": recipe.rating,
+                "is_favorite": recipe.is_favorite,
+            },
+        )
+    return list(visti.values())
 
 
 @router.get("/{recipe_id}")

@@ -21,6 +21,9 @@ export default function RecipesPage() {
   const [difficulty, setDifficulty] = useState('');
   const [onlyFavorites, setOnlyFavorites] = useState(false);
   const [minRating, setMinRating] = useState(null);
+  // Le votate male stanno a parte: restano (dicono al modello cosa evitare) ma non
+  // sono piatti da rifare.
+  const [soloBocciate, setSoloBocciate] = useState(false);
   const [page, setPage] = useState(1);
   const [error, setError] = useState(null);
   const [tentativo, setTentativo] = useState(0);
@@ -40,6 +43,7 @@ export default function RecipesPage() {
           difficulty: difficulty || null,
           is_favorite: onlyFavorites || null,
           rating_min: minRating,
+          scope: soloBocciate ? 'low' : null,
         })
         .then((d) => {
           if (superata) return;
@@ -54,7 +58,7 @@ export default function RecipesPage() {
       superata = true;
       clearTimeout(t);
     };
-  }, [search, difficulty, onlyFavorites, minRating, page, tentativo]);
+  }, [search, difficulty, onlyFavorites, minRating, soloBocciate, page, tentativo]);
 
   const totalPages = data ? Math.ceil(data.total / data.per_page) : 1;
 
@@ -64,7 +68,8 @@ export default function RecipesPage() {
         <div>
           <h1 className="page-title">Ricettario</h1>
           <p className="page-subtitle">
-            {data ? `${data.total} ricette · ` : ''}i voti guidano le generazioni future
+            {data ? `${data.total} ricette · ` : ''}le preferite, quelle che hai votato e le
+            tue: i voti guidano le generazioni future
           </p>
         </div>
         {/* La ricerca sta nella testata, non in mezzo ai filtri: cercare per nome e
@@ -90,11 +95,12 @@ export default function RecipesPage() {
 
       <div className="filters">
         <button
-          className={`chip ${!onlyFavorites && minRating === null && difficulty === '' ? 'active' : ''}`}
+          className={`chip ${!onlyFavorites && minRating === null && difficulty === '' && !soloBocciate ? 'active' : ''}`}
           onClick={() => {
             setOnlyFavorites(false);
             setMinRating(null);
             setDifficulty('');
+            setSoloBocciate(false);
             setPage(1);
           }}
         >
@@ -122,6 +128,16 @@ export default function RecipesPage() {
           Voto 4+
         </button>
 
+        <button
+          className={`chip ${soloBocciate ? 'active' : ''}`}
+          onClick={() => {
+            setSoloBocciate((v) => !v);
+            setPage(1);
+          }}
+        >
+          Votate male
+        </button>
+
         {DIFFICULTIES.map((d) => (
           <button
             key={d.key}
@@ -143,8 +159,8 @@ export default function RecipesPage() {
       ) : !data || data.items.length === 0 ? (
         <EmptyState
           icon={ChefHat}
-          title="Nessuna ricetta"
-          text="Genera un piano settimanale: ogni ricetta creata finisce qui, pronta da riusare."
+          title="Nessuna ricetta salvata"
+          text="Qui restano le ricette che metti fra le preferite, che voti o che scrivi tu. Quelle generate e mai valutate escono dal ricettario: dai un voto a quelle che ti piacciono, dal pasto o prima di generare la settimana dopo."
           action={
             <Link className="btn btn-primary" to="/plan">
               Vai alla settimana

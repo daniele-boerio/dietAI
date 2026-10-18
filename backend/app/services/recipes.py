@@ -17,6 +17,7 @@ stacca prima una copia. È la stessa garanzia di quando le copie si facevano sub
 (`copy_recipe` per i pasti ricorrenti), ma pagata solo quando serve davvero.
 """
 
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from ..models import Ingredient, PlannedMeal, Recipe, RecipeIngredient
@@ -738,3 +739,47 @@ def recipe_for_prompt(db: Session, recipe: Recipe) -> dict:
         },
         "tags": recipe.tags,
     }
+
+
+# ── Il ricettario: le ricette salvate ──────────────────────────────────────────
+#
+# Ogni generazione crea ricette, e il ricettario le teneva tutte: dopo un mese era un
+# archivio di piatti mai guardati, dove quelli piaciuti si perdevano. Ora una ricetta
+# è **salvata** se l'hai voluta tu — preferita, votata, o scritta a mano — e solo
+# quelle stanno nel ricettario. Le altre restano agganciate ai loro pasti finché
+# servono (l'andamento conta i loro macro, healthAI li ha ricevuti) e si cancellano
+# davvero quando nessun pasto le usa più (`prune_unsaved`, a ogni generazione).
+
+
+def saved_clause():
+    return or_(
+        Recipe.is_favorite.is_(True), Recipe.rating.isnot(None), Recipe.is_custom.is_(True)
+    )
+
+
+def proposable_clause():
+    """Quelle da proporre per un pasto: un voto basso dice «non rifarmela»."""
+    return or_(
+        Recipe.is_favorite.is_(True),
+        Recipe.rating >= 3,
+        and_(Recipe.is_custom.is_(True), Recipe.rating.is_(None)),
+    )
+
+
+def low_rated_clause():
+    """Votate male: restano, perché dicono al modello cosa evitare, ma non si propongono."""
+    return and_(Recipe.rating <= 2, Recipe.is_favorite.is_(False))
+
+
+def prune_unsaved(db: Session, user_id: int) -> int:
+    """Cancella le ricette non salvate che nessun pasto usa più. Restituisce quante."""
+    usate = db.query(PlannedMeal.recipe_id).filter(PlannedMeal.recipe_id.isnot(None))
+    orfane = (
+        db.query(Recipe)
+        .filter(Recipe.user_id == user_id, ~saved_clause(), Recipe.id.notin_(usate))
+        .all()
+    )
+    for recipe in orfane:
+        db.delete(recipe)
+    db.flush()
+    return len(orfane)

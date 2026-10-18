@@ -134,6 +134,23 @@ saltato, il puntatore `skipped_to_meal_id` segue il piatto: «l'ho seguito» sul
 saltato svuota la casella dove il piatto è finito, non quella di prima. Guardie in
 `tests/test_scambio.py`.
 
+**Il ricettario tiene le ricette che hai voluto tu.** Prima ci finiva ogni ricetta
+generata, e dopo un mese i piatti piaciuti si perdevano fra centinaia mai guardati.
+Ora una ricetta è salvata se è fra le preferite, se ha un voto o se l'hai scritta tu
+(`recipes.saved_clause`), e il ricettario mostra solo quelle. Le altre non si
+cancellano subito: restano agganciate ai loro pasti finché servono — l'andamento conta
+i loro macro, healthAI li ha ricevuti, un pasto passato deve poter dire cosa c'era — e
+se ne vanno davvero all'inizio di ogni generazione, quando nessun pasto le usa più
+(`prune_unsaved`). Le votate male (1-2 stelle, non preferite) restano, perché dicono al
+modello cosa evitare, ma stanno sotto «Votate male» e non si propongono per un pasto
+(`scope=proposable`: preferite, voto ≥ 3, le proprie). Siccome una settimana nuova è
+il momento in cui le ricette vecchie smettono di servire, la finestra «Cosa ti
+genero?» elenca quelle della settimana e della precedente non ancora salvate
+(`GET /recipes/unsaved`) con stelle e cuore. Dal dettaglio di un pasto pieno «Dal
+ricettario» mette al suo posto una ricetta salvata: spesa e dispensa la seguono, le
+grammature no — sono le sue, e i macro del pasto possono scostarsi dal target. Guardie
+in `tests/test_ricettario_salvato.py`.
+
 **Lo stesso piatto è una ricetta sola.** Il ricettario è l'archivio dei piatti, non il
 diario delle caselle: la colazione che si ripete sette giorni è un piatto. Prima ogni
 casella si portava dietro la sua riga — `create_recipe` una per pasto generato,

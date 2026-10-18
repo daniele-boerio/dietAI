@@ -206,6 +206,10 @@ paragrafo nel documento, scrivendo anche cosa non andava con la versione di prim
 - Due pasti della stessa settimana si scambiano la ricetta (`meals.swap`, anche pranzo ↔
   cena): i target restano ai pasti, conta il totale settimanale. Fuori fissi, «lo faccio
   io», saltati e già segnati (`swap_block`); il rinvio di un saltato segue il piatto.
+- Il ricettario mostra solo le ricette salvate (preferita, votata o scritta a mano,
+  `saved_clause`); le altre si cancellano alla generazione quando nessun pasto le usa
+  (`prune_unsaved`). Per un pasto si propongono preferite, voto ≥ 3 e le proprie;
+  prima di generare la dialog chiede quali salvare (`/recipes/unsaved`).
 - Lo stesso piatto è una ricetta sola (`find_twin`); chi modifica da un pasto stacca
   prima una copia (`fork_recipe_for_meal`) e poi si riaccorpa (`settle_recipe`).
 

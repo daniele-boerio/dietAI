@@ -417,6 +417,17 @@ export default function MealDetailPage() {
                       <ArrowLeftRight size={16} /> Scambia
                     </button>
 
+                    {/* Al posto del piatto generato, uno di quelli salvati: la spesa e la
+                        dispensa seguono la ricetta nuova, la ricetta no — ha le sue
+                        grammature, non quelle cucite sui target di questo pasto. */}
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => setPicker(true)}
+                      disabled={frozen || meal.is_recurring || meal.is_followed !== null}
+                    >
+                      <BookOpen size={16} /> Dal ricettario
+                    </button>
+
                     <button
                       className="btn btn-secondary"
                       onClick={() => setGenerator(true)}
@@ -827,7 +838,7 @@ function RecipePicker({ onPick, onCancel }) {
   useEffect(() => {
     const t = setTimeout(() => {
       api
-        .getRecipes({ search, per_page: 30 })
+        .getRecipes({ search, per_page: 30, scope: "proposable" })
         .then((d) => setItems(d.items))
         .catch(() => {});
     }, 250);
@@ -836,6 +847,10 @@ function RecipePicker({ onPick, onCancel }) {
 
   return (
     <Modal title="Scegli dal ricettario" onClose={onCancel} className="modal-lg">
+      <p className="field-hint" style={{ marginBottom: 10 }}>
+        Le preferite, quelle votate da 3 stelle in su e le tue. La ricetta resta con le
+        sue grammature: i macro del pasto possono scostarsi dal target.
+      </p>
       <input
         type="text"
         placeholder="Cerca..."

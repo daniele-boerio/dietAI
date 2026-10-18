@@ -4816,6 +4816,19 @@ textarea:focus-visible {
   color: var(--text-muted);
 }
 
+/* Le ricette da salvare prima di generare: corte, e la finestra non deve diventare
+   una pagina. */
+.save-list {
+  max-height: min(32dvh, 260px);
+  overflow-y: auto;
+}
+
+/* Lo stesso cuore del foglio della ricetta, ma in riga invece che sulla fascia. */
+.save-list .recipe-fav {
+  position: static;
+  flex-shrink: 0;
+}
+
 /* Lo scambio fra pasti: un elenco per giorno, che scorre dentro la finestra. Chi non
    si può scegliere resta visibile, spento, col motivo: sparire farebbe sembrare la
    settimana più corta. */

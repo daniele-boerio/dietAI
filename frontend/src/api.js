@@ -319,6 +319,10 @@ export const api = {
 
   getRecipe: (id) => request(`/recipes/${id}`),
 
+  // Le ricette della settimana e di quella prima che non hai ancora salvato (voto o
+  // preferita): la finestra di generazione chiede se tenerne qualcuna.
+  getUnsavedRecipes: (weekId) => request(`/recipes/unsaved?week_id=${weekId}`),
+
   createRecipe: (payload) =>
     request('/recipes', { method: 'POST', body: JSON.stringify(payload) }),
 

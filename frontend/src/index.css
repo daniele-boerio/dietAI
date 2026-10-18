@@ -2490,6 +2490,15 @@ textarea {
   background: var(--bg-card-hover);
 }
 
+/* Sulla fascia del piatto il tondo sta nell'angolo, specchio del preferito: senza,
+   la fascia (flex centrata) lo metteva in mezzo accanto alle posate, al posto della
+   foto. */
+.recipe-hero .recipe-back {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+}
+
 /* Il gemello a destra: il preferito. Sta sulla fascia perché in fondo al foglio era
    il sesto comando di una riga che sul telefono va a capo tre volte. */
 .recipe-fav {

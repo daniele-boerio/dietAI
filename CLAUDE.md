@@ -156,7 +156,8 @@ paragrafo nel documento, scrivendo anche cosa non andava con la versione di prim
 - Ogni chiamata al modello lascia una riga in `AIUsage` (token e costo, a chi ha premuto
   il pulsante): il client la scrive da sé se è stato costruito da `get_client`.
 - Niente email: l'unico endpoint pubblico è `/auth/login`. Cancellare un utente porta
-  via tutto (CASCADE); il seed ricrea solo l'amministratore.
+  via tutto (CASCADE) tranne le sue righe di `AIUsage`, che restano anonime (SET NULL,
+  «Account cancellati»); il seed ricrea solo l'amministratore.
 
 **Dieta** (`docs/dieta.md`)
 - Il questionario produce una `DietPlan` identica alle altre; il conto lo fa

@@ -100,6 +100,32 @@ def summary(db: Session, days: int = 30) -> dict:
         }
         for uid, email, calls, tin, tout, cost, senza in rows
     ]
+    # Gli account cancellati: le loro chiamate restano (`user_id` NULL), in una riga
+    # sola, perché sono soldi già spesi e il totale deve contarli.
+    calls, tin, tout, cost, senza = (
+        db.query(
+            func.count(AIUsage.id),
+            func.coalesce(func.sum(AIUsage.input_tokens), 0),
+            func.coalesce(func.sum(AIUsage.output_tokens), 0),
+            func.sum(AIUsage.cost_usd),
+            func.sum(case((AIUsage.cost_usd.is_(None), 1), else_=0)),
+        )
+        .filter(AIUsage.user_id.is_(None), AIUsage.created_at >= since)
+        .one()
+    )
+    if calls:
+        users.append(
+            {
+                "user_id": None,
+                "email": None,
+                "deleted": True,
+                "calls": calls,
+                "input_tokens": int(tin),
+                "output_tokens": int(tout),
+                "cost_usd": round(cost, 4) if cost is not None else None,
+                "calls_without_cost": int(senza or 0),
+            }
+        )
     return {
         "days": days,
         "users": users,

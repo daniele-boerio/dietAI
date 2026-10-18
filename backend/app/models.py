@@ -628,13 +628,16 @@ class AIUsage(Base):
     Chi mette la chiave paga per tutti: senza questa tabella aveva solo l'interruttore
     `ai_enabled` e nessun numero per decidere quando usarlo. `user_id` è chi ha
     premuto il pulsante, non chi paga — chi paga è sempre l'amministratore.
+
+    Cancellando un account le sue righe restano, con `user_id` a NULL: sono soldi già
+    spesi dall'amministratore, e col CASCADE il conto del mese calava da solo.
     """
 
     __tablename__ = "ai_usage"
 
     id = Column(Integer, primary_key=True)
     user_id = Column(
-        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
     role = Column(String, nullable=False)
     model = Column(String, nullable=False)

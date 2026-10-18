@@ -93,5 +93,21 @@ def test_il_riepilogo_per_utente(client, guest_client, db):
     assert res["total_cost_usd"] == 0.25
 
 
+def test_cancellare_un_account_non_cancella_quello_che_e_costato(client, guest_client, db):
+    """Sono soldi già spesi dall'amministratore: col CASCADE il totale calava da solo."""
+    ospite_id = guest_client.get("/api/auth/me").json()["id"]
+    usage.recorder(db.get_bind(), ospite_id, "chat")("m", {"input_tokens": 5, "output_tokens": 7, "cost_usd": 0.5})
+
+    assert client.delete(f"/api/admin/users/{ospite_id}").status_code in (200, 204)
+
+    db.expire_all()
+    riga = db.query(AIUsage).one()
+    assert riga.user_id is None
+    res = client.get("/api/admin/usage").json()
+    cancellati = next(u for u in res["users"] if u.get("deleted"))
+    assert cancellati["calls"] == 1 and cancellati["cost_usd"] == 0.5
+    assert res["total_cost_usd"] == 0.5
+
+
 def test_il_riepilogo_e_solo_dell_amministratore(guest_client):
     assert guest_client.get("/api/admin/usage").status_code == 403

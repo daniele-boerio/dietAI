@@ -42,8 +42,8 @@ export default function AiUsageCard() {
         <>
           <ul className="usage-list">
             {data.users.map((u) => (
-              <li key={u.user_id}>
-                <span className="usage-email">{u.email}</span>
+              <li key={u.user_id ?? 'cancellati'}>
+                <span className="usage-email">{u.deleted ? 'Account cancellati' : u.email}</span>
                 <span className="usage-num">{u.calls} chiamate</span>
                 <span className="usage-num">
                   {token(u.input_tokens)} / {token(u.output_tokens)} token

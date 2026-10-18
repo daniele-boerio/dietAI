@@ -63,6 +63,12 @@ account su 7, 30 o 90 giorni (`GET /api/admin/usage`, solo amministratore). La r
 a **chi ha premuto il pulsante**, non a chi paga — chi paga è sempre lui, e la domanda
 a cui il pannello risponde è un'altra.
 
+Per lo stesso motivo le righe **non** se ne vanno con l'account: fino alla migrazione
+`0033` la FK era in CASCADE come ogni dato personale, e cancellare un ospite faceva
+calare da solo il conto del mese — soldi già spesi che sparivano dal totale. Ora è
+SET NULL, e il riepilogo le raccoglie in una riga «Account cancellati». Guardia in
+`tests/test_costo_ai.py`.
+
 Il costo lo dichiara OpenRouter nella risposta (`usage.cost`, fra i campi che l'SDK non
 conosce); in streaming serve `stream_options={"include_usage": True}`, perché l'uso
 arriva nell'ultimo pezzo senza `choices` — e la generazione della settimana, la più

@@ -1,0 +1,415 @@
+"""Le due chat: sul pasto (riscrive la sua ricetta) e sulla spesa (riscrive tutte le
+ricette che usano un ingrediente).
+
+Il router fa solo HTTP — proprietà, limite di frequenza, il client del modello — e
+passa qui il client già costruito: così i test lo sostituiscono dov'è sempre stato,
+sul router. Qui c'è il resto: il prompt, lo storico, la chiamata, il marcatore, e
+l'applicazione della ricetta con le sue regole (esclusi, copia staccata, dispensa).
+"""
+
+import logging
+import re
+
+from sqlalchemy.orm import Session
+
+from ..models import (
+    DayPlan,
+    MealChatMessage,
+    MealSlot,
+    PlannedMeal,
+    Recipe,
+    ShoppingChatMessage,
+    User,
+    WeekPlan,
+)
+from . import prompts
+from .ai_client import _extract_json
+from .exclusions import ExcludedFoodError, check_recipe
+from .planner import DAY_NAMES, build_context, meal_context_for_chat
+from .recipes import (
+    fork_recipe_for_meal,
+    ingredients_of,
+    serialize_recipe,
+    settle_recipe,
+    update_recipe_from_ai,
+)
+from .shopping import (
+    meals_to_buy,
+    rebuild_shopping_list,
+    rescale_pantry,
+    serialize_shopping_list,
+    shopping_list_summary,
+)
+
+logger = logging.getLogger(__name__)
+
+# Marcatore concordato nel prompt: quello che segue è la ricetta aggiornata in JSON.
+UPDATE_MARKER = "[RECIPE_UPDATE]"
+
+# Come sopra, ma per la chat della spesa: quello che segue è una lista di ricette da
+# aggiornare, ciascuna con il suo meal_id.
+RECIPES_UPDATE_MARKER = "[RECIPES_UPDATE]"
+
+# Quanti messaggi passati rimandare al modello. Oltre non serve: la conversazione su
+# un singolo pasto è corta, e ogni messaggio in più è contesto pagato a ogni turno.
+HISTORY_LIMIT = 20
+
+# I segni che il modello ha scritto la ricetta *dentro* il messaggio invece che dopo il
+# marcatore: pezzi di JSON crudi, o i nomi dei campi dello schema usati come titoletti.
+_RECIPE_DUMP = re.compile(
+    r'"(?:name|quantity|prep_time_min|cook_time_min|ingredients|nutrition)"\s*:'
+    r"|\*\*(?:ingredients|instructions|nutrition|prep_time_min|cook_time_min)\*\*",
+    re.IGNORECASE,
+)
+
+
+def _retry_for_marker(
+    client, system: str, messages: list[dict], answer: str, marker: str, max_tokens: int
+) -> str:
+    """Richiede la risposta quando il modello ha scritto la ricetta a parole.
+
+    Senza marcatore la ricetta non viene applicata: l'utente legge un piatto
+    bell'e pronto e nel piano non è cambiato niente — il modo peggiore di fallire,
+    perché sembra riuscito. Quando si riconosce il caso (nel messaggio ci sono pezzi
+    di JSON o i nomi dei campi) conviene ridirglielo: una seconda chiamata di chat
+    costa poco e recupera la prima, che è già stata pagata.
+
+    Se anche il secondo tentativo sbaglia si tiene quello nuovo solo se ha il
+    marcatore, altrimenti resta il primo: almeno è una risposta intera.
+    """
+    logger.info("Chat: ricetta scritta nel messaggio invece che dopo %s, richiedo", marker)
+    retry = messages + [
+        {"role": "assistant", "content": answer[:2000]},
+        {
+            "role": "user",
+            "content": (
+                "Hai scritto la ricetta dentro il messaggio. Rispondi di nuovo: prima UNA "
+                f"frase che dice cosa hai cambiato, poi una riga con {marker}, poi SOLO il "
+                "JSON completo della ricetta. Nel messaggio niente elenchi di ingredienti, "
+                "niente nomi di campi, niente JSON."
+            ),
+        },
+    ]
+    second = client.chat(system, retry, max_tokens=max_tokens)
+    return second if marker in second else answer
+
+
+def _needs_marker_retry(answer: str, marker: str) -> bool:
+    return marker not in answer and bool(_RECIPE_DUMP.search(answer))
+
+
+def serialize_message(message: MealChatMessage | ShoppingChatMessage) -> dict:
+    return {
+        "id": message.id,
+        "role": message.role,
+        "content": message.content,
+        "created_at": message.created_at.isoformat() if message.created_at else None,
+    }
+
+
+def _history(db: Session, model, filtro, content: str) -> list[dict]:
+    """Gli ultimi `HISTORY_LIMIT` messaggi in ordine, più quello appena scritto."""
+    rows = db.query(model).filter(filtro).order_by(model.id.desc()).limit(HISTORY_LIMIT).all()
+    messages = [{"role": m.role, "content": m.content} for m in reversed(rows)]
+    messages.append({"role": "user", "content": content})
+    return messages
+
+
+# ── Chat del pasto ─────────────────────────────────────────────────────────────
+
+
+def send_meal_message(
+    db: Session, client, user: User, meal: PlannedMeal, day: DayPlan, content: str
+) -> dict:
+    """Un messaggio sulla ricetta di un pasto, e la ricetta riscritta se il modello la cambia.
+
+    Se la risposta contiene una ricetta aggiornata (marcatore [RECIPE_UPDATE]) la
+    ricetta viene riscritta e la lista della spesa ricalcolata. L'unico caso in cui
+    non si applica niente è una giornata saltata: quel piatto si è già accodato
+    altrove, e riscriverlo qui non cambierebbe nulla di quello che si cucina.
+    """
+    meal_id = meal.id
+    ctx = meal_context_for_chat(db, meal)
+    slot = ctx["slot"]
+    recipe = ctx["recipe"]
+
+    # Una giornata saltata è l'unica casella in sola lettura rimasta: la sua ricetta
+    # si è accodata altrove, qui la chat può commentare ma non riscrivere niente.
+    frozen = day.is_skipped or meal.is_skipped
+    if frozen:
+        lock_note = (
+            "- IMPORTANTE: questo pasto è stato saltato e la sua ricetta si è spostata "
+            "su un altro giorno. Non proporre modifiche: non verrebbero applicate."
+        )
+    else:
+        lock_note = (
+            "- Il piano è modificabile: se l'utente chiede una modifica sensata, applicala."
+        )
+
+    system = prompts.render(
+        prompts.MEAL_CHAT_SYSTEM,
+        context=build_context(db, user.id),
+        slot_name=slot.name,
+        day_name=DAY_NAMES[day.day_of_week],
+        target_calories=slot.target_calories,
+        target_protein=f"{slot.target_protein_g:g}",
+        target_carbs=f"{slot.target_carbs_g:g}",
+        target_fat=f"{slot.target_fat_g:g}",
+        current_recipe=ctx["recipe_json"],
+        lock_note=lock_note,
+    )
+    messages = _history(
+        db, MealChatMessage, MealChatMessage.planned_meal_id == meal_id, content
+    )
+
+    # Niente transazione aperta durante la chiamata al modello, che può durare minuti:
+    # Postgres terrebbe la connessione "idle in transaction" e il pool si esaurirebbe
+    # con poche chat lente. Il messaggio dell'utente si scrive insieme alla risposta.
+    db.commit()
+    # Budget largo: sui modelli che ragionano una parte se ne va in ragionamento
+    # prima ancora che comincino a scrivere.
+    answer = client.chat(system, messages, max_tokens=8000)
+    db.add(MealChatMessage(planned_meal_id=meal_id, role="user", content=content))
+    if not frozen and _needs_marker_retry(answer, UPDATE_MARKER):
+        answer = _retry_for_marker(client, system, messages, answer, UPDATE_MARKER, 8000)
+
+    recipe_updated = False
+    visible = answer
+
+    if UPDATE_MARKER in answer:
+        head, _, tail = answer.partition(UPDATE_MARKER)
+        visible = head.strip() or "Ho aggiornato la ricetta."
+        if frozen:
+            visible += "\n\n(Pasto saltato: la modifica non è stata applicata.)"
+        elif not recipe:
+            visible += "\n\n(Non c'è ancora una ricetta da aggiornare per questo pasto.)"
+        else:
+            try:
+                data = _extract_json(tail)
+                if isinstance(data, dict):
+                    # Gli esclusi prima di tutto, e prima di staccare la copia: una
+                    # modifica che non si applica non deve lasciare dietro niente.
+                    check_recipe(db, user.id, data)
+                    # Lo stesso piatto in due giorni è una riga sola: se questo è il
+                    # caso, la modifica chiesta qui se ne stacca una copia sua invece
+                    # di riscrivere anche gli altri giorni.
+                    recipe = fork_recipe_for_meal(db, meal)
+                    update_recipe_from_ai(db, recipe, data)
+                    db.flush()
+                    # E se la modifica ha riportato il piatto identico a uno che c'era
+                    # già (o non ha cambiato niente), si torna a una riga sola.
+                    recipe = settle_recipe(db, meal) or recipe
+                    rescale_pantry(db, user.id, meal)
+                    recipe_updated = True
+            except ExcludedFoodError as exc:
+                logger.warning("Chat: modifica rifiutata (pasto %s): %s", meal_id, exc.detail)
+                visible += f"\n\n({exc.detail} La ricetta resta com'era.)"
+            except ValueError:
+                # Non solo JSON assente: anche un ingrediente il cui nome si svuota
+                # normalizzandolo. In quel caso la copia staccata e metà modifica sono
+                # già nella sessione, e vanno buttate come nel ramo qui sotto.
+                logger.warning("Chat: [RECIPE_UPDATE] non applicabile (pasto %s)", meal_id)
+                db.rollback()
+                db.add(MealChatMessage(planned_meal_id=meal_id, role="user", content=content))
+                visible += "\n\n(Non sono riuscito ad applicare la modifica, riprova.)"
+            except Exception:
+                # Come sopra: la ricetta resta com'era, ma la conversazione si salva.
+                logger.exception("Chat: ricetta non applicabile (pasto %s)", meal_id)
+                db.rollback()
+                db.add(MealChatMessage(planned_meal_id=meal_id, role="user", content=content))
+                visible += "\n\n(Non sono riuscito ad applicare la modifica, riprova.)"
+
+    db.add(MealChatMessage(planned_meal_id=meal_id, role="assistant", content=visible))
+    db.commit()
+
+    if recipe_updated:
+        rebuild_shopping_list(db, user.id)
+        db.commit()
+
+    return {
+        "role": "assistant",
+        "content": visible,
+        "recipe_updated": recipe_updated,
+        "recipe": serialize_recipe(db, recipe, full=True) if recipe_updated else None,
+    }
+
+
+# ── Chat della spesa: cambia un ingrediente in tutte le ricette della settimana ─
+
+
+def _meal_label(day: DayPlan, slot: MealSlot) -> str:
+    """Come si chiama un pasto in chat. La data c'è perché la spesa può coprire più
+    settimane, e "Lunedì / Pranzo" da solo sarebbe ambiguo."""
+    return f"{DAY_NAMES[day.day_of_week]} {day.date.strftime('%d/%m')} / {slot.name}"
+
+
+def _editable_meals(
+    db: Session, user_id: int
+) -> dict[int, tuple[PlannedMeal, DayPlan, MealSlot]]:
+    """I pasti che la chat della spesa può toccare: esattamente quelli che pesano sulla lista.
+
+    Non solo quelli di questa settimana: la lista arriva a domenica otto, e se le
+    zucchine non si trovano vanno tolte da tutte le ricette che quella spesa sta
+    comprando, altrimenti restano in lista. Derivando da `meals_to_buy` la finestra è
+    la stessa per definizione, orizzonte compreso.
+    """
+    out = {}
+    for day, meal in meals_to_buy(db, user_id):
+        slot = db.get(MealSlot, meal.meal_slot_id)
+        out[meal.id] = (meal, day, slot)
+    return out
+
+
+def _week_index(db: Session, meals: dict[int, tuple[PlannedMeal, DayPlan, MealSlot]]) -> str:
+    """Elenco compatto dei pasti per il prompt: id, giorno, target e ingredienti.
+
+    Bastano i nomi degli ingredienti perché il modello capisca quali ricette toccare;
+    le porzioni aiutano a rifare i conti dei macro dopo il cambio.
+    """
+    lines = []
+    for meal_id, (meal, day, slot) in sorted(
+        meals.items(), key=lambda kv: (kv[1][1].date, kv[1][2].order_index)
+    ):
+        recipe = db.get(Recipe, meal.recipe_id)
+        ingredients = ", ".join(
+            f"{i['name']} {i['quantity']:g} {i['unit']}" for i in ingredients_of(db, recipe.id)
+        )
+        lines.append(
+            f"- meal_id {meal_id} · {_meal_label(day, slot)} — "
+            f"target {slot.target_calories} kcal (P {slot.target_protein_g:g} "
+            f"C {slot.target_carbs_g:g} G {slot.target_fat_g:g}) — "
+            f'"{recipe.title}" — ingredienti: {ingredients}'
+        )
+    return "\n".join(lines) if lines else "(nessuna ricetta in programma)"
+
+
+def _apply_recipes_update(
+    db: Session,
+    user: User,
+    meals: dict[int, tuple[PlannedMeal, DayPlan, MealSlot]],
+    data: dict,
+    rejected: list[str] | None = None,
+) -> list[str]:
+    """Applica le ricette aggiornate dalla chat. Ritorna le etichette dei pasti cambiati.
+
+    Una ricetta che contiene un alimento escluso non si applica: il motivo finisce in
+    `rejected` e le altre vanno avanti.
+    """
+    changed = []
+    for entry in data.get("meals") or []:
+        try:
+            meal_id = int(entry.get("meal_id"))
+        except (TypeError, ValueError):
+            continue
+        target = meals.get(meal_id)
+        recipe_data = entry.get("recipe")
+        if not target or not isinstance(recipe_data, dict):
+            # Il modello ha citato un pasto che non è tra quelli modificabili (o l'ha
+            # inventato): meglio ignorarlo che scrivere una ricetta a caso.
+            continue
+        meal, day, slot = target
+        try:
+            check_recipe(db, user.id, recipe_data)
+        except ExcludedFoodError as exc:
+            if rejected is not None:
+                rejected.append(exc.detail)
+            continue
+        # Come nella chat del pasto: se quel piatto è in programma anche altrove, la
+        # modifica vale per questa casella e non per tutte quelle che lo condividono.
+        recipe = fork_recipe_for_meal(db, meal)
+        if recipe is None:
+            continue
+        update_recipe_from_ai(db, recipe, recipe_data)
+        db.flush()
+        # Due caselle che avevano lo stesso piatto ricevono qui la stessa identica
+        # modifica: senza rimetterle insieme, il doppione rientrerebbe da qui.
+        settle_recipe(db, meal)
+        # Il segno «l'ho seguito» resta, come nella chat del pasto: è la dispensa a
+        # seguire la ricetta nuova.
+        rescale_pantry(db, user.id, meal)
+        changed.append(_meal_label(day, slot))
+    return changed
+
+
+def send_shopping_message(
+    db: Session, client, user: User, week: WeekPlan, content: str
+) -> dict:
+    """Chat "da supermercato": cambia un ingrediente in tutte le ricette che lo usano.
+
+    Se la risposta contiene ricette aggiornate (marcatore [RECIPES_UPDATE]) vengono
+    riscritte e la lista della spesa ricalcolata.
+    """
+    week_id = week.id
+    meals = _editable_meals(db, user.id)
+    # La lista che il modello legge è quella vera di adesso, non l'ultima salvata.
+    lst = rebuild_shopping_list(db, user.id)
+
+    lock_note = "- Il piano è modificabile: applica pure i cambi richiesti."
+
+    system = prompts.render(
+        prompts.SHOPPING_CHAT_SYSTEM,
+        context=build_context(db, user.id),
+        shopping_list=shopping_list_summary(db, lst),
+        week_index=_week_index(db, meals),
+        lock_note=lock_note,
+    )
+    messages = _history(
+        db, ShoppingChatMessage, ShoppingChatMessage.week_plan_id == week_id, content
+    )
+
+    db.commit()  # come nella chat del pasto: niente transazione aperta durante la chiamata
+    # Budget più largo della chat sul pasto: qui una risposta può contenere più ricette
+    # complete in una volta.
+    answer = client.chat(system, messages, max_tokens=16000)
+    db.add(ShoppingChatMessage(week_plan_id=week_id, role="user", content=content))
+    if _needs_marker_retry(answer, RECIPES_UPDATE_MARKER):
+        answer = _retry_for_marker(
+            client, system, messages, answer, RECIPES_UPDATE_MARKER, 16000
+        )
+
+    changed: list[str] = []
+    visible = answer
+
+    if RECIPES_UPDATE_MARKER in answer:
+        head, _, tail = answer.partition(RECIPES_UPDATE_MARKER)
+        visible = head.strip() or "Ho aggiornato le ricette."
+        try:
+            data = _extract_json(tail)
+            if isinstance(data, dict):
+                rifiutate: list[str] = []
+                changed = _apply_recipes_update(db, user, meals, data, rifiutate)
+                if rifiutate:
+                    visible += "\n\n(Non applicate: " + "; ".join(rifiutate) + ")"
+        except ValueError:
+            logger.warning("Chat spesa: [RECIPES_UPDATE] non applicabile (settimana %s)", week_id)
+            db.rollback()
+            db.add(ShoppingChatMessage(week_plan_id=week_id, role="user", content=content))
+            changed = []
+            visible += "\n\n(Non sono riuscito ad applicare le modifiche, riprova.)"
+        except Exception:
+            # Un JSON sintatticamente valido ma fatto in un modo imprevisto non deve
+            # costare la risposta: si annulla la modifica a metà, si tiene la
+            # conversazione (la chiamata è già stata pagata) e lo si dice all'utente.
+            logger.exception("Chat spesa: ricette non applicabili (settimana %s)", week_id)
+            db.rollback()
+            db.add(ShoppingChatMessage(week_plan_id=week_id, role="user", content=content))
+            visible += "\n\n(Non sono riuscito ad applicare le modifiche, riprova.)"
+        if not changed and not any(
+            frase in visible.lower() for frase in ("non sono riuscito", "non applicate")
+        ):
+            visible += "\n\n(Nessuna ricetta corrispondeva: non ho cambiato niente.)"
+
+    db.add(ShoppingChatMessage(week_plan_id=week_id, role="assistant", content=visible))
+    db.commit()
+
+    if changed:
+        rebuild_shopping_list(db, user.id)
+        db.commit()
+
+    return {
+        "role": "assistant",
+        "content": visible,
+        "changed_meals": changed,
+        "list_updated": bool(changed),
+        "shopping_list": serialize_shopping_list(db, user.id, lst) if changed else None,
+    }

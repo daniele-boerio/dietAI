@@ -71,6 +71,7 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
 │       ├── services/
 │       │   ├── accounts.py     # chi è l'amministratore, creazione di un account
 │       │   ├── ai_client.py    # due backend (openrouter/anthropic) dietro una interfaccia
+│       │   ├── chat.py         # chat del pasto e della spesa: prompt, marcatore, ricette applicate
 │       │   ├── exclusions.py   # alimenti esclusi controllati sulle ricette del modello
 │       │   ├── ownership.py    # own_meal/own_week: il filtro per utente in un posto solo
 │       │   ├── catalog.py      # catalogo modelli del provider (per il selettore)

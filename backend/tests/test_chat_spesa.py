@@ -12,6 +12,7 @@ from datetime import date, timedelta
 import pytest
 
 from app.routers import chat as chat_router
+from app.services import chat as chat_service
 from app.services import planner
 from tests.test_chat import FakeChat
 from tests.test_flow import FakeModel
@@ -222,7 +223,7 @@ def test_una_modifica_che_esplode_non_costa_la_conversazione(client, week, monke
     def esplode(*args, **kwargs):
         raise RuntimeError("qualcosa di imprevisto nel JSON")
 
-    monkeypatch.setattr(chat_router, "update_recipe_from_ai", esplode)
+    monkeypatch.setattr(chat_service, "update_recipe_from_ai", esplode)
     use_chat(monkeypatch, _update_reply([mid]))
 
     res = client.post(

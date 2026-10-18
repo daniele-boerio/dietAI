@@ -108,6 +108,27 @@ _DA_GRATTUGIA = {
     "pecorino romano",
 }
 
+# L'olio extravergine ha più nomi che bottiglie: «olio evo», «olio e.v.o.», «olio extra
+# vergine», «olio d'oliva extravergine», «un filo d'olio». Ognuno faceva una riga di
+# anagrafica sua, e quella riga non era fra gli ingredienti di base dell'utente: chi ha
+# l'extravergine sempre in casa se lo ritrovava in lista a ogni generazione. Si
+# confronta il **nome intero** (schemi, non parole), come per i formaggi: «olio di
+# semi» e «olio di sesamo» restano altri alimenti. Anche «olio d'oliva» finisce qui:
+# in una ricetta di casa è l'extravergine, e chi lo vuole distinto spegne il termine
+# dalle Impostazioni.
+OLIO_EVO = "olio extravergine d'oliva"
+_OLIO_EVO_NAMES = (
+    r"evo",
+    r"olio\s+evo",
+    r"olio\s+e\.?v\.?o\.?",
+    r"olio\s+evo\s+extra[\s-]?vergine",
+    r"olio\s+extra[\s-]?vergine",
+    r"olio\s+extra[\s-]?vergine\s+d'oliva",
+    r"olio\s+d'oliva\s+extra[\s-]?vergine",
+    r"olio\s+d'oliva",
+    r"filo\s+d'olio",
+)
+
 # Olive: togliere tipi e qualificatori, conservare solo "olive"
 _OLIVE_QUALIFIERS = (
     "taggiasche", "nere", "verdi", "denocciolate", "snocciolate", r"di\s+\w+",
@@ -251,6 +272,7 @@ class _Builtin:
     peperoni: re.Pattern | None
     varianti: tuple[tuple[str, re.Pattern], ...]
     grattugia: frozenset
+    olio_evo: re.Pattern | None
 
 
 @lru_cache(maxsize=32)
@@ -298,6 +320,7 @@ def _builtin(spenti: frozenset) -> _Builtin:
             if (termini := _alt(tieni(gruppo)))
         ),
         grattugia=frozenset(t for t in _DA_GRATTUGIA if t not in spenti),
+        olio_evo=compila(rf"({olio})") if (olio := _alt(tieni(_OLIO_EVO_NAMES))) else None,
     )
 
 
@@ -327,6 +350,8 @@ def _builtin_normalize(name: str, spenti: frozenset = frozenset()) -> str:
     # il rumore qui sopra.
     if n in regole.grattugia or n == "formaggio":
         return "formaggio"
+    if regole.olio_evo and regole.olio_evo.fullmatch(n):
+        return OLIO_EVO
     # Per ultimo il singolare/plurale, che confronta il nome intero: prima devono aver
     # già fatto il loro lavoro gli accorpamenti (altrimenti "sedani" arriverebbe qui
     # come sedano invece che come pasta) e i qualificatori (o arriverebbe "peperone
@@ -526,6 +551,12 @@ def builtin_groups() -> list[dict]:
             "note": "Valgono con o senza «filetto di» davanti.",
         },
         {
+            "target": OLIO_EVO,
+            "terms": [_term(t) for t in _OLIO_EVO_NAMES],
+            "note": "Confrontati per nome intero: «olio di semi» e «olio di sesamo» "
+            "restano altri alimenti. Spegni «olio d'oliva» se lo compri a parte.",
+        },
+        {
             "target": "formaggio",
             "terms": [_term(t) for t in sorted(_DA_GRATTUGIA)],
             "note": "Confrontati per nome intero: sulla pasta ci va quello che c'è in "
@@ -549,6 +580,7 @@ def builtin_terms() -> set[str]:
         | set(_PASTA_NAMES)
         | set(_PESCE_NAMES)
         | set(_DA_GRATTUGIA)
+        | set(_OLIO_EVO_NAMES)
         | set(_GAMBERI_QUALIFIERS)
         | set(_OLIVE_QUALIFIERS)
         | set(_PEPERONI_QUALIFIERS)

@@ -64,6 +64,19 @@ e a vincere sarebbe l'ultimo seminato). È così che si sono scoperte cinque rig
 mista" — che il seed ricreava a ogni avvio mentre l'alimento vero restava senza
 reparto né composizione.
 
+**L'olio extravergine ha un nome solo** (`_OLIO_EVO_NAMES` → `olio extravergine
+d'oliva`). Il modello lo scrive in dieci modi — «olio evo», «olio e.v.o.», «olio extra
+vergine», «olio d'oliva extravergine», «filo d'olio» — e ognuno era una riga di
+anagrafica sua. Gli ingredienti di base si confrontano per riga, quindi chi aveva
+l'extravergine fra quelli di base se lo ritrovava in lista della spesa a ogni
+generazione, sotto un altro nome. Come per i formaggi si confronta il **nome intero**,
+con schemi invece che parole: «olio di semi», «olio di sesamo» e «tonno all'olio
+d'oliva» restano quello che sono, e «olio» da solo resta ambiguo. Anche «olio d'oliva»
+finisce sull'extravergine — in una ricetta di casa è quello — e chi lo compra a parte
+spegne il termine dalle Impostazioni. Dopo il deploy le righe vecchie si fondono con
+`python -m app.merge_ingredients`. Guardie in `tests/test_normalizzazione.py` e
+`tests/test_flow.py`.
+
 **Le stesse regole si allargano dalle Impostazioni**, senza deploy (Impostazioni →
 Nomi e accorpamenti, solo amministratore: l'anagrafica è una sola per tutti).
 `NormalizationRule` tiene le modifiche — `kind='alias'` è un termine che finisce su un

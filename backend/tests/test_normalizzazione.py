@@ -150,6 +150,18 @@ def test_i_due_apostrofi_finiscono_sulla_stessa_riga(client, db):
         # Il colore del peperone è come il calibro: stesso banco, stesso alimento, stessi
         # macro. Separati sono due righe in lista e una dispensa che non copre nessuna
         # delle due.
+        # L'olio extravergine ha più nomi che bottiglie, e ogni nome faceva una riga
+        # sua: fra gli ingredienti di base c'era solo uno di questi, e gli altri finivano
+        # in lista a ogni generazione.
+        ("olio EVO", "olio extravergine d'oliva"),
+        ("olio e.v.o.", "olio extravergine d'oliva"),
+        ("olio extra vergine di oliva", "olio extravergine d'oliva"),
+        ("olio di oliva extra vergine", "olio extravergine d'oliva"),
+        ("olio d'oliva", "olio extravergine d'oliva"),
+        ("filo d'olio", "olio extravergine d'oliva"),
+        ("olio di semi", "olio di semi"),
+        ("olio di sesamo", "olio di sesamo"),
+        ("tonno all'olio d'oliva", "tonno all'olio d'oliva"),
         ("peperoni rossi", "peperoni"),
         ("peperone rosso", "peperoni"),
         ("peperoni rossi e gialli", "peperoni"),

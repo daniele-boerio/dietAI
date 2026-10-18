@@ -224,6 +224,18 @@ def test_gli_ingredienti_di_base_non_entrano_in_lista(client, diet, fake_ai):
     assert "zucchine" in names
 
 
+def test_l_olio_di_base_non_entra_in_lista_comunque_lo_scriva_la_ricetta(client, db):
+    """«Olio EVO» in ricetta e «olio extravergine d'oliva» fra quelli di base erano due
+    righe di anagrafica: il filtro della lista guarda la riga, e l'olio si comprava a
+    ogni generazione."""
+    from app.services.ingredients import get_or_create_ingredient
+
+    client.post("/api/config/base-ingredients", json={"ingredient_name": "olio extravergine d'oliva"})
+    base = {b["ingredient_id"] for b in client.get("/api/config/base-ingredients").json()}
+    for scritto in ("olio EVO", "olio extra vergine di oliva", "olio d'oliva"):
+        assert get_or_create_ingredient(db, scritto).id in base
+
+
 def test_la_dispensa_scala_le_quantita(client, diet, fake_ai):
     # 1 kg di zucchine in casa: la lista deve chiederne 750 g invece di 1750.
     client.post(

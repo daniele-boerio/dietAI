@@ -12,7 +12,9 @@ from sqlalchemy.orm import Session
 from ..models import DayPlan, MealSlot, PlannedMeal, Recipe, User, WeekPlan
 from . import macros, prompts
 from .exclusions import recipe_violations
+from .ownership import own_meal
 from .planner import (
+    DAY_NAMES,
     clear_meal_cell,
     ensure_not_skipped,
     forget_queued_meal,
@@ -21,6 +23,7 @@ from .planner import (
     skip_meal,
     stop_recurring_forward,
     unskip_meal,
+    week_meals,
 )
 from .recipes import create_recipe, declared_details
 from .shopping import consume_from_pantry, rebuild_shopping_list, restore_to_pantry
@@ -277,4 +280,110 @@ def set_followed(
     # pulsante che non funziona.
     data["pantry_used"] = pantry_used
     data["pantry_skipped"] = pantry_skipped
+    return data
+
+
+# ── Scambio fra due pasti della settimana ──────────────────────────────────────
+
+
+def swap_block(day: DayPlan, meal: PlannedMeal, slot: MealSlot) -> str | None:
+    """Perché questa casella non può entrare in uno scambio, o None se può.
+
+    Una regola sola per la lista dei candidati e per lo scambio vero: se la pagina
+    decidesse da sé, prima o poi proporrebbe uno scambio che il server rifiuta.
+    """
+    if day.is_skipped or meal.is_skipped:
+        return "saltato"
+    if not slot.auto_generate:
+        # Una casella «lo faccio io» non ha ricetta e non va in spesa: un piatto
+        # spostato lì non verrebbe comprato.
+        return "lo fai tu"
+    if meal.is_recurring:
+        # Il fisso è ancorato al suo giorno e si ricopia da lì ogni settimana.
+        return "fisso"
+    if meal.is_followed is not None:
+        return "già segnato"
+    return None
+
+
+def _label(day: DayPlan, slot: MealSlot) -> str:
+    return f"{slot.name} di {DAY_NAMES[day.day_of_week].lower()}"
+
+
+def swap_candidates(db: Session, meal: PlannedMeal, week: WeekPlan) -> list[dict]:
+    """Gli altri pasti della settimana, ognuno col motivo per cui non si può, se c'è."""
+    out = []
+    for day, other, slot in week_meals(db, week):
+        if other.id == meal.id:
+            continue
+        recipe = db.get(Recipe, other.recipe_id) if other.recipe_id else None
+        out.append(
+            {
+                "meal_id": other.id,
+                "date": day.date.isoformat(),
+                "day_name": DAY_NAMES[day.day_of_week],
+                "slot_name": slot.name,
+                "target_calories": slot.target_calories,
+                "recipe": (
+                    {"id": recipe.id, "title": recipe.title, "calories": recipe.calories}
+                    if recipe
+                    else None
+                ),
+                "blocked": swap_block(day, other, slot),
+            }
+        )
+    return out
+
+
+def swap(
+    db: Session, user_id: int, meal: PlannedMeal, day: DayPlan, week: WeekPlan, other_id: int
+) -> dict:
+    """Scambia le ricette di due pasti della stessa settimana.
+
+    I target dei due pasti non si toccano, quindi i totali dei due giorni cambiano: è
+    voluto, perché quello che conta in nutrizione è il fabbisogno della settimana, e
+    quello resta identico. Una casella vuota vale: il piatto si sposta e basta.
+
+    Il rinvio di un pasto saltato (`skipped_to_meal_id`) segue il piatto: se una
+    delle due caselle ospitava un piatto rimandato, «l'ho seguito» sul pasto saltato
+    deve svuotare la casella dove il piatto è finito adesso, non quella di prima.
+    """
+    if other_id == meal.id:
+        raise HTTPException(400, "Scegli un altro pasto.")
+    other, other_day, other_week = own_meal(db, user_id, other_id)
+    if other_week.id != week.id:
+        raise HTTPException(400, "Si scambia solo con un pasto della stessa settimana.")
+
+    slot = db.get(MealSlot, meal.meal_slot_id)
+    other_slot = db.get(MealSlot, other.meal_slot_id)
+    for d, m, s in ((day, meal, slot), (other_day, other, other_slot)):
+        motivo = swap_block(d, m, s)
+        if motivo:
+            raise HTTPException(409, f"{_label(d, s).capitalize()}: {motivo}, non si scambia.")
+    if not meal.recipe_id and not other.recipe_id:
+        raise HTTPException(400, "Tutte e due le caselle sono vuote: non c'è niente da scambiare.")
+
+    meal.recipe_id, other.recipe_id = other.recipe_id, meal.recipe_id
+    meal.source, other.source = other.source, meal.source
+    forget_tracking(meal)
+    forget_tracking(other)
+
+    verso_qui = db.query(PlannedMeal).filter(PlannedMeal.skipped_to_meal_id == meal.id).all()
+    verso_la = db.query(PlannedMeal).filter(PlannedMeal.skipped_to_meal_id == other.id).all()
+    for saltato in verso_qui:
+        saltato.skipped_to_meal_id = other.id
+    for saltato in verso_la:
+        saltato.skipped_to_meal_id = meal.id
+    db.commit()
+
+    rebuild_shopping_list(db, user_id)
+    db.commit()
+
+    data = _full(db, day, meal)
+    data["swapped_with"] = {
+        "meal_id": other.id,
+        "day_name": DAY_NAMES[other_day.day_of_week],
+        "slot_name": other_slot.name,
+        "date": other_day.date.isoformat(),
+    }
     return data

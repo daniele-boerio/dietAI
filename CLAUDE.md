@@ -203,6 +203,9 @@ paragrafo nel documento, scrivendo anche cosa non andava con la versione di prim
 - Per pasto: `servings` (per quante persone: moltiplica spesa e dispensa, mai ricetta e
   macro) e `batch_days` (stesso piatto per N giorni consecutivi: Python fa i gruppi, il
   modello genera la prima casella, le altre ricevono la stessa ricetta).
+- Due pasti della stessa settimana si scambiano la ricetta (`meals.swap`, anche pranzo ↔
+  cena): i target restano ai pasti, conta il totale settimanale. Fuori fissi, «lo faccio
+  io», saltati e già segnati (`swap_block`); il rinvio di un saltato segue il piatto.
 - Lo stesso piatto è una ricetta sola (`find_twin`); chi modifica da un pasto stacca
   prima una copia (`fork_recipe_for_meal`) e poi si riaccorpa (`settle_recipe`).
 

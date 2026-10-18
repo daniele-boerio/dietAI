@@ -271,6 +271,17 @@ export const api = {
 
   clearMeal: (mealId) => request(`/planning/meals/${mealId}/recipe`, { method: 'DELETE' }),
 
+  // Gli altri pasti della settimana, ognuno con `blocked` (il motivo) se non si può
+  // scambiare: la regola la decide il server, la pagina la mostra soltanto.
+  getSwapCandidates: (mealId) => request(`/planning/meals/${mealId}/swap-candidates`),
+
+  // Scambia la ricetta con un altro pasto della settimana; risponde col pasto intero.
+  swapMeal: (mealId, otherMealId) =>
+    request(`/planning/meals/${mealId}/swap`, {
+      method: 'POST',
+      body: JSON.stringify({ other_meal_id: otherMealId }),
+    }),
+
   setRecurring: (mealId, is_recurring, recurring_rule = null) =>
     request(`/planning/meals/${mealId}/recurring`, {
       method: 'PUT',

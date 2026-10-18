@@ -301,6 +301,12 @@ class RecurringRequest(BaseModel):
     recurring_rule: RecurringRule | None = None
 
 
+class SwapMealRequest(BaseModel):
+    """Il pasto con cui scambiare la ricetta: della stessa settimana."""
+
+    other_meal_id: int
+
+
 class FollowedRequest(BaseModel):
     is_followed: bool
     deviation_notes: str | None = Field(default=None, max_length=500)

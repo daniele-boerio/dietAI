@@ -4816,6 +4816,31 @@ textarea:focus-visible {
   color: var(--text-muted);
 }
 
+/* Lo scambio fra pasti: un elenco per giorno, che scorre dentro la finestra. Chi non
+   si può scegliere resta visibile, spento, col motivo: sparire farebbe sembrare la
+   settimana più corta. */
+.swap-list {
+  max-height: min(60dvh, 460px);
+  overflow-y: auto;
+}
+
+.swap-day {
+  margin-top: 14px;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.swap-list > div:first-child .swap-day {
+  margin-top: 0;
+}
+
+.list-row.is-blocked {
+  opacity: 0.55;
+}
+
 /* Riga di un account: quattro comandi che sul telefono non stanno in fila con
    l'email. Vanno a capo tutti insieme e restano allineati a destra, invece di
    spezzarsi a metà — "Sospendi" da una parte e il cestino dall'altra. */

@@ -46,6 +46,7 @@ CORPI = {
     ("PUT", "/api/planning/meals/{meal_id}/recurring"): {"is_recurring": False},
     ("PUT", "/api/planning/meals/{meal_id}/eaten"): {"nothing": True},
     ("PUT", "/api/planning/meals/{meal_id}/followed"): {"is_followed": True},
+    ("POST", "/api/planning/meals/{meal_id}/swap"): {"other_meal_id": 1},
     ("PUT", "/api/planning/days/{day_id}/skip"): {"is_skipped": True},
     ("PUT", "/api/recipes/{recipe_id}/rate"): {"rating": 1},
     ("PUT", "/api/recipes/{recipe_id}/favorite"): {"is_favorite": True},

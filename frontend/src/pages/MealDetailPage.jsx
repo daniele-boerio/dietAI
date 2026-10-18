@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import {
   ArrowLeft,
+  ArrowLeftRight,
   BookOpen,
   CalendarOff,
   Check,
@@ -42,6 +43,7 @@ export default function MealDetailPage() {
   const [confirmClear, setConfirmClear] = useState(false);
   const [picker, setPicker] = useState(false);
   const [generator, setGenerator] = useState(false);
+  const [swapping, setSwapping] = useState(false);
 
   // Lo spinner solo quando si è senza niente a schermo: `load()` si richiama anche
   // dopo una sostituzione, col dialogo del risultato aperto sopra la pagina, e
@@ -396,6 +398,25 @@ export default function MealDetailPage() {
                       {meal.is_recurring ? "Fisso" : "Rendi fisso"}
                     </button>
 
+                    {/* Spostare il piatto in un altro giorno (o a un altro pasto) è la
+                        correzione più comune del piano: «giovedì sera esco, lo faccio
+                        martedì». Fissi e pasti già segnati non si spostano, e il
+                        pulsante lo dice prima invece di aprire una lista inutile. */}
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => setSwapping(true)}
+                      disabled={frozen || meal.is_recurring || meal.is_followed !== null}
+                      title={
+                        meal.is_recurring
+                          ? "Un pasto fisso resta nel suo giorno"
+                          : meal.is_followed !== null
+                            ? "È già segnato: non si sposta"
+                            : "Scambialo con un altro pasto della settimana"
+                      }
+                    >
+                      <ArrowLeftRight size={16} /> Scambia
+                    </button>
+
                     <button
                       className="btn btn-secondary"
                       onClick={() => setGenerator(true)}
@@ -464,6 +485,15 @@ export default function MealDetailPage() {
                     <BookOpen size={16} />
                     Scegli dal ricettario
                   </button>
+                  {!frozen && !meal.self_managed && (
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => setSwapping(true)}
+                    >
+                      <ArrowLeftRight size={16} />
+                      Sposta qui un piatto della settimana
+                    </button>
+                  )}
                 </div>
               }
             />
@@ -571,6 +601,21 @@ export default function MealDetailPage() {
         />
       )}
 
+      {swapping && (
+        <SwapDialog
+          meal={meal}
+          onCancel={() => setSwapping(false)}
+          onSwapped={(updated) => {
+            setMeal(updated);
+            setSwapping(false);
+            const altro = updated.swapped_with;
+            addToast(
+              `Scambiato con ${altro.slot_name.toLowerCase()} di ${altro.day_name.toLowerCase()} ✓`,
+            );
+          }}
+        />
+      )}
+
       {picker && (
         <RecipePicker
           onCancel={() => setPicker(false)}
@@ -657,6 +702,118 @@ function GenerateDialog({ meal, busy, onGenerate, onCancel }) {
             <Sparkles size={16} />
           )}
           {richiesta ? "Genera così" : "Scegli tu il piatto"}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * Lo scambio con un altro pasto della settimana.
+ *
+ * L'elenco è quello del server, col motivo accanto a chi non si può scegliere (fisso,
+ * già segnato, saltato, «lo fai tu»): se la pagina decidesse da sé, prima o poi
+ * proporrebbe uno scambio che il server rifiuta. I target restano ai pasti, quindi i
+ * totali dei due giorni cambiano — quello della settimana no, ed è quello che conta.
+ */
+function SwapDialog({ meal, onSwapped, onCancel }) {
+  const { addToast } = useApp();
+  const [candidati, setCandidati] = useState(null);
+  const [errore, setErrore] = useState(null);
+  const [inCorso, setInCorso] = useState(null);
+
+  useEffect(() => {
+    api
+      .getSwapCandidates(meal.id)
+      .then(setCandidati)
+      .catch((e) => setErrore(e.message));
+  }, [meal.id]);
+
+  const scambia = async (otherId) => {
+    setInCorso(otherId);
+    try {
+      onSwapped(await api.swapMeal(meal.id, otherId));
+    } catch (e) {
+      addToast(e.message, "error");
+      setInCorso(null);
+    }
+  };
+
+  // Un gruppo per giorno, nell'ordine della settimana: è così che si pensa a uno
+  // spostamento («lo faccio mercoledì»), non per nome del piatto.
+  const giorni = [];
+  for (const c of candidati || []) {
+    const ultimo = giorni[giorni.length - 1];
+    if (ultimo && ultimo.date === c.date) ultimo.items.push(c);
+    else giorni.push({ date: c.date, day_name: c.day_name, items: [c] });
+  }
+
+  return (
+    <Modal
+      title={meal.recipe ? "Scambia con un altro pasto" : "Sposta qui un piatto"}
+      onClose={onCancel}
+      busy={inCorso !== null}
+      className="modal-lg"
+    >
+      <p className="modal-text">
+        {meal.recipe ? (
+          <>
+            <strong>{meal.recipe.title}</strong> va al pasto che scegli, e quel piatto
+            viene qui.
+          </>
+        ) : (
+          "Il piatto che scegli si sposta in questa casella, e la sua resta vuota."
+        )}{" "}
+        I totali dei due giorni cambiano; quello della settimana resta lo stesso.
+      </p>
+
+      {errore ? (
+        <p className="field-hint">{errore}</p>
+      ) : !candidati ? (
+        <div className="spinner" />
+      ) : (
+        <div className="swap-list">
+          {giorni.map((g) => (
+            <div key={g.date}>
+              <div className="swap-day">
+                {g.day_name} {formatDate(g.date, { day: "numeric", month: "short" })}
+              </div>
+              {g.items.map((c) => (
+                <div key={c.meal_id} className={`list-row ${c.blocked ? "is-blocked" : ""}`}>
+                  <div className="list-row-main">
+                    <strong>{c.slot_name}</strong>
+                    <span>
+                      {c.recipe
+                        ? `${c.recipe.title} · ${c.recipe.calories} kcal`
+                        : "vuoto"}
+                      {c.blocked ? ` · ${c.blocked}` : ""}
+                    </span>
+                  </div>
+                  {!c.blocked && (c.recipe || meal.recipe) && (
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => scambia(c.meal_id)}
+                      disabled={inCorso !== null}
+                      aria-label={`Scambia con ${c.slot_name} di ${c.day_name}`}
+                    >
+                      {inCorso === c.meal_id ? (
+                        <span className="spinner-inline" />
+                      ) : (
+                        <ArrowLeftRight size={14} />
+                      )}
+                      {meal.recipe ? "Scambia" : "Sposta qui"}
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="modal-actions" style={{ marginTop: 16 }}>
+        <button className="btn btn-secondary" onClick={onCancel} disabled={inCorso !== null}>
+          Chiudi
         </button>
       </div>
     </Modal>

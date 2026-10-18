@@ -18,6 +18,7 @@ from ..schemas import (
     RecurringRequest,
     RegenerateMealRequest,
     SkipDayRequest,
+    SwapMealRequest,
 )
 from ..services import meals, planner
 from ..services.ai_client import get_client
@@ -269,6 +270,29 @@ def set_recurring(
     return meals.set_recurring(
         db, user_id, meal, day, body.is_recurring, body.recurring_rule
     )
+
+
+@router.get("/meals/{meal_id}/swap-candidates")
+def swap_candidates(
+    meal_id: int,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    """Gli altri pasti della settimana, ognuno con `blocked` se non si può scambiare."""
+    meal, _day, week = _get_meal(db, user_id, meal_id)
+    return meals.swap_candidates(db, meal, week)
+
+
+@router.post("/meals/{meal_id}/swap")
+def swap_meal(
+    meal_id: int,
+    body: SwapMealRequest,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    """Scambia la ricetta con un altro pasto della settimana (`meals.swap`)."""
+    meal, day, week = _get_meal(db, user_id, meal_id)
+    return meals.swap(db, user_id, meal, day, week, body.other_meal_id)
 
 
 @router.put("/meals/{meal_id}/eaten")

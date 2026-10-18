@@ -119,6 +119,21 @@ può essere SQL NULL o il JSON `null`, e i vincoli accettano tutti e due. Conseg
 pratica: in «ho mangiato altro» la dispensa si rimette **prima** del salto, perché
 `skip_meal` scrive sul database.
 
+**Due pasti della settimana si scambiano la ricetta.** «Giovedì sera esco, lo faccio
+martedì»: dal dettaglio del pasto, «Scambia» apre gli altri pasti della settimana e uno
+tocco li scambia (`POST /meals/{id}/swap`, `services/meals.swap`). Vale fra pasti
+diversi, anche pranzo ↔ cena, per scelta: i target restano ai pasti, quindi i totali
+dei due giorni cambiano, ma in nutrizione quello che conta è il fabbisogno della
+settimana, e quello resta identico. Una casella vuota vale — il piatto si sposta e
+basta. Non si scambiano i fissi (ancorati al loro giorno), le caselle «lo faccio io»
+(un piatto lì non verrebbe comprato), i saltati e i pasti già segnati: lo decide
+`swap_block`, la stessa funzione che riempie l'elenco dei candidati
+(`/swap-candidates`, col motivo accanto), così la pagina non propone mai uno scambio
+che il server rifiuta. Se una delle due caselle ospitava il rinvio di un pasto
+saltato, il puntatore `skipped_to_meal_id` segue il piatto: «l'ho seguito» sul pasto
+saltato svuota la casella dove il piatto è finito, non quella di prima. Guardie in
+`tests/test_scambio.py`.
+
 **Lo stesso piatto è una ricetta sola.** Il ricettario è l'archivio dei piatti, non il
 diario delle caselle: la colazione che si ripete sette giorni è un piatto. Prima ogni
 casella si portava dietro la sua riga — `create_recipe` una per pasto generato,

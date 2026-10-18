@@ -8,7 +8,7 @@ ricette.
 import pytest
 
 from app.services import planner
-from app.utils.units import format_quantity, price_for, to_base
+from app.utils.units import format_quantity, to_base
 
 DAYS = 7
 
@@ -209,7 +209,7 @@ def test_la_lista_della_spesa_aggrega_e_sottrae(client, diet, fake_ai):
     # L'olio è tra gli ingredienti di base? No, in questo test non lo è: deve esserci.
     # Il nome arriva elisa dalla normalizzazione, comunque lo scriva la ricetta.
     assert "olio extravergine d'oliva" in items
-    assert lst["estimated_cost"] > 0
+    assert "estimated_cost" not in lst
 
 
 def test_gli_ingredienti_di_base_non_entrano_in_lista(client, diet, fake_ai):
@@ -474,7 +474,3 @@ def test_formattazione_quantita():
     assert format_quantity(2.0, "unità") == "2 unità"
 
 
-def test_stima_prezzo():
-    assert price_for(500, "g", 9.5, "kg") == pytest.approx(4.75)
-    # Prezzo al kg per un ingrediente contato a pezzi: nessuna stima inventata.
-    assert price_for(2, "unità", 9.5, "kg") is None

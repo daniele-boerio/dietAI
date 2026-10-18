@@ -1,6 +1,6 @@
 # Lista della spesa e dispensa
 
-La lista come funzione del piano, i prezzi, i reparti, la dispensa che si riempie e si svuota. Il perché di ogni scelta: le regole in breve stanno in
+La lista come funzione del piano, i reparti, la dispensa che si riempie e si svuota. Il perché di ogni scelta: le regole in breve stanno in
 `CLAUDE.md`, qui c'è la storia che le giustifica.
 
 **La lista della spesa è una funzione, non un documento.** Dice sempre la stessa cosa
@@ -35,46 +35,24 @@ qualche parte) e non si chiude mai: `completed_at` dice quand'è stato l'ultimo 
 Chi tocca il piano chiama `rebuild_shopping_list(db, user_id)` — la dashboard legge la
 lista senza ricostruirla.
 
-**I prezzi veri battono il catalogo.** `utils/pricing.py` porta medie nazionali: nel
-negozio dove l'utente fa la spesa valgono poco, ed è per questo che un totale stimato
-non dice quasi niente. `PUT /api/shopping/items/{id}/price` chiede la cifra che si ha
-sotto gli occhi — quanto è costato *quel* pacco — e `unit_price_from` (l'inverso di
-`price_for`) ne ricava il prezzo al kg/l/unità, che finisce su `Ingredient` e da lì in
-poi vale per tutte le liste.
-
-**Ma la cifra scritta a mano è un fatto, e non si ricalcola.** Sta sulla riga
-(`ShoppingListItem.paid_price`, migrazione `0019`) e il costo della riga è quello,
-punto; il prezzo unitario che se ne ricava serve a stimare le righe che un prezzo
-scritto non ce l'hanno. Prima si teneva solo il prezzo al chilo e la riga veniva
-**ricalcolata** ogni volta da quello per la quantità del momento: bastava correggere
-quanto se n'era preso davvero (il pacco da 1 kg invece dei 700 g che servivano), o
-rigenerare una ricetta che di quell'ingrediente ne chiede di più, perché il numero
-appena battuto ne diventasse un altro — e al supermercato sembrava che l'app cambiasse
-i prezzi da sé. Tre corollari: `rebuild_shopping_list` si porta dietro `paid_price`
-come già faceva con la spunta e la quantità presa, cambiare la quantità presa non
-tocca la cifra ma **rifà** il prezzo unitario (lo stesso scontrino per 400 g invece di
-140 vuol dire un altro prezzo al chilo, ed è quello che l'app impara), e togliere la
-spunta la cancella — «non l'ho preso» vuol dire che non l'ho nemmeno pagato — mentre
-il prezzo al chilo resta, perché quello lo si è visto davvero. Guardie in
-`tests/test_dispensa.py`. Come per il reparto serve un flag (`price_by_user`) che
-protegga il numero dal seed, che gira a ogni avvio del container. Il prezzo si segna
-anche a spesa fatta — lo scontrino si guarda a casa — e la lista espone `priced_items`
-perché il totale possa dire su cosa si regge invece di spacciarsi per un preventivo.
+**I prezzi non ci sono più** (migrazione `0032`). C'erano una stima del costo dai prezzi
+medi del catalogo, il prezzo pagato scritto a mano su ogni riga (che insegnava il prezzo
+al chilo all'anagrafica), la lettura della foto dello scontrino, un livello di budget e
+un tetto settimanale in euro che arrivavano al modello e si confrontavano col totale.
+Le medie nazionali al negozio vero non dicevano quasi niente, il prezzo scritto «a
+spesa fatta» non funzionava (dopo «Ho fatto la spesa» la riga usciva dalla lista e
+segnarne il prezzo dava 404: nei test passava solo perché SQLite riusava gli id), e
+l'utente non li usava: ha deciso di toglierli tutti. Il riquadro accanto alla lista
+ora dice quanti articoli restano da prendere, e la lista è fatta solo di nomi,
+quantità e reparti. Se un giorno i prezzi tornassero, il primo problema da risolvere è
+dove restano visibili le righe già comprate.
 
 **La lista si aggiorna per differenza, e gli id restano.** `rebuild_shopping_list`
 cancellava tutte le righe e le riscriveva a ogni lettura: gli id cambiavano a ogni GET,
 e una spunta data dal telefono mentre il computer rileggeva la lista finiva in un 404.
-Ora la riga che serve ancora si aggiorna (quantità e stima), quella nuova si aggiunge,
-quella che non serve più si toglie; spunta, quantità presa e prezzo stanno sulla riga
-e non vanno più ricopiati.
-
-⚠️ Aperto: **il prezzo «a spesa fatta» oggi non funziona.** Dopo «Ho fatto la spesa» le
-righe comprate escono dalla lista (la roba è in dispensa) e il loro id non esiste più:
-su Postgres segnarne il prezzo è un 404. Nei test passava solo perché SQLite riusava
-gli id dopo la cancellazione totale, e il prezzo finiva su un'altra riga. Per
-sistemarlo va deciso dove restano visibili le righe già comprate (e con quale segno,
-senza rimetterle in dispensa a ogni conferma): il test che lo descrive è segnato
-`xfail` in `tests/test_dispensa.py` finché non c'è.
+Ora la riga che serve ancora si aggiorna (la quantità), quella nuova si aggiunge,
+quella che non serve più si toglie; spunta e quantità presa stanno sulla riga e non
+vanno più ricopiate.
 
 **Il reparto di un ingrediente lo decide chi fa la spesa.** `Ingredient.category`
 serve a girare il supermercato una volta sola, e il catalogo non può sapere che gli
@@ -85,12 +63,12 @@ ogni avvio del container** e riallinea l'anagrafica al catalogo — se la ripren
 al primo deploy. Il raggruppamento avviene alla lettura (`serialize_shopping_list`),
 quindi non serve ricostruire niente.
 
-Reparto e prezzo imparato stanno sull'anagrafica, che è **una per tutti gli account**:
+Il reparto sta sull'anagrafica, che è **una per tutti gli account**:
 quello che sposta un ospite lo vede anche l'amministratore. È voluto — gli account
 sono della stessa casa e girano gli stessi negozi, e un reparto per persona vorrebbe
 dire una tabella in più e ogni lettura della lista da riscrivere — e la review di
 sicurezza lo ha segnalato come canale fra account: per questo lo dice un test
-(`test_reparto_e_prezzo_sono_della_casa` in `tests/test_due_account.py`). Se un giorno
+(`test_il_reparto_e_della_casa` in `tests/test_due_account.py`). Se un giorno
 gli account non fossero più della stessa casa, è il primo posto da separare.
 
 **Un articolo che è anche in dispensa dice perché è in lista lo stesso.** La quantità
@@ -168,43 +146,3 @@ piano con un altro nome.
 La spesa fatta non tocca la scadenza di una scorta che c'era già: la data si riferiva
 al pacco vecchio, e indovinare quella del nuovo sarebbe inventare. La si corregge dalla
 dispensa. Guardie in `tests/test_scadenze.py`.
-
-**Il budget è anche un numero.** Il livello (economico, medio, premium) diceva al
-modello che tipo di ingredienti scegliere, ma non era una cifra contro cui misurare la
-spesa; ora che i prezzi sono quelli dello scaffale, un tetto in euro si può confrontare.
-`UserPreferences.weekly_budget_eur` fa due cose. Nel contesto (`_budget_line`) arriva
-come «TETTO di spesa: 60 € a settimana per tutti i pasti di una persona, ai prezzi di
-un supermercato italiano», con l'ordine degli ingredienti economici da cui partire —
-senza il dove, un modello ragiona volentieri in dollari o su prezzi da ristorante. Nel
-conto della spesa (`_budget_for`) il tetto si **scala sui giorni che la lista copre**:
-la lista non compra una settimana, compra dal primo all'ultimo giorno con una ricetta
-da cucinare, fino a due settimane, e contro il tetto di una sola chiunque avesse
-generato anche la prossima risulterebbe fuori budget.
-
-Il campo si salva insieme alle altre preferenze ma solo se c'è nel corpo
-(`model_fields_set`): un client che salva le preferenze senza conoscerlo non lo deve
-cancellare. Guardie in `tests/test_budget.py`.
-
-**Lo scontrino si fotografa.** Segnare i prezzi a mano è una riga alla volta, col
-carrello in mano; lo scontrino li ha tutti, e a casa si fotografa in un secondo. `POST
-/api/shopping/current/receipt` manda la foto al modello del ruolo `diet` — quello che
-legge i documenti, ed è per questo che l'etichetta è diventata «Lettura di documenti»
-— insieme all'elenco degli articoli in lista **col loro id**: l'abbinamento lo fa il
-modello, perché gli scontrini abbreviano e «PETTO POLLO FILE'» è un lavoro di
-significato, non di lettere. Si applicano solo gli id che sono davvero in lista.
-
-Da lì vale la logica del prezzo scritto a mano: la cifra va su `paid_price` (due righe
-dello stesso articolo si sommano), il prezzo al chilo si impara
-(`_impara_prezzo_unitario`), la riga si spunta. La quantità presa si segna solo se
-l'unità dello scontrino parla la stessa lingua della riga (grammi con grammi, pezzi
-con pezzi): 1 L di latte contro una lista in grammi non si converte, e una quantità
-inventata insegnerebbe un prezzo al chilo sbagliato. Le righe rimaste fuori tornano
-indietro e la pagina le mostra: un detersivo è normale, una riga di pollo non abbinata
-no.
-
-La foto si rimpicciolisce nel browser (1600 px di lato, JPEG) prima di partire: un
-telefono ne fa da 4 MB, e ogni pixel in più si paga in token. Le due API vogliono
-l'immagine in due forme diverse — blocco `image` per Anthropic, `image_url` con un data
-URL per OpenRouter — e `read_image_json` le costruisce entrambe. Sul telefono il
-pulsante sta in testata, perché il conto è una barra in fondo dove non ci sta. Guardie
-in `tests/test_scontrino.py`.

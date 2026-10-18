@@ -15,7 +15,7 @@ from app.services.ingredients import (
     merge_duplicates,
     normalize_name,
 )
-from app.utils.pricing import DEFAULT_BASE_INGREDIENTS, INGREDIENT_CATALOG
+from app.utils.ingredient_catalog import DEFAULT_BASE_INGREDIENTS, INGREDIENT_CATALOG
 
 
 @pytest.mark.parametrize(
@@ -147,7 +147,7 @@ def test_i_due_apostrofi_finiscono_sulla_stessa_riga(client, db):
 @pytest.mark.parametrize(
     "scritto,atteso",
     [
-        # Il colore del peperone è come il calibro: stesso banco, stesso prezzo, stessi
+        # Il colore del peperone è come il calibro: stesso banco, stesso alimento, stessi
         # macro. Separati sono due righe in lista e una dispensa che non copre nessuna
         # delle due.
         ("peperoni rossi", "peperoni"),
@@ -155,7 +155,7 @@ def test_i_due_apostrofi_finiscono_sulla_stessa_riga(client, db):
         ("peperoni rossi e gialli", "peperoni"),
         ("peperoni gialli a listarelle", "peperoni"),
         # Singolare e plurale sono lo stesso alimento: si sceglie la forma del
-        # catalogo, che è quella a cui sono attaccati reparto e prezzo.
+        # catalogo, che è quella a cui sono attaccati reparto e composizione.
         ("cetriolo", "cetrioli"),
         ("zucchina", "zucchine"),
         ("pomodoro", "pomodori"),
@@ -210,13 +210,12 @@ def test_la_mappa_del_singolare_non_scavalca_il_catalogo():
 def test_i_nomi_del_catalogo_sopravvivono_alla_normalizzazione(name):
     """Il seed semina l'anagrafica con questi nomi così come sono scritti, a ogni avvio
     del container. Un nome che `normalize_name` riscrive è una riga che nessuna ricetta
-    raggiungerà mai — e l'alimento vero resta senza prezzo, che è il modo in cui il
-    totale della spesa perde le voci più care."""
+    raggiungerà mai — e l'alimento vero resta senza reparto né composizione."""
     assert normalize_name(name) == name
 
 
 def test_due_voci_di_catalogo_non_finiscono_sulla_stessa_riga():
-    """Sarebbero due prezzi per lo stesso nome, e a vincere sarebbe l'ultimo seminato."""
+    """Sarebbero due reparti per lo stesso nome, e a vincere sarebbe l'ultimo seminato."""
     righe: dict[str, list[str]] = {}
     for name in INGREDIENT_CATALOG:
         righe.setdefault(normalize_name(name), []).append(name)

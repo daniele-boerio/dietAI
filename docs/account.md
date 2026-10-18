@@ -42,8 +42,8 @@ sparirebbe, e si rifiuta di lasciare l'app senza amministratori o di cancellare
 l'utente di `SEED_USER_EMAIL`, che il seed ricreerebbe al riavvio successivo.
 
 Quello che **non** è per-utente è l'anagrafica ingredienti (`Ingredient`): è un
-dizionario di nomi, reparti e prezzi al kg, non un dato personale. Se un utente
-corregge il prezzo del pane, il pane costa quello per tutti.
+dizionario di nomi e reparti, non un dato personale. Se un utente sposta il pane di
+reparto, il pane è spostato per tutti.
 
 **Niente email, in tutta l'app.** Nessun SMTP, nessuna registrazione, nessun recupero
 password via link: l'unico endpoint pubblico è `/auth/login`. L'amministratore nasce

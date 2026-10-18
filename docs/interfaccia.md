@@ -276,8 +276,9 @@ sul telefono sta sotto la ricetta invece che di fianco.
   Non affidarsi al posizionamento automatico: il cursore di CSS Grid non torna
   indietro fra colonne e manderebbe l'intestazione del secondo giorno in fondo.
 - **Testo UI in italiano.** Codice, commenti e nomi in inglese solo dove è già così.
-- **Il conto della spesa sul telefono è una barra in fondo**, sopra le schede: il
-  totale cambia a ogni spunta ed è quello che si guarda mentre si spunta, non
+- **Il riepilogo della spesa sul telefono è una barra in fondo**, sopra le schede: il
+  numero di articoli da prendere cambia a ogni spunta ed è quello che si guarda mentre
+  si spunta, non
   qualcosa da cercare scorrendo fino in fondo alla lista. È la stessa
   `.shopping-total-card` della colonna di destra, che lì si compatta — via il titolo
   e la frase lunga, che in una barra da 80px non ci stanno.

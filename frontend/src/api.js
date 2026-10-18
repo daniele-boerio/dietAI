@@ -109,9 +109,6 @@ export const api = {
 
   uploadDiet: (file) => upload('/diet/upload', file),
 
-  // La foto dello scontrino: il modello abbina le righe alla lista e segna i prezzi.
-  readReceipt: (file) => upload('/shopping/current/receipt', file),
-
   createDietManually: (meals) =>
     request('/diet/manual', { method: 'POST', body: JSON.stringify({ meals }) }),
 
@@ -362,14 +359,6 @@ export const api = {
       body: JSON.stringify({ quantity }),
     }),
 
-  // Quanto è costato per la quantità presa: l'app ne ricava il prezzo unitario e da
-  // lì in poi conta con quello. null rimette il prezzo medio del catalogo.
-  setPaidPrice: (itemId, paid) =>
-    request(`/shopping/items/${itemId}/price`, {
-      method: 'PUT',
-      body: JSON.stringify({ paid }),
-    }),
-
   completeShopping: () => request('/shopping/current/complete', { method: 'POST' }),
 
   clearShoppingList: () => request('/shopping/current/items', { method: 'DELETE' }),
@@ -435,9 +424,6 @@ export const formatDate = (iso, options = { day: 'numeric', month: 'long' }) =>
     'it-IT',
     options
   );
-
-export const formatMoney = (value) =>
-  value == null ? null : `€ ${value.toFixed(2).replace('.', ',')}`;
 
 export const formatNumber = (value, digits = 0) =>
   value == null ? '—' : Number(value).toFixed(digits).replace('.', ',');

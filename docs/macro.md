@@ -17,12 +17,12 @@ a volume). È lo stesso principio del sorteggio delle cucine: quello che si può
 calcolare lo calcola il codice.
 
 **La composizione viene da tre parti.** Il catalogo (`utils/composition.py`, una voce
-per ogni alimento di `utils/pricing.py`: `test_macro_calcolati` pretende le stesse
+per ogni alimento di `utils/ingredient_catalog.py`: `test_macro_calcolati` pretende le stesse
 chiavi) la porta per i nomi noti, e il seed la riscrive a ogni avvio. I nomi che il
 catalogo non conosce la ricevono dal modello (`ensure_composition`, prompt
 `COMPOSITION_SYSTEM`): **una chiamata per generazione**, per tutti i nomi nuovi
 insieme, e poi restano in anagrafica per sempre (`composition_source = "ai"`). Quella
-corretta a mano (`"utente"`) il seed non la tocca, come il reparto e il prezzo. I
+corretta a mano (`"utente"`) il seed non la tocca, come il reparto. I
 valori sono del prodotto **come si compra** — pasta e legumi secchi, carne cruda — e
 il contesto lo chiede al modello (riga PESI di `CONTEXT_TEMPLATE`): con "pasta cotta"
 il conto verrebbe la metà.

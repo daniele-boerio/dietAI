@@ -25,14 +25,13 @@ function domenicaCorrente() {
   ).padStart(2, '0')}`;
 }
 import { Link } from 'react-router-dom';
-import { api, formatDate, formatMoney } from '../api';
+import { api, formatDate } from '../api';
 import { useApp } from '../App';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
 import LoadError from '../components/LoadError';
 import Modal from '../components/Modal';
 import ShoppingChat from '../components/ShoppingChat';
-import ReceiptReader from '../components/ReceiptReader';
 import { useDueColonne } from '../lib/schermo';
 
 /**
@@ -92,55 +91,6 @@ function QuantityInput({ item, onDone, onCancel }) {
   );
 }
 
-/**
- * Il campo per dire quanto è costato.
- *
- * Si chiede la cifra che si ha sotto gli occhi — quanto è costato quel pacco — non un
- * prezzo al chilo da ricavare a mente: il conto al kg lo fa il server, che conosce la
- * quantità della riga. Vuoto cancella il prezzo tuo e rimette la media del catalogo.
- */
-function PriceInput({ item, onDone, onCancel }) {
-  useRitornaSu(`price-${item.id}`);
-  // Quello che si ritrova nel campo è quello che ci si era scritto, non la stima
-  // ricalcolata: il prezzo pagato sta sulla riga proprio per questo.
-  const [value, setValue] = useState(item.paid_price ?? '');
-  const annullato = useRef(false);
-
-  const conferma = () => {
-    if (annullato.current) return;
-    const numero = value === '' ? null : Number(String(value).replace(',', '.'));
-    onDone(Number.isFinite(numero) && numero > 0 ? numero : null);
-  };
-
-  return (
-    <span className="shopping-price-edit">
-      <em>€</em>
-      <input
-        type="number"
-        step="0.01"
-        inputMode="decimal"
-        autoFocus
-        value={value}
-        placeholder={item.estimated_price != null ? String(item.estimated_price) : '0,00'}
-        aria-label={`Quanto hai pagato ${item.name}, in euro. Invio salva, Esc annulla`}
-        onFocus={(e) => e.target.select()}
-        onChange={(e) => setValue(e.target.value)}
-        onBlur={conferma}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            e.target.blur();
-          } else if (e.key === 'Escape') {
-            e.preventDefault();
-            annullato.current = true;
-            onCancel();
-          }
-        }}
-      />
-    </span>
-  );
-}
-
 export default function ShoppingPage() {
   const { addToast } = useApp();
   const [list, setList] = useState(null);
@@ -155,9 +105,8 @@ export default function ShoppingPage() {
   const dueColonne = useDueColonne();
   // L'articolo che si sta spostando di reparto (null = nessun dialogo aperto).
   const [moving, setMoving] = useState(null);
-  // L'articolo di cui si sta scrivendo la quantità presa, e quello del prezzo pagato.
+  // L'articolo di cui si sta scrivendo la quantità presa.
   const [quantityOf, setQuantityOf] = useState(null);
-  const [priceOf, setPriceOf] = useState(null);
 
   const load = useCallback(
     async ({ silent = false } = {}) => {
@@ -194,10 +143,9 @@ export default function ShoppingPage() {
             ? {
                 ...i,
                 is_checked: next,
-                // "Non l'ho preso" cancella anche quanto ne avevo segnato e quanto
-                // avevo scritto di averci speso: il server fa lo stesso, qui si tiene
-                // solo il passo.
-                ...(next ? {} : { bought_quantity: null, bought_label: null, paid_price: null }),
+                // "Non l'ho preso" cancella anche quanto ne avevo segnato: il server fa
+                // lo stesso, qui si tiene solo il passo.
+                ...(next ? {} : { bought_quantity: null, bought_label: null }),
               }
             : i
         ),
@@ -213,7 +161,7 @@ export default function ShoppingPage() {
     }
   };
 
-  // La lista che torna da quantità e prezzo è quella di quando il server ha risposto:
+  // La lista che torna dalla quantità è quella di quando il server ha risposto:
   // se nel frattempo si è spuntato qualcos'altro, rimetterla a schermo toglieva la
   // spunta appena data. In quel caso si tiene lo stato locale (la spunta ha la sua
   // richiesta in volo).
@@ -231,22 +179,6 @@ export default function ShoppingPage() {
     const versione = spunte.current;
     try {
       mostraSeAttuale(await api.setBoughtQuantity(item.id, quantity), versione);
-    } catch (e) {
-      addToast(e.message, 'error');
-      load({ silent: true });
-    }
-  };
-
-  // Il prezzo del catalogo è una media italiana e nel negozio dove fai la spesa vale
-  // poco: è per questo che il totale stimato non dice quasi niente. Ogni cifra segnata
-  // qui insegna all'app un prezzo vero, e resta per tutte le liste che verranno.
-  const savePrice = async (item, paid) => {
-    setPriceOf(null);
-    if (paid === (item.paid_price ?? null)) return;
-    const versione = spunte.current;
-    try {
-      mostraSeAttuale(await api.setPaidPrice(item.id, paid), versione);
-      if (paid) addToast(`${item.name}: prezzo segnato ✓`);
     } catch (e) {
       addToast(e.message, 'error');
       load({ silent: true });
@@ -326,13 +258,6 @@ export default function ShoppingPage() {
           <button className="btn btn-secondary" onClick={copyList}>
             <Copy size={16} /> Copia
           </button>
-          {/* Sul telefono il conto è una barra in fondo, dove lo scontrino non ci sta:
-              qui in testata, dove il telefono — che è anche la fotocamera — lo trova. */}
-          {list.total_items > 0 && (
-            <div className="receipt-in-testata">
-              <ReceiptReader onList={setList} />
-            </div>
-          )}
         </div>
       </div>
 
@@ -351,7 +276,7 @@ export default function ShoppingPage() {
           )}
 
           {/* La lista arriva più in là di domenica perché hai già generato la settimana
-              prossima: dirlo evita che il totale alto sembri un errore di conto. */}
+              prossima: dirlo evita che una lista lunga sembri un errore di conto. */}
           {oltre && (
             <div className="notice notice-skip">
               <CalendarCheck />
@@ -421,9 +346,6 @@ export default function ShoppingPage() {
                       <span className="count">
                         {done}/{cat.items.length}
                       </span>
-                      {cat.estimated_price != null && (
-                        <span className="price">{formatMoney(cat.estimated_price)}</span>
-                      )}
                     </button>
 
                     {!isCollapsed &&
@@ -468,33 +390,6 @@ export default function ShoppingPage() {
                             </button>
                           )}
 
-                          {/* Il prezzo si tocca per dire quanto è costato davvero: da lì
-                              l'app impara il prezzo unitario e smette di stimare a caso.
-                              Si può fare anche a spesa fatta, scontrino alla mano. */}
-                          {priceOf === item.id ? (
-                            <PriceInput
-                              item={item}
-                              onDone={(paid) => savePrice(item, paid)}
-                              onCancel={() => setPriceOf(null)}
-                            />
-                          ) : (
-                            <button
-                              id={`price-${item.id}`}
-                              className={`shopping-price ${item.paid_price != null ? 'mine' : ''}`}
-                              onClick={() => setPriceOf(item.id)}
-                              title={
-                                item.paid_price != null
-                                  ? `L'hai pagato tu: ${formatMoney(item.paid_price)}` +
-                                    ` — ${formatMoney(item.unit_price)}/${item.price_unit}` +
-                                    (item.last_paid_at ? ` · segnato il ${formatDate(item.last_paid_at)}` : '')
-                                  : item.price_by_user
-                                    ? `Stima col prezzo tuo: ${formatMoney(item.unit_price)}/${item.price_unit}`
-                                    : 'Quanto è costato? Segnalo e la stima diventa la tua'
-                              }
-                            >
-                              {item.estimated_price != null ? formatMoney(item.estimated_price) : '€ —'}
-                            </button>
-                          )}
                           <button
                             className="icon-button shopping-move"
                             onClick={() => setMoving({ ...item, from: cat.label })}
@@ -533,32 +428,20 @@ export default function ShoppingPage() {
         </div>
 
         <aside className="page-aside">
-          {/* Il conto è **su carta**: è il foglietto che si tiene in mano alla
-              cassa, ed è l'unica cosa chiara della pagina — quella su cui l'occhio
-              cade tornando dalla lista. */}
+          {/* Il riepilogo è **su carta**: è il foglietto che si tiene in mano al
+              supermercato, ed è l'unica cosa chiara della pagina — quella su cui
+              l'occhio cade tornando dalla lista. Fino alla migrazione 0032 ci stava
+              il totale stimato, tolto con tutti i prezzi: medie nazionali che al
+              negozio vero non dicevano niente. */}
           <div className="card shopping-total-card">
-            <div className="card-title">Totale stimato</div>
-            <div className="shopping-total">{formatMoney(list.estimated_cost) || '—'}</div>
-            {/* Un totale fatto di medie nazionali non serve a niente, e dirlo è
-                meglio che farlo sembrare un preventivo: la frase cambia man mano
-                che i prezzi veri prendono il posto di quelli del catalogo. */}
+            <div className="card-title">Spesa</div>
+            <div className="shopping-total">{list.total_items - list.checked_items}</div>
+            {/* Sul telefono il titolo sparisce e restano numero e nota: la nota deve
+                bastare da sola. */}
             <div className="shopping-total-note">
-              {list.priced_items === 0
-                ? `stima sui prezzi medi · ${list.total_items} articoli`
-                : list.priced_items === list.total_items
-                  ? `sui tuoi prezzi · ${list.total_items} articoli`
-                  : `${list.priced_items} di ${list.total_items} articoli a prezzo tuo`}
-              {list.total_items > 0 && ` · ${list.total_items - list.checked_items} da prendere`}
+              da prendere, su {list.total_items}{' '}
+              {list.total_items === 1 ? 'articolo' : 'articoli'}
             </div>
-            {/* Il tetto scalato sui giorni che la lista copre: la lista non compra una
-                settimana, compra fino a due. Contro il tetto di una sola, chiunque
-                abbia generato anche la prossima risulterebbe fuori budget. */}
-            {list.budget && (
-              <div className={`shopping-budget ${list.budget.over ? 'over' : ''}`}>
-                {list.budget.over ? 'Oltre il budget' : 'Nel budget'}: {formatMoney(list.budget.limit)}{' '}
-                per {list.budget.days === 7 ? 'la settimana' : `${list.budget.days} giorni`}
-              </div>
-            )}
             <button
               className="btn btn-primary btn-block"
               disabled={list.checked_items === 0}
@@ -571,7 +454,6 @@ export default function ShoppingPage() {
               davvero, e da lì sparisce dalla lista: quello che resta è quello che non
               hai preso.
             </p>
-            {list.total_items > 0 && <ReceiptReader onList={setList} />}
           </div>
 
           {/* Sul monitor la chat vive qui, accanto alla lista: è lì che si sta

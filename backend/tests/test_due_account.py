@@ -231,7 +231,7 @@ def test_il_ricettario_non_e_in_comune(client, guest_client):
     È il punto in cui due diete diverse si toccherebbero peggio: lo stesso piatto pesa
     200 g per uno e 120 g per l'altro, e una riga condivisa vorrebbe dire mangiare i
     macro di qualcun altro. In comune c'è solo l'anagrafica degli ingredienti — nome,
-    reparto, prezzo al kg — che di grammi e calorie non sa niente.
+    reparto — che di grammi e calorie non sa niente.
     """
     mia = client.post("/api/recipes", json=_ricetta(200, 700)).json()
     sua = guest_client.post("/api/recipes", json=_ricetta(120, 450)).json()
@@ -251,7 +251,7 @@ def test_il_ricettario_non_e_in_comune(client, guest_client):
     assert dettaglio_mio["calories"] == 700 and dettaglio_suo["calories"] == 450
 
 
-def test_reparto_e_prezzo_sono_della_casa(client, guest_client, db):
+def test_il_reparto_e_della_casa(client, guest_client, db):
     """L'anagrafica è una per tutti: il reparto spostato dall'ospite vale anche per
     l'admin. È una scelta (stessa casa, stessi negozi — vedi docs/spesa.md), non una
     svista: se questo test cambia, va cambiata anche quella decisione."""

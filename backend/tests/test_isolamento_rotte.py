@@ -40,7 +40,6 @@ CORPI = {
     ("PUT", "/api/config/pantry/{item_id}"): {"quantity": 1},
     ("PUT", "/api/shopping/items/{item_id}/check"): {"is_checked": True},
     ("PUT", "/api/shopping/items/{item_id}/quantity"): {"quantity": 1},
-    ("PUT", "/api/shopping/items/{item_id}/price"): {"paid": 1},
     ("POST", "/api/chat/shopping/{week_id}/messages"): {"content": "ciao"},
     ("POST", "/api/chat/meals/{meal_id}/messages"): {"content": "ciao"},
     ("PUT", "/api/planning/meals/{meal_id}/assign"): {"recipe_id": 1},
@@ -157,5 +156,5 @@ def test_l_ospite_non_tocca_niente_dell_amministratore(admin_e_ospite):
         assert res.status_code in (403, 404), (metodo, path, res.status_code, res.text)
         provate += 1
 
-    assert provate >= 30
+    assert provate >= 29
     assert _fotografia(admin) == prima

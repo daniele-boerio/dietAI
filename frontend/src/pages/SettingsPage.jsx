@@ -229,12 +229,6 @@ function ExcludedTab() {
 // dire «non mi interessa» quando il gesto è lo stesso sarebbe un comando in più.
 const TEMPO_LIBERO = 90;
 
-const BUDGET = [
-  { key: 'economico', label: 'Basso' },
-  { key: 'medio', label: 'Medio' },
-  { key: 'premium', label: 'Alto' },
-];
-
 function PreferencesTab() {
   const { addToast } = useApp();
   const [prefs, setPrefs] = useState(null);
@@ -339,42 +333,6 @@ function PreferencesTab() {
         <div className="range-ends">
           <span>10 min</span>
           <span>senza limite</span>
-        </div>
-      </div>
-
-      <div className="field">
-        <label className="field-label">Budget</label>
-        <div className="segmented">
-          {BUDGET.map(({ key, label }) => (
-            <button
-              key={label}
-              className={(prefs.budget_level ?? null) === key ? 'on' : ''}
-              disabled={busy}
-              onClick={() => save({ ...prefs, budget_level: key })}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        {/* Il livello dice che tipo di ingredienti; il tetto è un numero, e il conto
-            della spesa lo confronta col totale. Vuoto = nessun tetto. */}
-        <div className="budget-cap">
-          <span>Tetto della spesa</span>
-          <input
-            type="number"
-            min="1"
-            step="5"
-            inputMode="decimal"
-            placeholder="nessuno"
-            defaultValue={prefs.weekly_budget_eur ?? ''}
-            aria-label="Tetto della spesa in euro a settimana"
-            onBlur={(e) => {
-              const n = e.target.value === '' ? null : Number(e.target.value);
-              if (n === (prefs.weekly_budget_eur ?? null)) return;
-              save({ ...prefs, weekly_budget_eur: n && n > 0 ? n : null });
-            }}
-          />
-          <span>€ a settimana</span>
         </div>
       </div>
 

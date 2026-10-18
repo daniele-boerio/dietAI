@@ -22,7 +22,7 @@ from ..models import (
     RecipeIngredient,
     ShoppingListItem,
 )
-from ..utils.pricing import INGREDIENT_CATALOG, catalog_entry, guess_category
+from ..utils.ingredient_catalog import INGREDIENT_CATALOG, catalog_entry, guess_category
 from ..utils.seasonality import season_months_for
 from ..utils.units import to_base
 
@@ -188,7 +188,7 @@ def _segni(name: str) -> str:
 # Singolare e plurale sono lo stesso alimento, ma il modello scrive ora l'uno ora
 # l'altro: "peperone" oggi, "peperoni" domani, e sono due righe di anagrafica — cioè
 # una dispensa che non copre la ricetta e due voci nella lista della spesa. La forma
-# buona è quella del catalogo, perché è il nome a cui sono attaccati reparto e prezzo.
+# buona è quella del catalogo, perché è il nome a cui sono attaccati reparto e composizione.
 #
 # La mappa si **deriva** dal catalogo invece di scriverla a mano: un elenco a parte
 # resterebbe indietro al primo ingrediente aggiunto, e sarebbe una bugia scritta
@@ -344,7 +344,7 @@ class NormalizationRules:
     riempie dalle Impostazioni.
 
     L'ordine non è arbitrario: le regole di serie sono quelle su cui si reggono il
-    catalogo dei prezzi e mezza suite di test, e devono restare prevedibili. Le
+    catalogo e mezza suite di test, e devono restare prevedibili. Le
     aggiunte lavorano su ciò che esce da lì.
     """
 
@@ -452,10 +452,9 @@ def normalize_name(name: str, rules: NormalizationRules | None = None) -> str:
 def get_or_create_ingredient(db: Session, name: str) -> Ingredient:
     """Restituisce la riga di anagrafica per un nome, creandola se serve.
 
-    Categoria, prezzo e stagionalità vengono dal catalogo quando l'ingrediente è
-    noto; altrimenti la categoria si indovina dalle parole chiave (serve a
-    raggruppare la lista della spesa per reparto) e il prezzo resta NULL — meglio
-    "costo non stimabile" che un numero inventato.
+    Categoria e stagionalità vengono dal catalogo quando l'ingrediente è noto;
+    altrimenti la categoria si indovina dalle parole chiave (serve a raggruppare la
+    lista della spesa per reparto).
     """
     clean = normalize_name(name, load_rules(db))
     if not clean:
@@ -465,18 +464,10 @@ def get_or_create_ingredient(db: Session, name: str) -> Ingredient:
     if existing:
         return existing
 
-    entry = catalog_entry(clean)
-    if entry:
-        category, price, price_unit = entry
-    else:
-        category, price, price_unit = guess_category(clean), None, None
-
     ingredient = Ingredient(
         name=clean,
-        category=category,
+        category=catalog_entry(clean) or guess_category(clean),
         season_months=season_months_for(clean),
-        avg_price_per_unit=price,
-        price_unit=price_unit,
     )
     # La composizione del catalogo arriva subito, non al prossimo avvio del seed: la
     # ricetta che sta nascendo adesso è la prima che ne ha bisogno.
@@ -590,7 +581,7 @@ def builtin_rules() -> dict:
             {
                 "target": "peperoni",
                 "terms": [_term(t) for t in _PEPERONI_QUALIFIERS],
-                "note": "Il colore non cambia l'alimento: stesso banco, stesso prezzo, "
+                "note": "Il colore non cambia l'alimento: stesso banco, stesso alimento, "
                 "stessi macro. Tolti quando seguono «peperoni» o «peperone».",
             },
         ],

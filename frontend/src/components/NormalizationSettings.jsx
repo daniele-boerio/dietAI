@@ -123,7 +123,7 @@ export default function NormalizationSettings() {
           bio» diventa <strong>pasta rigate</strong>. Serve perché la dispensa e la spesa
           si parlino — tre righe di zucchine scritte in tre modi non si sottraggono fra
           loro. Qui sotto ci sono tutte le regole: quelle di serie non si tolgono (ci si
-          appoggiano il catalogo dei prezzi e i test), le tue sì.
+          appoggiano il catalogo e i test), le tue sì.
         </p>
         <p className="field-hint">
           <strong>Un accorpamento non si annulla:</strong> togliendo la regola le righe
@@ -250,7 +250,7 @@ export default function NormalizationSettings() {
         stessa riga. Senza, in dispensa ne comparirebbero due identiche a vedersi.
         <br />
         <strong>Singolare e plurale</strong> finiscono sulla forma del catalogo, che è
-        quella a cui sono attaccati reparto e prezzo: «peperone» diventa «peperoni»,
+        quella a cui sono attaccati reparto e composizione: «peperone» diventa «peperoni»,
         «uovo» diventa «uova».
       </p>
 

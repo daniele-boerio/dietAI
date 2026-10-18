@@ -52,13 +52,10 @@ from ..services.ingredients import (
 )
 from ..services.shopping import CATEGORY_LABELS
 from ..utils import cuisines
-from ..utils.pricing import DEFAULT_BASE_INGREDIENTS
+from ..utils.ingredient_catalog import DEFAULT_BASE_INGREDIENTS
 from ..utils.units import format_quantity, normalize_unit
 
 router = APIRouter(prefix="/api/config", tags=["Configurazione"])
-
-BUDGET_LEVELS = {"economico", "medio", "premium"}
-
 
 # ── Ingredienti di base ────────────────────────────────────────────────────────
 
@@ -321,8 +318,8 @@ def update_pantry(
         raise HTTPException(404, "Non trovato")
 
     # Cambiare il nome vuol dire puntare la riga a un altro ingrediente dell'anagrafica:
-    # non è una modifica di testo, perché da quel collegamento dipendono il reparto, il
-    # prezzo e soprattutto lo scomputo dalla lista della spesa.
+    # non è una modifica di testo, perché da quel collegamento dipendono il reparto e
+    # soprattutto lo scomputo dalla lista della spesa.
     if body.ingredient_name is not None:
         try:
             ingredient = get_or_create_ingredient(db, body.ingredient_name)
@@ -383,8 +380,6 @@ def _serialize_prefs(prefs: UserPreferences) -> dict:
         # l'ha più, cioè un'impossibile da togliere.
         "cuisines": cuisines.clean(prefs.cuisines),
         "max_prep_time_min": prefs.max_prep_time_min,
-        "budget_level": prefs.budget_level,
-        "weekly_budget_eur": prefs.weekly_budget_eur,
         "notes": prefs.notes,
     }
 
@@ -416,8 +411,6 @@ def update_preferences(
     user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-    if body.budget_level and body.budget_level not in BUDGET_LEVELS:
-        raise HTTPException(400, "Livello di budget non valido")
     sconosciute = cuisines.unknown(body.cuisines)
     if sconosciute:
         raise HTTPException(400, f"Cucine non in elenco: {', '.join(sconosciute)}")
@@ -436,9 +429,6 @@ def update_preferences(
     prefs.prefer_seasonal = body.prefer_seasonal
     prefs.cuisines = cuisines.clean(body.cuisines)
     prefs.max_prep_time_min = body.max_prep_time_min
-    prefs.budget_level = body.budget_level
-    if "weekly_budget_eur" in body.model_fields_set:
-        prefs.weekly_budget_eur = body.weekly_budget_eur
     prefs.notes = (body.notes or "").strip() or None
     db.commit()
     return _serialize_prefs(prefs)
@@ -449,7 +439,7 @@ def update_preferences(
 ROLE_LABELS = {
     "planning": "Pianificazione settimanale",
     "chat": "Chat e modifiche",
-    "diet": "Lettura di documenti (dieta e scontrini)",
+    "diet": "Lettura della dieta",
 }
 
 ROLE_HINTS = {
@@ -463,9 +453,8 @@ ROLE_HINTS = {
         "economico qui si nota poco e si sente sulla bolletta."
     ),
     "diet": (
-        "La dieta due o tre volte l'anno, lo scontrino dopo ogni spesa. Se il PDF "
-        "contiene testo va bene qualunque modello; per le scansioni e per le foto degli "
-        "scontrini serve un modello che sappia guardare le immagini."
+        "La dieta due o tre volte l'anno. Se il PDF contiene testo va bene qualunque "
+        "modello; per le scansioni serve un modello che sappia guardare le immagini."
     ),
 }
 
@@ -638,7 +627,7 @@ def get_normalization(_admin: User = Depends(get_current_admin), db: Session = D
 
     I termini di serie e quelli aggiunti a mano stanno nello **stesso** gruppo, perché
     fanno la stessa cosa: la differenza è solo che i primi non si tolgono da qui (ci si
-    appoggiano il catalogo dei prezzi e i test) e i secondi sì.
+    appoggiano il catalogo e i test) e i secondi sì.
     """
     rows = (
         db.query(NormalizationRule)

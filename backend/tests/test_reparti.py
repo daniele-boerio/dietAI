@@ -131,11 +131,11 @@ def test_il_catalogo_si_indovina_da_solo():
     nomi che il catalogo ha è il modo più onesto di sapere quanto sbaglia. Con la
     ricerca in mezzo alle parole ne sbagliava venti su centottanta — peperoni fra i
     condimenti, melanzane fra la frutta, melagrana fra i latticini."""
-    from app.utils.pricing import INGREDIENT_CATALOG, guess_category
+    from app.utils.ingredient_catalog import INGREDIENT_CATALOG, guess_category
 
     sbagliati = {
         nome: (categoria, guess_category(nome))
-        for nome, (categoria, _, _) in INGREDIENT_CATALOG.items()
+        for nome, categoria in INGREDIENT_CATALOG.items()
         if guess_category(nome) != categoria
     }
     assert sbagliati == {}
@@ -152,7 +152,7 @@ def test_il_catalogo_si_indovina_da_solo():
     ],
 )
 def test_il_reparto_lo_decide_l_inizio_del_nome(nome, reparto):
-    from app.utils.pricing import guess_category
+    from app.utils.ingredient_catalog import guess_category
 
     assert guess_category(nome) == reparto
 

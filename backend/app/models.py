@@ -180,15 +180,6 @@ class Ingredient(Base):
     )
     # Mesi di stagionalità: [6,7,8] = giugno-agosto. NULL = disponibile tutto l'anno.
     season_months = Column(JSONType)
-    avg_price_per_unit = Column(Float)
-    price_unit = Column(String)  # "kg", "l", "unità"
-    # Il prezzo del catalogo è una media italiana: al negozio dove fa la spesa
-    # l'utente vale poco. Quando lo corregge segnando quanto ha pagato, il flag
-    # protegge il suo numero dal seed e dice alla UI che quella cifra è vera.
-    price_by_user = Column(
-        Boolean, nullable=False, default=False, server_default="false"
-    )
-    last_paid_at = Column(DateTime(timezone=True))
     # Composizione per 100 g del prodotto come si compra: è ciò che permette di
     # **calcolare** i macro di una ricetta invece di credere a quelli che scrive il
     # modello (vedi `services/macros.py`). NULL = non si sa, e la ricetta che lo usa
@@ -229,7 +220,7 @@ class NormalizationRule(Base):
     """Una regola di normalizzazione dei nomi aggiunta a mano.
 
     Le regole di serie stanno nel codice (`services/ingredients.py`) perché su di esse
-    si reggono il catalogo dei prezzi e mezza suite di test. Queste sono le aggiunte
+    si reggono il catalogo e mezza suite di test. Queste sono le aggiunte
     che si fanno guardando la lista della spesa — «anche "a filetti" è un taglio», «i
     tortiglioni sono pasta» — e chiedono un deploy solo se restano nel codice.
 
@@ -240,7 +231,7 @@ class NormalizationRule(Base):
     `kind = "noise"` → `term` è una parola da togliere dal nome.
     `kind = "alias"` → il nome **intero** `term` diventa `replacement`.
     `kind = "off"`   → un termine **di serie** che smette di valere. Resta scritto nel
-    codice (ci poggiano il catalogo dei prezzi e i test): questa riga lo spegne, e
+    codice (ci poggiano il catalogo e i test): questa riga lo spegne, e
     cancellarla lo riaccende. È così che si toglie "sedani" da pasta senza un deploy —
     è un formato, ma è anche il plurale del sedano.
     """
@@ -614,11 +605,6 @@ class UserPreferences(Base):
     # NULL o [] = nessuna preferenza, sceglie il modello.
     cuisines = Column(JSONType)
     max_prep_time_min = Column(Integer)
-    budget_level = Column(String)  # "economico", "medio", "premium"
-    # Il tetto della spesa in euro a settimana. NULL = nessun tetto. Il livello qui
-    # sopra dice al modello che tipo di ingredienti scegliere; questo è un numero, e il
-    # conto della spesa lo confronta col totale.
-    weekly_budget_eur = Column(Float)
     # Regole in linguaggio naturale che non stanno in una lista: "niente insaccati",
     # "carne al massimo due volte a settimana", "la domenica mangio fuori". Vanno nel
     # prompt così come sono — il destinatario è un modello, non un parser.
@@ -730,7 +716,6 @@ class ShoppingList(Base):
     # sempre quello che il piano chiede e la dispensa non copre — ma sapere quand'è
     # stato l'ultimo giro serve a leggere una lista corta senza sospettare un bug.
     completed_at = Column(DateTime(timezone=True))
-    estimated_cost = Column(Float)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -754,13 +739,6 @@ class ShoppingListItem(Base):
     # misura, e per 140 g di tacchino si porta a casa il pacco da 400. NULL = ho preso
     # quello che c'era scritto. È questo che finisce in dispensa a spesa fatta.
     bought_quantity = Column(Float)
-    # Quanto è costato davvero questa riga, se l'utente l'ha scritto. È un fatto — la
-    # cifra sullo scaffale o sullo scontrino — e per questo si conserva com'è: il
-    # prezzo al chilo che se ne ricava (`Ingredient.avg_price_per_unit`) serve a
-    # stimare le righe che un prezzo non ce l'hanno, non a riscrivere questa.
-    paid_price = Column(Float)
-    # Quanto costa la riga: il prezzo pagato se c'è, altrimenti la stima dal catalogo.
-    estimated_price = Column(Float)
 
     __table_args__ = (
         UniqueConstraint(

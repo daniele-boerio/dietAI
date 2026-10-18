@@ -11,7 +11,7 @@ import {
   UtensilsCrossed,
   X,
 } from 'lucide-react';
-import { api, formatDate, formatMoney, formatNumber } from '../api';
+import { api, formatDate, formatNumber } from '../api';
 import { useApp } from '../App';
 import EatenInsteadDialog from '../components/EatenInsteadDialog';
 import EmptyState from '../components/EmptyState';
@@ -465,9 +465,7 @@ export default function DashboardPage() {
               </strong>
               <span>
                 {daPrendere > 0
-                  ? shopping.estimated_cost
-                    ? `${formatMoney(shopping.estimated_cost)} stimati`
-                    : 'per il piano da oggi in avanti'
+                  ? 'per il piano da oggi in avanti'
                   : 'quello che il piano chiede è già in dispensa'}
               </span>
             </div>

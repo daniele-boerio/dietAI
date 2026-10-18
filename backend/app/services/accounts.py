@@ -7,15 +7,15 @@ non lo è genera con la sua. Da qui discende il resto — l'admin è l'unico che
 schermata della chiave e sceglie i modelli, perché è l'unico che ne paga il conto.
 
 L'anagrafica ingredienti (`Ingredient`) resta invece comune a tutti: è un dizionario di
-nomi, reparti e prezzi al kg, non un dato personale. Se un utente corregge il prezzo
-del pane, il prezzo del pane è corretto per tutti.
+nomi e reparti, non un dato personale. Se un utente sposta il pane di reparto, il
+pane è spostato per tutti.
 """
 
 from sqlalchemy.orm import Session
 
 from ..auth import get_password_hash
 from ..models import BaseIngredient, Ingredient, User, UserPreferences
-from ..utils.pricing import DEFAULT_BASE_INGREDIENTS
+from ..utils.ingredient_catalog import DEFAULT_BASE_INGREDIENTS
 
 
 def admin_user(db: Session) -> User | None:

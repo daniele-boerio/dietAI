@@ -16,7 +16,7 @@ non è uguale a un altro. Servono a che 100 g di pasta valgano 356 kcal in ogni
 ricetta, invece di quello che il modello ricorda quel giorno.
 
 Formato: nome del catalogo → (kcal, proteine, carboidrati, grassi) per 100 g.
-Le chiavi sono quelle di `utils/pricing.INGREDIENT_CATALOG`, e `test_macro_calcolati`
+Le chiavi sono quelle di `utils/ingredient_catalog.INGREDIENT_CATALOG`, e `test_macro_calcolati`
 pretende che ci siano tutte.
 """
 

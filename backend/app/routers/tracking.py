@@ -257,7 +257,6 @@ def dashboard(
         },
         "shopping": {
             "completed_at": lst.completed_at.isoformat() if lst.completed_at else None,
-            "estimated_cost": lst.estimated_cost,
             "total_items": len(items),
             "checked_items": sum(1 for i in items if i.is_checked),
         },

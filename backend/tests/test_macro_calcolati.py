@@ -21,7 +21,7 @@ from app.utils.composition import (
     DETAILS,
     GRAMS_PER_UNIT,
 )
-from app.utils.pricing import INGREDIENT_CATALOG
+from app.utils.ingredient_catalog import INGREDIENT_CATALOG
 from tests.test_flow import FakeModel
 
 

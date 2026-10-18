@@ -93,7 +93,7 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
 │           ├── cuisines.py     # catalogo delle cucine, quote e sorteggio per giorno
 │           ├── seasonality.py  # stagionalità prodotti italiani
 │           ├── nutrition.py    # questionario → calorie e macro (Mifflin-St Jeor)
-│           ├── pricing.py      # catalogo ingredienti: categoria + prezzo medio
+│           ├── ingredient_catalog.py # catalogo ingredienti: nome → reparto
 │           ├── frequencies.py  # frequenze settimanali per gruppo: assegnazione e conto
 │           └── composition.py  # composizione per 100 g degli alimenti del catalogo
 └── frontend/src/
@@ -125,7 +125,7 @@ il ragionamento.
 | Account, amministratore, accesso | `docs/account.md` |
 | Dieta: questionario, editor, lucchetto | `docs/dieta.md` |
 | Piano: settimane, caselle, saltati, fissi, ricette condivise | `docs/piano.md` |
-| Spesa, prezzi, reparti, dispensa | `docs/spesa.md` |
+| Spesa, reparti, dispensa | `docs/spesa.md` |
 | Andamento e aderenza | `docs/andamento.md` |
 | healthAI: invio dei pasti consumati | `docs/healthai.md` |
 | Generazione, modelli, ragionamento, stato | `docs/generazione.md` |
@@ -193,19 +193,15 @@ paragrafo nel documento, scrivendo anche cosa non andava con la versione di prim
 - La lista è una funzione: quello che le ricette da oggi alla domenica della settimana prossima
   (`shopping_horizon`) chiedono e la dispensa non ha. Chi tocca il piano chiama
   `rebuild_shopping_list(db, user_id)`, e chi la mostra (pagina, home, chat) la ricalcola.
-- Il prezzo scritto a mano (`paid_price`) è un fatto e non si ricalcola; il prezzo al
-  kg che se ne ricava vale per tutti. Reparto e prezzo corretti a mano sono protetti
-  dal seed (`category_by_user`, `price_by_user`).
+- Niente prezzi (migrazione `0032`): né stima del costo, né prezzo pagato, né
+  scontrino, né budget. Il reparto corretto a mano è protetto dal seed
+  (`category_by_user`) e vale per tutti gli account.
 - «Ho fatto la spesa» sposta gli spuntati in dispensa; «l'ho seguito» scala la
   dispensa e scrive `pantry_used` (NULL, non `[]`, se non scala niente) e spiega gli
   scarti (`pantry_skipped`). Cambiare una ricetta non tocca la dispensa.
 - Le scorte possono avere una scadenza (`PantryItem.expires_on`): nel contesto della
   generazione la dispensa va in ordine di scadenza, con la data per quello che scade
   entro una settimana.
-- Il tetto di spesa settimanale (`weekly_budget_eur`) arriva al modello come cifra e il
-  conto lo confronta col totale **scalato sui giorni che la lista copre**.
-- La foto dello scontrino la legge il modello del ruolo `diet` e abbina lui le righe
-  agli id degli articoli in lista; da lì è un prezzo scritto a mano come gli altri.
 
 **Andamento** (`docs/andamento.md`)
 - Un giorno senza pasti tracciati resta fuori dalle medie; nel grafico della settimana
@@ -372,11 +368,11 @@ diventerebbe indecifrabile e andrebbe reinserita.
 - **Cambiare modello:** dalla UI (Impostazioni → Modelli AI, per ruolo) oppure
   `AI_MODEL_PLANNING` / `AI_MODEL_CHAT` / `AI_MODEL_DIET` per il default d'ambiente.
 - **Cambiare provider:** `AI_PROVIDER` + `AI_BASE_URL`; la API key salvata va reinserita.
-- **Aggiungere ingredienti al catalogo:** `utils/pricing.py` (categoria + prezzo), poi
+- **Aggiungere ingredienti al catalogo:** `utils/ingredient_catalog.py` (nome → reparto), poi
   `python -m app.seed` per riallineare l'anagrafica.
 - **Accorpare un nome nuovo** (un formato di pasta che il modello si è inventato, un
   taglio che non era in elenco): Impostazioni → Nomi e accorpamenti, che salva la
   regola e rifà l'anagrafica. Nel codice si scende solo per cambiare le regole di
-  serie, che sono quelle su cui poggiano il catalogo dei prezzi e i test.
+  serie, che sono quelle su cui poggiano il catalogo e i test.
 - **Ricettario pieno di doppioni** (archivio di prima che le ricette si condividessero):
   `python -m app.merge_recipes` per vedere cosa fonderebbe, `--yes` per fonderlo.

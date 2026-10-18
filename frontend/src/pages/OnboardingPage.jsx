@@ -21,7 +21,7 @@ const ALL_STEPS = ['welcome', 'apikey', 'diet', 'ingredients', 'preferences'];
 // dicono quanto manca ma non che cosa manca.
 const ETICHETTE_PASSI = {
   welcome: 'Benvenuto',
-  apikey: 'API key',
+  'apikey': 'API key',
   diet: 'Dieta',
   ingredients: 'Ingredienti',
   preferences: 'Preferenze',
@@ -510,7 +510,6 @@ function PreferencesStep({ onDone, addToast }) {
     // niente, ed è quello che faceva il vecchio interruttore acceso.
     cuisines: { italiana: 100 },
     max_prep_time_min: 45,
-    budget_level: 'medio',
   });
   const [busy, setBusy] = useState(false);
 
@@ -579,18 +578,6 @@ function PreferencesStep({ onDone, addToast }) {
             <option value="30">30 minuti</option>
             <option value="45">45 minuti</option>
             <option value="60">1 ora</option>
-          </select>
-        </div>
-
-        <div className="field">
-          <label className="field-label">Budget</label>
-          <select
-            value={prefs.budget_level ?? ''}
-            onChange={(e) => setPrefs((p) => ({ ...p, budget_level: e.target.value || null }))}
-          >
-            <option value="economico">Economico</option>
-            <option value="medio">Medio</option>
-            <option value="premium">Senza pensieri</option>
           </select>
         </div>
       </div>

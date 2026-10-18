@@ -40,8 +40,8 @@ REALISMO), `SINGLE_MEAL_SYSTEM` e `SUBSTITUTE_SYSTEM` —, o il prompt si
 contraddirebbe da una schermata all'altra. Resta com'era `SHOPPING_CHAT_SYSTEM`, dove
 il sostituto deve stare sullo scaffale davvero: lì l'utente è in negozio e non può
 aspettare una consegna. In lista della spesa le salse restano **righe distinte**:
-`normalize_name` non le accorpa — sono alimenti diversi, con prezzi diversi — e stanno
-a catalogo (`utils/pricing.py`) perché senza una riga di anagrafica il reparto lo
+`normalize_name` non le accorpa — sono alimenti diversi, con sapori diversi — e stanno
+a catalogo (`utils/ingredient_catalog.py`) perché senza una riga di anagrafica il reparto lo
 indovina `guess_category`, che proprio sulle più usate sbaglia: "salsa di pesce" al
 banco del pesce, "pasta di curry" fra i cereali, "latte di cocco" fra i latticini.
 

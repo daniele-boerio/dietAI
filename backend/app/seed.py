@@ -15,7 +15,7 @@ from .database import SessionLocal
 from .models import Ingredient, User
 from .services.macros import apply_catalog_composition
 from .services.accounts import admin_user, create_user
-from .utils.pricing import INGREDIENT_CATALOG, guess_category
+from .utils.ingredient_catalog import INGREDIENT_CATALOG, guess_category
 from .utils.seasonality import season_months_for
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -25,7 +25,7 @@ logger = logging.getLogger("seed")
 def seed_ingredients(db) -> tuple[int, int]:
     """Inserisce (o aggiorna) l'anagrafica dal catalogo."""
     created = updated = 0
-    for name, (category, price, price_unit) in INGREDIENT_CATALOG.items():
+    for name, category in INGREDIENT_CATALOG.items():
         ingredient = db.query(Ingredient).filter(Ingredient.name == name).first()
         if ingredient:
             # Il reparto spostato a mano dalla lista della spesa vince sul catalogo:
@@ -33,21 +33,14 @@ def seed_ingredients(db) -> tuple[int, int]:
             # spaghetti tornerebbero in "altro" al primo deploy.
             if not ingredient.category_by_user:
                 ingredient.category = category
-            # Stessa cosa per il prezzo: quello segnato allo scaffale è vero, quello
-            # del catalogo è una media nazionale. Vince il primo.
-            if not ingredient.price_by_user:
-                ingredient.avg_price_per_unit = price
-                ingredient.price_unit = price_unit
             ingredient.season_months = season_months_for(name)
-            # La composizione corretta a mano non si tocca, come il reparto e il prezzo.
+            # La composizione corretta a mano non si tocca, come il reparto.
             apply_catalog_composition(ingredient)
             updated += 1
         else:
             ingredient = Ingredient(
                 name=name,
                 category=category,
-                avg_price_per_unit=price,
-                price_unit=price_unit,
                 season_months=season_months_for(name),
             )
             apply_catalog_composition(ingredient)

@@ -1,4 +1,4 @@
-"""Lista della spesa: aggregazione, stima costo, spesa fatta.
+"""Lista della spesa: aggregazione e spesa fatta.
 
 La lista non è una cosa che l'utente compila e non è nemmeno una cosa che si chiude:
 è una funzione del piano, e dice sempre la stessa cosa — **quello che le ricette da
@@ -33,10 +33,9 @@ from ..models import (
     RecipeIngredient,
     ShoppingList,
     ShoppingListItem,
-    UserPreferences,
     WeekPlan,
 )
-from ..utils.units import format_quantity, price_for, to_base
+from ..utils.units import format_quantity, to_base
 
 # Ordine dei reparti nella lista: è il giro che si fa al supermercato, non l'alfabeto.
 CATEGORY_ORDER = [
@@ -223,8 +222,8 @@ def rebuild_shopping_list(db: Session, user_id: int) -> ShoppingList:
             quantity, unit = to_base(item.quantity_available, item.unit or "unità")
             pantry[(item.ingredient_id, unit)] = pantry.get((item.ingredient_id, unit), 0) + quantity
 
-    # La lista si aggiorna per differenza, non si cancella e si riscrive. Le spunte, le
-    # quantità prese e il prezzo scritto a mano stanno sulla riga e restano dove sono:
+    # La lista si aggiorna per differenza, non si cancella e si riscrive. Le spunte e le
+    # quantità prese stanno sulla riga e restano dove sono:
     # rigenerare una ricetta non deve far ripartire da capo chi è già al supermercato.
     # E gli id restano gli stessi: prima cambiavano a ogni lettura, e una spunta data
     # dal telefono mentre il computer rileggeva la lista finiva in un 404.
@@ -232,14 +231,6 @@ def rebuild_shopping_list(db: Session, user_id: int) -> ShoppingList:
         (i.ingredient_id, i.unit): i
         for i in db.query(ShoppingListItem).filter(ShoppingListItem.shopping_list_id == lst.id)
     }
-    ingredienti = {
-        i.id: i
-        for i in db.query(Ingredient).filter(
-            Ingredient.id.in_({ingredient_id for ingredient_id, _ in totals})
-        )
-    } if totals else {}
-
-    estimated_total = 0.0
     servono: set[tuple[int, str]] = set()
     for (ingredient_id, unit), quantity in totals.items():
         if ingredient_id in base_ids:
@@ -251,21 +242,6 @@ def rebuild_shopping_list(db: Session, user_id: int) -> ShoppingList:
         chiave = (ingredient_id, unit)
         servono.add(chiave)
         riga = previous.get(chiave)
-        ingredient = ingredienti[ingredient_id]
-        # Il costo segue quello che si porta a casa: se il pacco è più grande della
-        # quantità che serve, il conto alla cassa è quello del pacco. A meno che il
-        # prezzo l'utente non l'abbia scritto: quello vale com'è, anche se intanto la
-        # quantità in lista è cambiata perché il piano è cambiato.
-        pagato = riga.paid_price if riga is not None else None
-        taken = (riga.bought_quantity if riga is not None else None) or round(net, 2)
-        price = (
-            pagato
-            if pagato is not None
-            else price_for(taken, unit, ingredient.avg_price_per_unit, ingredient.price_unit)
-        )
-        if price:
-            estimated_total += price
-
         if riga is None:
             db.add(
                 ShoppingListItem(
@@ -274,18 +250,15 @@ def rebuild_shopping_list(db: Session, user_id: int) -> ShoppingList:
                     total_quantity=round(net, 2),
                     unit=unit,
                     is_checked=False,
-                    estimated_price=price,
                 )
             )
         else:
             riga.total_quantity = round(net, 2)
-            riga.estimated_price = price
 
     for chiave, riga in previous.items():
         if chiave not in servono:
             db.delete(riga)
 
-    lst.estimated_cost = round(estimated_total, 2) if estimated_total else None
     db.flush()
     return lst
 
@@ -337,7 +310,6 @@ def serialize_shopping_list(db: Session, user_id: int, lst: ShoppingList) -> dic
     }
 
     groups: dict[str, list[dict]] = {}
-    summary: dict[str, float] = {}
 
     for item, ingredient in rows:
         category = ingredient.category or "altro"
@@ -359,36 +331,18 @@ def serialize_shopping_list(db: Session, user_id: int, lst: ShoppingList) -> dic
                     if item.bought_quantity
                     else None
                 ),
-                "estimated_price": item.estimated_price,
-                # Quello che l'utente ha scritto per *questa* riga: è la cifra che
-                # ritrova nel campo quando lo riapre, e quella che il totale conta al
-                # posto della stima.
-                "paid_price": item.paid_price,
-                # Un prezzo che l'utente ha segnato allo scaffale vale come dato, uno
-                # del catalogo vale come indizio: la UI li distingue. Il flag sta
-                # sull'ingrediente perché il prezzo al chilo imparato vale per tutte
-                # le liste, anche dove nessuno ha scritto niente.
-                "price_by_user": ingredient.price_by_user,
-                "last_paid_at": (
-                    ingredient.last_paid_at.isoformat() if ingredient.last_paid_at else None
-                ),
-                "unit_price": ingredient.avg_price_per_unit,
-                "price_unit": ingredient.price_unit,
                 # Quello che di questo articolo è già in casa, e se è servito a
                 # qualcosa: senza, una riga che la dispensa copre a metà (o che non
                 # copre per un'unità che non torna) sembra un conto sbagliato.
                 "pantry": _pantry_note(scorte.get(ingredient.id), item),
             }
         )
-        if item.estimated_price:
-            summary[category] = round(summary.get(category, 0) + item.estimated_price, 2)
 
     categories = [
         {
             "key": key,
             "label": CATEGORY_LABELS.get(key, key.capitalize()),
             "items": sorted(groups[key], key=lambda i: i["name"]),
-            "estimated_price": summary.get(key),
         }
         for key in CATEGORY_ORDER
         if key in groups
@@ -396,9 +350,6 @@ def serialize_shopping_list(db: Session, user_id: int, lst: ShoppingList) -> dic
 
     total_items = sum(len(c["items"]) for c in categories)
     checked_items = sum(1 for c in categories for i in c["items"] if i["is_checked"])
-    # Quanti costi vengono da un prezzo segnato allo scaffale invece che dalla media
-    # del catalogo: è la misura di quanto ci si può fidare del totale.
-    priced_items = sum(1 for c in categories for i in c["items"] if i["price_by_user"])
 
     # Il periodo che la lista sta comprando: dal primo all'ultimo giorno con una
     # ricetta ancora da cucinare. Non è "questa settimana" — se hai generato anche la
@@ -410,49 +361,20 @@ def serialize_shopping_list(db: Session, user_id: int, lst: ShoppingList) -> dic
         "id": lst.id,
         "week_plan_id": lst.week_plan_id,
         "completed_at": lst.completed_at.isoformat() if lst.completed_at else None,
-        "estimated_cost": lst.estimated_cost,
         "covers_from": min(giorni).isoformat() if giorni else None,
         "covers_to": max(giorni).isoformat() if giorni else None,
         # Dove si ferma la spesa e quanto piano resta fuori: senza, chi ha pianificato
         # tre settimane vede meno roba di quella che si aspetta e pensa a un errore.
         "horizon": shopping_horizon().isoformat(),
         "meals_beyond": meals_beyond_horizon(db, user_id),
-        "budget": _budget_for(db, user_id, lst.estimated_cost, giorni),
         "total_items": total_items,
         "checked_items": checked_items,
-        "priced_items": priced_items,
         "categories": categories,
-        "categories_summary": summary,
         # Tutti i reparti, non solo quelli con qualcosa dentro: servono a spostarci un
         # ingrediente finito nel posto sbagliato (gli spaghetti in "altro").
         "all_categories": [
             {"key": key, "label": CATEGORY_LABELS[key]} for key in CATEGORY_ORDER
         ],
-    }
-
-
-def _budget_for(db: Session, user_id: int, costo: float | None, giorni: list) -> dict | None:
-    """Il tetto settimanale portato sul periodo che la lista copre davvero.
-
-    La lista non compra una settimana: compra dal primo all'ultimo giorno con una
-    ricetta ancora da cucinare, fino a due settimane. Confrontarne il totale con il
-    tetto di **una** settimana direbbe «fuori budget» a chiunque abbia generato anche
-    la prossima. Quindi il tetto si scala sui giorni coperti (60 € a settimana, nove
-    giorni = 77 €), e il confronto è con quello.
-    """
-    prefs = db.query(UserPreferences).filter(UserPreferences.user_id == user_id).first()
-    if not prefs or not prefs.weekly_budget_eur:
-        return None
-    if giorni:
-        n = (max(giorni) - min(giorni)).days + 1
-    else:
-        n = 7
-    tetto = round(prefs.weekly_budget_eur * n / 7, 2)
-    return {
-        "weekly": prefs.weekly_budget_eur,
-        "days": n,
-        "limit": tetto,
-        "over": costo is not None and costo > tetto,
     }
 
 
@@ -701,7 +623,4 @@ def export_text(db: Session, user_id: int, lst: ShoppingList) -> str:
             mark = "x" if item["is_checked"] else " "
             lines.append(f"  [{mark}] {item['name']} — {item['label']}")
         lines.append("")
-
-    if data["estimated_cost"]:
-        lines.append(f"Totale stimato: € {data['estimated_cost']:.2f}".replace(".", ","))
     return "\n".join(lines)

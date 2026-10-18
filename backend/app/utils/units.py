@@ -1,4 +1,4 @@
-"""Unità di misura: normalizzazione, somma e conversione per la stima di costo.
+"""Unità di misura: normalizzazione, somma e conversione.
 
 L'AI scrive le quantità in modo naturale ("200 g", "0.5 kg", "2 cucchiai"), ma la
 lista della spesa deve sommare mele con mele. Qui si riporta tutto a tre unità
@@ -85,47 +85,3 @@ def format_quantity(quantity: float, unit: str) -> str:
     else:
         num = f"{quantity:.1f}".replace(".", ",")
     return f"{num} {unit}"
-
-
-def unit_price_from(paid: float, quantity: float, unit: str) -> tuple[float, str] | None:
-    """Il prezzo al kg / al litro / a unità che si ricava da uno scontrino.
-
-    È l'inverso di `price_for`: lì si stima quanto costerà una quantità partendo da un
-    prezzo medio, qui si impara quanto costa l'unità di misura partendo da quello che
-    si è pagato davvero. Serve perché all'utente si chiede la cifra che ha sotto gli
-    occhi — quanto è costato quel pacco — non un prezzo al chilo da calcolare a mente.
-    """
-    base_qty, base_unit = to_base(quantity, unit)
-    if paid <= 0 or base_qty <= 0:
-        return None
-    if base_unit == "g":
-        return round(paid / (base_qty / 1000), 2), "kg"
-    if base_unit == "ml":
-        return round(paid / (base_qty / 1000), 2), "l"
-    if base_unit == "unità":
-        return round(paid / base_qty, 2), "unità"
-    return None
-
-
-def price_for(quantity: float, unit: str, avg_price: float | None, price_unit: str | None):
-    """Stima il costo di una quantità dato il prezzo medio per kg / l / unità.
-
-    Restituisce None quando manca il prezzo o l'unità non è confrontabile (es. un
-    prezzo al kg per un ingrediente contato a unità): meglio nessuna stima che una
-    stima inventata.
-    """
-    if avg_price is None or not price_unit:
-        return None
-
-    base_qty, base_unit = to_base(quantity, unit)
-    price_unit = normalize_unit(price_unit)
-
-    if price_unit == "kg" and base_unit == "g":
-        return round(base_qty / 1000 * avg_price, 2)
-    if price_unit == "l" and base_unit == "ml":
-        return round(base_qty / 1000 * avg_price, 2)
-    if price_unit == "unità" and base_unit == "unità":
-        return round(base_qty * avg_price, 2)
-    if price_unit == base_unit:
-        return round(base_qty * avg_price, 2)
-    return None

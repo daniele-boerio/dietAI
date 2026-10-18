@@ -1,6 +1,6 @@
 # Nomi degli ingredienti e accorpamenti
 
-Normalizzazione, catalogo prezzi, regole dalle Impostazioni. Il perché di ogni scelta: le regole in breve stanno in
+Normalizzazione, catalogo dei reparti, regole dalle Impostazioni. Il perché di ogni scelta: le regole in breve stanno in
 `CLAUDE.md`, qui c'è la storia che le giustifica.
 
 **I nomi degli ingredienti si normalizzano.** `services/ingredients.normalize_name`
@@ -42,7 +42,7 @@ applica **sulla parola** e non sul nome intero, o "couscous integrale" resterebb
 riga a sé.
 
 Sempre per lo stesso motivo, **singolare e plurale sono lo stesso alimento** e finiscono
-sulla forma del catalogo, che è quella a cui sono attaccati reparto e prezzo
+sulla forma del catalogo, che è quella a cui sono attaccati reparto e composizione
 (`_CATALOG_FORMS`: "peperone" → "peperoni", "cetriolo" → "cetrioli", "uovo" → "uova").
 La mappa si **deriva** dal catalogo invece di scriverla a mano — un elenco a parte
 resterebbe indietro al primo ingrediente aggiunto — e genera solo le coppie che in
@@ -52,16 +52,17 @@ due nomi del catalogo, o che è già un nome del catalogo, si lascia stare. Il c
 sul nome intero e si fa **per ultimo**, dopo accorpamenti e qualificatori: prima
 "sedani" dev'essere diventato pasta, e "peperone rosso" dev'essere già "peperone".
 
-Chi unisce tocca anche `utils/pricing.py`, in due modi: il nome fabbricato va aggiunto
-(o resta senza prezzo, e sono sempre le voci più care) e quelli che ha inghiottito
+Chi unisce tocca anche `utils/ingredient_catalog.py`, in due modi: il nome fabbricato va aggiunto
+(o resta senza reparto né composizione) e quelli che ha inghiottito
 vanno tolti — il seed semina l'anagrafica coi nomi del catalogo così come sono
 scritti, quindi un nome che `normalize_name` non può più produrre diventa una riga che
 nessuna ricetta userà mai, ricreata a ogni avvio del container. Non è un promemoria:
 `test_normalizzazione.py` rende ogni nome del catalogo e pretende che esca identico, e
-che due voci non finiscano sulla stessa riga (sarebbero due prezzi per lo stesso nome,
+che due voci non finiscano sulla stessa riga (sarebbero due reparti per lo stesso nome,
 e a vincere sarebbe l'ultimo seminato). È così che si sono scoperte cinque righe morte
 — "tonno fresco", "manzo macinato", "fave secche", "piselli secchi", "frutta secca
-mista" — che il seed ricreava a ogni avvio mentre l'alimento vero restava senza prezzo.
+mista" — che il seed ricreava a ogni avvio mentre l'alimento vero restava senza
+reparto né composizione.
 
 **Le stesse regole si allargano dalle Impostazioni**, senza deploy (Impostazioni →
 Nomi e accorpamenti, solo amministratore: l'anagrafica è una sola per tutti).
@@ -77,7 +78,7 @@ generazione) e togliendo la riga tutto torna com'era. Serve per i termini ambigu
 mostra barrati invece di farli sparire: nascosti, fra sei mesi si riscriverebbero a mano.
 Se si spegne l'ultimo termine di un gruppo la sostituzione viene **saltata**, non
 compilata vuota (`\b()\b` matcha ovunque). Si applicano **dopo** le regole del codice, che restano la base su cui si
-reggono il catalogo dei prezzi e mezza suite di test; per questo un termine si salva
+reggono il catalogo e mezza suite di test; per questo un termine si salva
 già normalizzato ("pasta rigate", non "penne rigate") e chi ne aggiunge uno inutile si
 sente rispondere perché. Senza regole aggiunte `NormalizationRules` è falsa e la
 normalizzazione resta identica byte per byte (`__bool__`): è la garanzia che questo

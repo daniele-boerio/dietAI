@@ -217,20 +217,28 @@ def test_a_spesa_fatta_le_ricette_si_cambiano_lo_stesso(client, questa):
 # ── Il piano cambia in una settimana, la lista è dell'altra ────────────────────
 
 
-def test_generare_la_prossima_riallinea_la_lista_di_questa(client, questa):
+def test_generare_la_prossima_riallinea_la_lista_di_questa(client, questa, db):
     """La dashboard legge la lista senza ricostruirla: se generare la settimana
     prossima non toccasse la lista, resterebbe indietro di sette giorni."""
+    from app.models import ShoppingListItem
+
+    def roba():
+        db.expire_all()
+        return sum(i.total_quantity for i in db.query(ShoppingListItem).all())
+
     client.get("/api/shopping/current")  # la lista esiste
     prima = client.get("/api/tracking/dashboard").json()["shopping"]
+    quanta_prima = roba()
 
     w = client.get("/api/planning/weeks/next").json()
     client.post(f"/api/planning/weeks/{w['id']}/generate")
 
     dopo = client.get("/api/tracking/dashboard").json()["shopping"]
-    # Stessi ingredienti (le righe non cambiano), ma il doppio della roba: è il costo
-    # a dire se la lista si è davvero rifatta.
+    # Stessi ingredienti (le righe non cambiano), ma il doppio della roba: sono le
+    # quantità, lette senza passare dalla pagina della spesa, a dire se la lista si è
+    # davvero rifatta.
     assert dopo["total_items"] == prima["total_items"]
-    assert dopo["estimated_cost"] == pytest.approx(prima["estimated_cost"] * 2, rel=0.05)
+    assert roba() == pytest.approx(quanta_prima * 2, rel=0.05)
 
 
 def test_la_chat_della_spesa_cambia_anche_i_pasti_della_prossima(client, prossima, monkeypatch):

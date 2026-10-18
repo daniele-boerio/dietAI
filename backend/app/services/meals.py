@@ -21,6 +21,7 @@ from .planner import (
     forget_tracking,
     serialize_meal,
     skip_meal,
+    spread_recurring,
     stop_recurring_forward,
     unskip_meal,
     week_meals,
@@ -130,17 +131,19 @@ def set_recurring(
     # settimane già aperte ci sono già, e lasciarle vorrebbe dire spegnere
     # l'interruttore trovandosi la luce accesa lo stesso.
     tolte = 0 if is_recurring else stop_recurring_forward(db, user_id, meal, day)
+    messe = spread_recurring(db, user_id, meal, day) if is_recurring else 0
     db.commit()
 
-    if tolte:
+    if tolte or messe:
         # Il piano è cambiato da qui in avanti, quindi la spesa pure.
         rebuild_shopping_list(db, user_id)
         db.commit()
 
     payload = _full(db, day, meal)
-    # Quante caselle si è portata via: senza dirlo, la ricetta sparita dai giorni dopo
-    # sembra un effetto collaterale invece della cosa che si è chiesta.
+    # Quante caselle si è portata via o ha riempito: senza dirlo, la ricetta sparita (o
+    # comparsa) nei giorni dopo sembra un effetto collaterale invece della cosa chiesta.
     payload["cleared_forward"] = tolte
+    payload["filled_forward"] = messe
     return payload
 
 

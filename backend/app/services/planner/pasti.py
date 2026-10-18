@@ -223,6 +223,65 @@ def stop_recurring_forward(
     return tolte
 
 
+def spread_recurring(db: Session, user_id: int, meal: PlannedMeal, day: DayPlan) -> int:
+    """Mettendo il «fisso», il piatto va subito nelle caselle che la regola copre.
+
+    Prima la spunta si limitava a segnare la casella, e `apply_recurring_meals` la
+    ricopiava solo sulle settimane create **dopo**: il resto di questa settimana e
+    quelle già aperte restavano come prima, e il pulsante sembrava non fare niente —
+    «la colazione è sempre questa» lasciava sei colazioni diverse.
+
+    Si riempiono le caselle dello stesso pasto, dopo questa e mai prima di oggi, nei
+    giorni della regola (tutti, o quel giorno della settimana), anche se avevano già un
+    piatto: fissare vuol dire proprio sostituirlo. Restano fuori quelle già vissute
+    (seguite o rimandate), i giorni saltati e la casella dove è accodato un piatto
+    rimandato: sono fatti o scelte dell'utente, non programma.
+    """
+    if not meal.recipe_id:
+        return 0
+    rule = meal.recurring_rule or {"type": "weekly", "day": day.day_of_week}
+
+    caselle = (
+        db.query(PlannedMeal, DayPlan)
+        .join(DayPlan, DayPlan.id == PlannedMeal.day_plan_id)
+        .join(WeekPlan, WeekPlan.id == DayPlan.week_plan_id)
+        .filter(
+            WeekPlan.user_id == user_id,
+            DayPlan.date > day.date,
+            DayPlan.date >= planner.today(),
+            DayPlan.is_skipped.is_(False),
+            PlannedMeal.id != meal.id,
+            PlannedMeal.meal_slot_id == meal.meal_slot_id,
+            PlannedMeal.is_skipped.is_(False),
+            PlannedMeal.is_followed.is_(None),
+        )
+        .all()
+    )
+    accodate = {
+        target
+        for (target,) in db.query(PlannedMeal.skipped_to_meal_id).filter(
+            PlannedMeal.skipped_to_meal_id.in_([c.id for c, _ in caselle] or [0])
+        )
+    }
+
+    messe = 0
+    for casella, giorno in caselle:
+        if rule.get("type") != "daily" and giorno.day_of_week != rule.get("day"):
+            continue
+        if casella.id in accodate:
+            continue
+        if casella.recipe_id != meal.recipe_id:
+            forget_tracking(casella)
+        casella.recipe_id = meal.recipe_id
+        casella.source = meal.source
+        casella.is_recurring = True
+        casella.recurring_rule = rule
+        messe += 1
+
+    db.flush()
+    return messe
+
+
 # ── Pasti saltati ──────────────────────────────────────────────────────────────
 
 

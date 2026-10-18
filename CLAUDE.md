@@ -198,8 +198,9 @@ paragrafo nel documento, scrivendo anche cosa non andava con la versione di prim
   stima, `pantry_used`): i vincoli `ck_planned_meal_*` (migrazione 0035) rifiutano gli
   stati incoerenti, e porzioni, batch, macro e quantità fuori regola.
 - «Lo faccio io» (`auto_generate=False`): mai generato, mai in spesa, ma i macro
-  **contano**. I pasti fissi (`_is_fixed`) non si rigenerano; togliere il fisso svuota
-  le copie future (`stop_recurring_forward`).
+  **contano**. I pasti fissi (`_is_fixed`) non si rigenerano; mettere il fisso (tutti i
+  giorni o quel giorno della settimana) riempie subito le caselle in avanti
+  (`spread_recurring`), toglierlo svuota le copie future (`stop_recurring_forward`).
 - Per pasto: `servings` (per quante persone: moltiplica spesa e dispensa, mai ricetta e
   macro) e `batch_days` (stesso piatto per N giorni consecutivi: Python fa i gruppi, il
   modello genera la prima casella, le altre ricevono la stessa ricetta).

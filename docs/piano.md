@@ -78,6 +78,20 @@ faccio io»*).
 `_is_fixed()` li salta nella generazione e la settimana successiva se li ripropone
 (`apply_recurring_meals`, che assegna la **stessa** ricetta: vedi qui sotto).
 
+**Mettendo la spunta, il piatto va subito dove la regola dice.** «Rendi fisso»
+chiede ogni quanto — tutti i giorni o tutti i martedì (il giorno della casella) — e
+`spread_recurring` mette la ricetta nelle caselle di quel pasto dopo questa, da oggi
+in avanti, in questa settimana e in quelle già aperte, anche se avevano un altro
+piatto: fissare vuol dire sostituirlo. Restano fuori le caselle già segnate, i giorni
+saltati e la casella dove è accodato un piatto rimandato. La risposta porta
+`filled_forward`, che il toast dice. Prima la spunta segnava solo la casella, il
+frontend non mandava la regola (quindi «ogni settimana, quel giorno») e
+`apply_recurring_meals` ricopiava solo sulle settimane create dopo: la colazione
+fissata il lunedì lasciava sei colazioni diverse, e il pulsante sembrava non fare
+niente. La spesa non si gonfia con un fisso «per sempre»: le settimane si creano solo
+aprendole, e la lista guarda comunque fino alla domenica della settimana prossima
+(`shopping_horizon`); guardia in `test_un_fisso_per_sempre_non_gonfia_la_spesa`.
+
 **E togliendo la spunta se ne vanno anche le copie già fatte.** Un pasto fisso si
 ricopia da sé sulle settimane che si aprono — e una settimana si apre anche solo
 sfogliandola — quindi quando si toglie il «fisso» quelle copie sono già scritte in

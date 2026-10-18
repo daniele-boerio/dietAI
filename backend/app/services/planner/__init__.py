@@ -35,7 +35,8 @@ from .stato import (  # noqa: F401
 from .pasti import (  # noqa: F401
     apply_recurring_meals, clear_meal_cell, _empty_meal, ensure_not_skipped,
     forget_queued_meal, forget_tracking, _free_cells, _is_fixed, is_generable,
-    _overflow_week, skip_day, skip_meal, stop_recurring_forward, unskip_meal,
+    _overflow_week, skip_day, skip_meal, spread_recurring, stop_recurring_forward,
+    unskip_meal,
 )
 from .contesto import (  # noqa: F401
     _base_names, build_context, cuisine_shares, _excluded_names, _fmt_list,

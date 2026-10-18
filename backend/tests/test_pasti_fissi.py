@@ -61,6 +61,52 @@ def test_il_pasto_fisso_riempie_la_settimana_dopo(client, colazione_fissa):
     assert all(c["is_recurring"] for c in colazioni(nxt))
 
 
+def test_il_pasto_fisso_riempie_subito_il_resto_della_settimana(client, colazione_fissa):
+    """Il pulsante che «non faceva niente»: la spunta segnava la casella e basta, e il
+    piatto compariva solo sulle settimane create dopo."""
+    assert colazione_fissa["filled_forward"] == 6
+    week = client.get("/api/planning/weeks/current").json()
+    assert all(c["recipe"]["title"] == RICETTA["title"] for c in colazioni(week))
+    assert all(c["is_recurring"] for c in colazioni(week))
+
+
+def test_sostituisce_i_piatti_che_c_erano_ma_non_quelli_vissuti(client, diet):
+    week = client.get("/api/planning/weeks/current").json()
+    altra = {**RICETTA, "title": "Pane e marmellata"}
+    for dow in (1, 2):
+        client.put(
+            f"/api/planning/meals/{pasto(week, dow, 'Colazione')['id']}/assign",
+            json={"recipe": altra},
+        )
+    seguita = pasto(week, 2, "Colazione")
+    client.put(f"/api/planning/meals/{seguita['id']}/followed", json={"is_followed": True})
+
+    lunedi = pasto(week, 0, "Colazione")
+    client.put(f"/api/planning/meals/{lunedi['id']}/assign", json={"recipe": RICETTA})
+    res = client.put(
+        f"/api/planning/meals/{lunedi['id']}/recurring",
+        json={"is_recurring": True, "recurring_rule": {"type": "daily"}},
+    )
+    assert res.json()["filled_forward"] == 5
+
+    titoli = [c["recipe"]["title"] for c in colazioni(client.get("/api/planning/weeks/current").json())]
+    assert titoli[1] == RICETTA["title"]  # martedì: era un altro piatto, ora è il fisso
+    assert titoli[2] == "Pane e marmellata"  # mercoledì è già segnato: resta com'è
+
+
+def test_la_regola_settimanale_riempie_solo_quel_giorno(client, diet):
+    client.get("/api/planning/weeks/next")  # la prossima esiste già: va riempita anche lì
+    week = client.get("/api/planning/weeks/current").json()
+    lunedi = pasto(week, 0, "Colazione")
+    client.put(f"/api/planning/meals/{lunedi['id']}/assign", json={"recipe": RICETTA})
+
+    res = client.put(f"/api/planning/meals/{lunedi['id']}/recurring", json={"is_recurring": True})
+    assert res.json()["filled_forward"] == 1
+
+    nxt = client.get("/api/planning/weeks/next").json()
+    assert [bool(c["recipe"]) for c in colazioni(nxt)] == [True] + [False] * 6
+
+
 # ── Togliendo la spunta se ne va da lì in poi ──────────────────────────────────
 
 
@@ -72,7 +118,8 @@ def test_togliere_il_fisso_svuota_le_caselle_in_avanti(client, colazione_fissa):
         json={"is_recurring": False},
     )
     assert res.status_code == 200, res.text
-    assert res.json()["cleared_forward"] == 7
+    # Da martedì a domenica di questa settimana, più le sette della prossima.
+    assert res.json()["cleared_forward"] == 13
 
     nxt = client.get("/api/planning/weeks/next").json()
     assert all(c["recipe"] is None for c in colazioni(nxt))
@@ -113,7 +160,7 @@ def test_una_casella_già_vissuta_non_si_cancella(client, colazione_fissa):
         f"/api/planning/meals/{colazione_fissa['id']}/recurring",
         json={"is_recurring": False},
     )
-    assert res.json()["cleared_forward"] == 6
+    assert res.json()["cleared_forward"] == 12
 
     rimasta = pasto(client.get("/api/planning/weeks/next").json(), 1, "Colazione")
     assert rimasta["recipe"]["title"] == RICETTA["title"]
@@ -140,7 +187,7 @@ def test_una_colazione_uguale_scelta_a_mano_non_e_una_copia(client, colazione_fi
     res = client.put(
         f"/api/planning/meals/{colazione_fissa['id']}/recurring", json={"is_recurring": False}
     )
-    assert res.json()["cleared_forward"] == 6
+    assert res.json()["cleared_forward"] == 12
 
     rimasta = pasto(client.get("/api/planning/weeks/next").json(), 2, "Colazione")
     assert rimasta["recipe"]["title"] == RICETTA["title"]
@@ -185,7 +232,7 @@ def test_la_spesa_si_accorcia(client, colazione_fissa):
     )
 
     # Restava solo il lunedì da cui si è tolta la spunta.
-    assert prima == pytest.approx(8 * 200)
+    assert prima == pytest.approx(14 * 200)
     assert yogurt() == pytest.approx(200)
 
 
@@ -222,6 +269,20 @@ def test_eliminare_toglie_il_piatto_dalla_spesa(client, colazione_fissa):
         voci = {i["name"]: i for cat in lst["categories"] for i in cat["items"]}
         return voci.get("mandorle", {}).get("quantity", 0)
 
-    assert mandorle() == pytest.approx(30)
+    assert mandorle() == pytest.approx(7 * 30)
     client.delete(f"/api/planning/meals/{colazione_fissa['id']}/recipe")
-    assert mandorle() == 0
+    # Via la casella del lunedì; gli altri giorni restano in programma.
+    assert mandorle() == pytest.approx(6 * 30)
+
+
+def test_un_fisso_per_sempre_non_gonfia_la_spesa(client, colazione_fissa):
+    """Il fisso si ripete su ogni settimana che si apre, anche fra un anno: la spesa
+    però guarda solo fino alla domenica della settimana prossima (`shopping_horizon`),
+    altrimenti «tutti i giorni» vorrebbe dire comprare cereali per un anno."""
+    client.get("/api/planning/weeks/next")
+    lontana = client.get("/api/planning/weeks/by-date/2100-01-04").json()
+    assert all(c["recipe"] for c in colazioni(lontana))
+
+    lst = client.get("/api/shopping/current").json()
+    voci = {i["name"]: i for cat in lst["categories"] for i in cat["items"]}
+    assert voci["yogurt greco"]["quantity"] == pytest.approx(14 * 200)

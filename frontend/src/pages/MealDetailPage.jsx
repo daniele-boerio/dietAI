@@ -44,6 +44,7 @@ export default function MealDetailPage() {
   const [picker, setPicker] = useState(false);
   const [generator, setGenerator] = useState(false);
   const [swapping, setSwapping] = useState(false);
+  const [fissando, setFissando] = useState(false);
 
   // Lo spinner solo quando si è senza niente a schermo: `load()` si richiama anche
   // dopo una sostituzione, col dialogo del risultato aperto sopra la pagina, e
@@ -135,12 +136,19 @@ export default function MealDetailPage() {
     }
   };
 
-  const toggleRecurring = async () => {
+  // Mettere il fisso chiede prima ogni quanto (FissoDialog); toglierlo no.
+  const toggleRecurring = async (rule = null) => {
     try {
-      const updated = await api.setRecurring(mealId, !meal.is_recurring);
+      const updated = await api.setRecurring(mealId, !meal.is_recurring, rule);
       setMeal(updated);
+      setFissando(false);
       if (!meal.is_recurring) {
-        addToast("Pasto fisso: si ripete sulle settimane che apri ✓");
+        const n = updated.filled_forward;
+        addToast(
+          n
+            ? `Pasto fisso ✓ Messo anche in ${n} ${n === 1 ? "casella successiva" : "caselle successive"}`
+            : "Pasto fisso: si ripete sulle settimane che apri ✓",
+        );
       } else if (updated.cleared_forward) {
         // La spunta tolta si porta via le copie già scritte nei giorni successivi:
         // se ne succedono sette in silenzio, sembra che si sia rotto qualcosa.
@@ -381,12 +389,12 @@ export default function MealDetailPage() {
 
                     <button
                       className="btn btn-secondary"
-                      onClick={toggleRecurring}
+                      onClick={() => (meal.is_recurring ? toggleRecurring() : setFissando(true))}
                       disabled={frozen}
                       title={
                         meal.is_recurring
                           ? "Smetti di ripeterlo: lo toglie anche dai giorni successivi che lo hanno ricevuto"
-                          : "Ripeti questo pasto ogni settimana"
+                          : "Ripeti questo pasto: tutti i giorni o ogni settimana"
                       }
                     >
                       <Pin
@@ -612,6 +620,14 @@ export default function MealDetailPage() {
         />
       )}
 
+      {fissando && (
+        <FissoDialog
+          meal={meal}
+          onPick={toggleRecurring}
+          onCancel={() => setFissando(false)}
+        />
+      )}
+
       {swapping && (
         <SwapDialog
           meal={meal}
@@ -713,6 +729,58 @@ function GenerateDialog({ meal, busy, onGenerate, onCancel }) {
             <Sparkles size={16} />
           )}
           {richiesta ? "Genera così" : "Scegli tu il piatto"}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+// «Tutti i martedì», «tutti i sabati», «tutte le domeniche».
+const OGNI_GIORNO = {
+  Sabato: "Tutti i sabati",
+  Domenica: "Tutte le domeniche",
+};
+
+/**
+ * Ogni quanto si ripete il pasto fisso.
+ *
+ * Il piatto va subito nelle caselle che la regola copre, da qui in avanti — in
+ * questa settimana e in quelle già aperte — e poi in ogni settimana che si apre. La
+ * spesa non si gonfia: guarda solo fino alla domenica della settimana prossima.
+ */
+function FissoDialog({ meal, onPick, onCancel }) {
+  const [inCorso, setInCorso] = useState(null);
+  const giorno = OGNI_GIORNO[meal.day_name] || `Tutti i ${meal.day_name.toLowerCase()}`;
+
+  const scegli = async (chiave, rule) => {
+    setInCorso(chiave);
+    await onPick(rule);
+    setInCorso(null);
+  };
+
+  return (
+    <Modal title="Fissare questo pasto" onClose={onCancel} busy={inCorso !== null}>
+      <p className="modal-text">
+        <strong>{meal.recipe.title}</strong> diventa il pasto «{meal.slot_name}» dei
+        giorni che scegli, da qui in avanti, al posto di quello che c'era. I pasti già
+        segnati restano come sono.
+      </p>
+      <div className="empty-actions">
+        <button
+          className="btn btn-primary"
+          onClick={() => scegli("daily", { type: "daily" })}
+          disabled={inCorso !== null}
+        >
+          {inCorso === "daily" ? <span className="spinner-inline" /> : <Pin size={16} />}
+          Tutti i giorni
+        </button>
+        <button
+          className="btn btn-secondary"
+          onClick={() => scegli("weekly", { type: "weekly", day: meal.day_of_week })}
+          disabled={inCorso !== null}
+        >
+          {inCorso === "weekly" ? <span className="spinner-inline" /> : <Pin size={16} />}
+          {giorno}
         </button>
       </div>
     </Modal>

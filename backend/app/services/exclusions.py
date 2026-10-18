@@ -15,6 +15,7 @@ costare una reazione allergica.
 import re
 from collections.abc import Iterable
 
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from ..models import (
@@ -229,3 +230,50 @@ def check_recipe(db: Session, user_id: int, data: dict) -> None:
             f"«{titolo}» contiene {', '.join(trovati)}, che hai escluso: non l'ho usata.",
             trovati,
         )
+
+
+def add_excluded(db: Session, user_id: int, name: str, reason: str | None) -> dict:
+    """Aggiunge un alimento da non usare mai, e dice quali pasti in programma lo usano.
+
+    Se il nome corrisponde a un ingrediente noto lo si aggancia all'anagrafica (così
+    la lista della spesa e la dispensa parlano la stessa lingua); altrimenti si
+    conserva il testo libero — "frutti di mare" non è un ingrediente, è una famiglia.
+    """
+    clean = normalize_name(name, load_rules(db))
+    if not clean:
+        raise HTTPException(400, "Nome non valido")
+
+    known = db.query(Ingredient).filter(Ingredient.name == clean).first()
+    already = (
+        db.query(ExcludedIngredient)
+        .filter(
+            ExcludedIngredient.user_id == user_id,
+            (ExcludedIngredient.ingredient_id == known.id)
+            if known
+            else (ExcludedIngredient.custom_name == clean),
+        )
+        .first()
+    )
+    if already:
+        raise HTTPException(409, f"'{clean}' è già nella lista degli esclusi.")
+
+    row = ExcludedIngredient(
+        user_id=user_id,
+        ingredient_id=known.id if known else None,
+        custom_name=None if known else clean,
+        reason=reason,
+    )
+    db.add(row)
+    db.commit()
+    nome = known.name if known else clean
+    # Quello che è già in programma non cambia da solo: lo si dice, così chi ha appena
+    # scoperto un'allergia sa quali pasti rigenerare.
+    regole = [r for r in exclusion_rules(db, user_id) if r[0] == nome]
+    return {
+        "id": row.id,
+        "ingredient_id": row.ingredient_id,
+        "name": nome,
+        "category": known.category if known else None,
+        "reason": row.reason,
+        "conflicts": planned_conflicts(db, user_id, regole),
+    }

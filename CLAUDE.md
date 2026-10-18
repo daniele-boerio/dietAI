@@ -88,6 +88,7 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
 │       │   │   └── generazione.py # generate_week (thread), regenerate_meal
 │       │   ├── recipes.py      # creazione/serializzazione ricette
 │       │   ├── ingredients.py  # normalizzazione nomi, anagrafica
+│       │   ├── normalization.py # regole dalle Impostazioni: validarle, mostrarle, salvarle
 │       │   ├── shopping.py     # aggregazione lista, spesa fatta, dispensa che segue i pasti
 │       │   ├── substitution.py # sostituire un ingrediente: il modello propone, Python applica
 │       │   ├── macros.py       # macro calcolati dagli ingredienti, ritocco grammature

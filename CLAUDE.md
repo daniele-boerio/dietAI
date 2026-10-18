@@ -15,7 +15,7 @@ con questo file e con `docs/`, valgono questi.
 ## Stack
 
 - **Backend:** Python 3.12 · FastAPI · PostgreSQL (SQLAlchemy + Alembic)
-- **Frontend:** React 18 · Vite · React Router 6 · Lucide icons (JSX, nessun TypeScript)
+- **Frontend:** React 18 · Vite · React Router 7 · Lucide icons (JSX, nessun TypeScript)
 - **Auth:** bcrypt · JWT (python-jose) · refresh token con rotazione · cookie httpOnly
 - **AI:** provider a scelta — OpenRouter (default, API OpenAI-compatibile) o SDK
   Anthropic — con la **API key dell'utente**, cifrata in DB. Modello configurabile per ruolo

@@ -68,6 +68,20 @@ racconta pasto per pasto. **Due flag da non confondere:** `DayPlan.is_skipped`
 (giornata intera saltata a mano) e `PlannedMeal.is_skipped` (singolo pasto accodato
 altrove).
 
+**"Ho mangiato questo" riempie una casella vuota a cose fatte.** Un pasto senza ricetta
+di oggi o di un giorno passato (un giorno non generato, una casella svuotata) restava un
+buco: l'andamento non sapeva cosa contare e healthAI non riceveva niente, perché «ho
+mangiato altro» vale solo su un pasto che un piatto ce l'ha. Ora dal dettaglio si
+scrive a parole cosa si è mangiato (`POST /planning/meals/{id}/ate`, `meals.ate`): il
+modello lo scompone negli alimenti di base alle porzioni dette o a quelle tipiche
+(`ATE_RECIPE_SYSTEM`, `recipes.create_from_eaten`), i macro si calcolano dagli
+ingredienti come per ogni ricetta, e la ricetta nasce dell'utente (`is_custom`: nel
+ricettario, mai ritoccata verso un target, esclusi non controllati — è un fatto, non
+una proposta). Il pasto nasce **seguito**, ma la dispensa **non** si scala
+(`pantry_used` resta NULL): non si sa se era roba di casa, e togliere scorte a caso è
+peggio che lasciarle. Su una casella piena risponde 409 e nel futuro 400, prima di
+chiamare il modello. Guardia in `tests/test_ho_mangiato_questo.py`.
+
 **"Lo faccio io" è un flag della dieta, non della settimana.** `MealSlot.auto_generate`
 a False significa che l'utente quel pasto lo prepara da sé: l'AI non lo genera mai e i
 suoi ingredienti non entrano in lista della spesa, **ma i suoi macro contano lo stesso**

@@ -355,6 +355,29 @@ EATEN_ESTIMATE_PROMPT = """PASTO PREVISTO: {slot_name}
 COSA HA MANGIATO INVECE: {text}"""
 
 
+# ── «Ho mangiato questo» su una casella vuota ─────────────────────────────────
+
+ATE_RECIPE_SYSTEM = """Sei DietAI: nutrizionista e cuoco italiano. L'utente aveva un pasto senza ricetta nel suo piano e ti dice, a parole sue, cosa ha mangiato ("pasta al pomodoro con un filo d'olio", "toast prosciutto e formaggio e un caffè", "una pizza margherita al ristorante"). Tu lo trasformi nella ricetta di quel piatto, per UNA persona, così che resti nel piano come pasto consumato.
+
+REGOLE
+1. FEDELTÀ: il piatto è quello che ha mangiato lui. Non migliorarlo, non alleggerirlo, non portarlo verso un target: è un fatto, non un consiglio. Bevande comprese, se le nomina.
+2. QUANTITÀ: se dice le quantità, usa le sue. Altrimenti porzioni tipiche in Italia (una pizza intera da pizzeria, un panino da bar, 80-100 g di pasta secca a casa, un piatto di pasta da trattoria più abbondante, un calice di vino da 150 ml, una birra media da 400 ml). Meglio una stima ragionevole che nessuna: non chiedere chiarimenti.
+3. INGREDIENTI: scomponi il piatto negli alimenti di base con cui è fatto, così che i valori si possano contare da quelli (una pizza margherita: farina, acqua, mozzarella, passata di pomodoro, olio). Grammature del prodotto CRUDO, come si compra; quello che si compra a pezzo va in "unità" ("uovo: 1 unità"). Il nome semplice dell'alimento, come lo si cerca al supermercato.
+4. PROCEDIMENTO: due o tre righe numerate su com'è fatto il piatto; se l'ha mangiato fuori, il primo passo lo dice ("Mangiato fuori: ricetta stimata").
+5. VALORI: calorie, macro, fibre, zuccheri, saturi, alcol (g di etanolo) e caffeina della porzione mangiata.
+6. TITOLO: il nome naturale del piatto, breve ("Pizza margherita", "Toast prosciutto e formaggio con caffè").
+
+FORMATO OUTPUT (JSON rigoroso, solo l'oggetto ricetta):
+""" + RECIPE_JSON_SHAPE + """
+
+Rispondi ESCLUSIVAMENTE con il JSON."""
+
+ATE_RECIPE_PROMPT = """PASTO: {slot_name}
+COSA HA MANGIATO: {text}
+
+Scrivi la ricetta di quello che ha mangiato, per una persona."""
+
+
 # ── Sostituzione di un ingrediente ─────────────────────────────────────────────
 
 SUBSTITUTE_SYSTEM = """Sei DietAI. L'utente vuole sostituire un ingrediente in una ricetta.

@@ -1,5 +1,6 @@
 """Quello che si fa a un singolo pasto del piano: assegnarlo, svuotarlo, fissarlo,
-segnarlo «l'ho seguito» o «ho mangiato altro (cosa?)».
+segnarlo «l'ho seguito» o «ho mangiato altro (cosa?)», o riempirlo a cose fatte con
+quello che si è mangiato («ho mangiato questo»).
 
 Le rotte di `routers/planning.py` tengono la proprietà e il client del modello;
 qui ogni azione cambia il pasto, ricalcola la spesa e risponde col pasto intero
@@ -10,7 +11,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from ..models import DayPlan, MealSlot, PlannedMeal, Recipe, User, WeekPlan
-from . import macros, prompts
+from . import macros, planner, prompts
 from .exclusions import recipe_violations
 from .ownership import own_meal
 from .planner import (
@@ -26,7 +27,7 @@ from .planner import (
     unskip_meal,
     week_meals,
 )
-from .recipes import create_recipe, declared_details
+from .recipes import create_from_eaten, create_recipe, declared_details
 from .shopping import consume_from_pantry, rebuild_shopping_list, restore_to_pantry
 
 NIENTE = "Non ho mangiato niente"
@@ -84,6 +85,46 @@ def assign(
     forget_queued_meal(db, meal)
     db.commit()
 
+    rebuild_shopping_list(db, user.id)
+    db.commit()
+    return _full(db, day, meal)
+
+
+def ate(
+    db: Session, user: User, client_for, meal: PlannedMeal, day: DayPlan, text: str
+) -> dict:
+    """«Ho mangiato questo»: una casella vuota si riempie con quello che si è mangiato.
+
+    Il piatto scritto a parole diventa una ricetta (`create_from_eaten`: il modello la
+    scompone negli alimenti di base, i macro si calcolano dagli ingredienti) e il pasto
+    nasce già segnato «l'ho seguito», così l'andamento e healthAI lo contano come ogni
+    pasto consumato. La dispensa **non** si scala: non si sa se era roba di casa, e
+    togliere a caso le scorte è peggio che lasciarle. Solo su una casella vuota (chi ha
+    già un piatto ha «ho mangiato altro») e di oggi o di un giorno passato: quello che
+    non è ancora successo non si segna.
+    """
+    ensure_not_skipped(day, meal)
+    if meal.recipe_id:
+        raise HTTPException(
+            409,
+            "Questo pasto ha già un piatto: se hai mangiato altro, segnalo con "
+            "«Ho mangiato altro».",
+        )
+    if day.date > planner.today():
+        raise HTTPException(400, "Si può segnare solo un pasto di oggi o dei giorni passati.")
+
+    slot = db.get(MealSlot, meal.meal_slot_id)
+    recipe = create_from_eaten(db, client_for(), user.id, slot_name=slot.name, text=text)
+
+    meal.recipe_id = recipe.id
+    meal.source = "user_custom"
+    forget_tracking(meal)
+    forget_queued_meal(db, meal)
+    meal.is_followed = True
+    meal.pantry_used = None
+    db.commit()
+
+    # Un pasto seguito esce dalla spesa: oggi la casella non chiede più niente.
     rebuild_shopping_list(db, user.id)
     db.commit()
     return _full(db, day, meal)

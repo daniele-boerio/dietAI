@@ -296,6 +296,14 @@ export const api = {
       body: JSON.stringify({ text, nothing }),
     }),
 
+  // «Ho mangiato questo» su una casella vuota: il piatto a parole diventa una ricetta
+  // stimata e il pasto risulta seguito. Risponde col pasto intero.
+  ateMeal: (mealId, text) =>
+    request(`/planning/meals/${mealId}/ate`, {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    }),
+
   setFollowed: (mealId, is_followed, deviation_notes = null) =>
     request(`/planning/meals/${mealId}/followed`, {
       method: 'PUT',

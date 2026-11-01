@@ -851,6 +851,33 @@ def edit_recipe(db: Session, user_id: int, recipe: Recipe, data: dict) -> None:
     rebuild_shopping_list(db, user_id)
 
 
+def create_from_eaten(db: Session, client, user_id: int, *, slot_name: str, text: str) -> Recipe:
+    """La ricetta di quello che si è mangiato, scritto a parole su una casella vuota.
+
+    Il modello scompone il piatto negli alimenti di base, alle porzioni dette o a quelle
+    tipiche (`ATE_RECIPE_SYSTEM`); i macro si calcolano dagli ingredienti come per ogni
+    ricetta. Nasce dell'utente (`is_custom`): l'ha mangiata lui, nessun ritocco verso
+    un target e nessun controllo sugli esclusi — è un fatto, non una proposta.
+    """
+    db.commit()  # niente transazione aperta durante la chiamata al modello
+    data = client.generate_json(
+        prompts.ATE_RECIPE_SYSTEM,
+        prompts.render(prompts.ATE_RECIPE_PROMPT, slot_name=slot_name, text=text.strip()),
+        max_tokens=4000,
+    )
+    if not isinstance(data, dict) or not isinstance(data.get("ingredients"), list):
+        raise AIError("Il modello non ha restituito una ricetta leggibile. Riprova.")
+    learn_composition(db, client, [data])
+    return create_recipe(
+        db,
+        user_id,
+        data,
+        is_custom=True,
+        computed=True,
+        generation_prompt=json.dumps({"mangiato": text.strip()}, ensure_ascii=False),
+    )
+
+
 def create_from_text(
     db: Session,
     client,

@@ -44,6 +44,7 @@ CORPI = {
     ("POST", "/api/chat/meals/{meal_id}/messages"): {"content": "ciao"},
     ("PUT", "/api/planning/meals/{meal_id}/assign"): {"recipe_id": 1},
     ("PUT", "/api/planning/meals/{meal_id}/recurring"): {"is_recurring": False},
+    ("POST", "/api/planning/meals/{meal_id}/ate"): {"text": "una pizza"},
     ("PUT", "/api/planning/meals/{meal_id}/eaten"): {"nothing": True},
     ("PUT", "/api/planning/meals/{meal_id}/followed"): {"is_followed": True},
     ("POST", "/api/planning/meals/{meal_id}/swap"): {"other_meal_id": 1},

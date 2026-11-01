@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { api, formatDate } from "../api";
 import { useApp } from "../App";
+import AteDialog from "../components/AteDialog";
 import ConfirmDialog from "../components/ConfirmDialog";
 import EatenInstead from "../components/EatenInstead";
 import EatenInsteadDialog from "../components/EatenInsteadDialog";
@@ -26,6 +27,7 @@ import Modal from "../components/Modal";
 import MealChat from "../components/MealChat";
 import RecipeView from "../components/RecipeView";
 import StarRating from "../components/StarRating";
+import { oggiIso } from "../lib/generation";
 import { useGoBack } from "../lib/navigation";
 import { nonScalatiDallaDispensa, scalatiDallaDispensa } from "../lib/pantry";
 
@@ -44,6 +46,10 @@ export default function MealDetailPage() {
   const [picker, setPicker] = useState(false);
   const [generator, setGenerator] = useState(false);
   const [swapping, setSwapping] = useState(false);
+  // «Ho mangiato questo»: la modale, e il segno che il pasto seguito è nato così (la
+  // dispensa non si è scalata, e l'avviso non deve dire il contrario).
+  const [mangiando, setMangiando] = useState(false);
+  const [appenaMangiato, setAppenaMangiato] = useState(false);
   const [fissando, setFissando] = useState(false);
 
   // Lo spinner solo quando si è senza niente a schermo: `load()` si richiama anche
@@ -244,6 +250,9 @@ export default function MealDetailPage() {
   // altrove. Tutto il resto — passato compreso — si modifica quando si vuole.
   const skipped = meal.day_is_skipped;
   const frozen = skipped || meal.is_skipped;
+  // Una casella vuota di oggi o di un giorno passato si può riempire con quello che
+  // si è mangiato davvero; il futuro non è ancora successo.
+  const giaSuccesso = meal.date <= oggiIso();
 
   return (
     <>
@@ -298,8 +307,18 @@ export default function MealDetailPage() {
         <div className="notice notice-ok">
           <CheckCircle2 />
           <div>
-            <strong>Pasto seguito.</strong> Gli ingredienti sono stati scalati
-            dalla dispensa e questo piatto è uscito dalla lista della spesa.
+            {appenaMangiato ? (
+              <>
+                <strong>Segnato come mangiato.</strong> Calorie e macro sono
+                stimati dagli ingredienti; la dispensa non è stata toccata.
+              </>
+            ) : (
+              <>
+                <strong>Pasto seguito.</strong> Gli ingredienti sono stati
+                scalati dalla dispensa e questo piatto è uscito dalla lista della
+                spesa.
+              </>
+            )}
           </div>
         </div>
       )}
@@ -477,6 +496,16 @@ export default function MealDetailPage() {
                    oppure la ricetta ce l'hai già. In riga si allineavano solo a
                    schermo largo — vedi il commento sulla classe. */
                 <div className="empty-actions">
+                  {giaSuccesso && !frozen && (
+                    <button
+                      className="btn btn-ai"
+                      onClick={() => setMangiando(true)}
+                      disabled={busy}
+                    >
+                      <Sparkles size={16} />
+                      Segna cosa ho mangiato
+                    </button>
+                  )}
                   <button
                     className="btn btn-primary"
                     onClick={() => regenerate()}
@@ -609,6 +638,17 @@ export default function MealDetailPage() {
 
       {altro && (
         <EatenInsteadDialog meal={altro} onSaved={setMeal} onClose={() => setAltro(null)} />
+      )}
+
+      {mangiando && (
+        <AteDialog
+          meal={meal}
+          onSaved={(updated) => {
+            setMeal(updated);
+            setAppenaMangiato(true);
+          }}
+          onClose={() => setMangiando(false)}
+        />
       )}
 
       {generator && (

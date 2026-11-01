@@ -12,6 +12,7 @@ from ..models import DayPlan, MealSlot, User, WeekPlan
 from ..rate_limit import AI_LIMIT, limiter
 from ..schemas import (
     AssignMealRequest,
+    AteRequest,
     EatenInsteadRequest,
     FollowedRequest,
     GenerateWeekRequest,
@@ -309,6 +310,20 @@ def set_eaten_instead(
     return meals.eaten_instead(
         db, lambda: get_client(db, user, "chat"), meal, day, body.text, body.nothing
     )
+
+
+@router.post("/meals/{meal_id}/ate")
+@limiter.limit(AI_LIMIT)
+def ate_meal(
+    request: Request,
+    meal_id: int,
+    body: AteRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """«Ho mangiato questo» su una casella vuota: ricetta stimata e pasto seguito."""
+    meal, day, _week = _get_meal(db, user.id, meal_id)
+    return meals.ate(db, user, lambda: get_client(db, user, "chat"), meal, day, body.text)
 
 
 @router.put("/meals/{meal_id}/followed")

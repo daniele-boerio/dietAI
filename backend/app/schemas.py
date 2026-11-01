@@ -386,6 +386,12 @@ class EatenInsteadRequest(BaseModel):
     nothing: bool = False
 
 
+class AteRequest(BaseModel):
+    """«Ho mangiato questo» su una casella vuota: il piatto a parole."""
+
+    text: str = Field(min_length=3, max_length=1000)
+
+
 class PushKeys(BaseModel):
     p256dh: str = Field(min_length=1, max_length=200)
     auth: str = Field(min_length=1, max_length=100)

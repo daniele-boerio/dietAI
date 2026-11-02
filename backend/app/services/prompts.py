@@ -248,8 +248,10 @@ PASTO IN DISCUSSIONE
 COME RISPONDERE
 - Sempre in italiano, tono diretto e concreto, poche righe.
 - Se l'utente chiede informazioni, spiegazioni o consigli: rispondi in linguaggio naturale, senza JSON.
-- Se l'utente chiede una MODIFICA alla ricetta (sostituire un ingrediente, cambiare metodo di cottura, alleggerire, aumentare le proteine, ecc.) e la modifica è compatibile con i vincoli: rispondi con una frase che spiega cosa hai cambiato, poi vai a capo, scrivi [RECIPE_UPDATE] e subito dopo il JSON COMPLETO della ricetta aggiornata (stesso formato di sotto), con i valori nutrizionali ricalcolati.
-- Se la modifica violerebbe i macro (oltre ±10%) o userebbe un ingrediente escluso: NON aggiornare la ricetta. Spiega perché e proponi un'alternativa che rispetti i vincoli.
+- Se l'utente chiede una MODIFICA alla ricetta (sostituire un ingrediente, cambiare quantità o metodo di cottura, alleggerire, aumentare le proteine, ecc.): FALLA. Rispondi con una frase che spiega cosa hai cambiato, poi vai a capo, scrivi [RECIPE_UPDATE] e subito dopo il JSON COMPLETO della ricetta aggiornata (stesso formato di sotto), con i valori nutrizionali ricalcolati.
+- COMANDA L'UTENTE. Il target del pasto è un riferimento, non un veto: se la modifica che chiede porta il piatto fuori dai macro (oltre ±10%), applicala lo stesso, così come l'ha chiesta, senza correggerla di nascosto per rientrare. Nella frase dì in breve di quanto si sposta ("così sono circa 150 kcal in più del target") e, se vuoi, suggerisci in mezza riga come compensare — ma il cambio lo hai già fatto. Non rifiutare e non chiedere conferma.
+- Quando invece le scelte le fai tu (l'utente ti lascia decidere: "alleggeriscila", "cambia qualcosa"), resta nei macro del pasto (±10%).
+- L'unico limite che non si supera sono gli ingredienti esclusi: se ne chiede uno, NON aggiornare la ricetta, spiega che è nella sua lista degli esclusi e proponi il sostituto più vicino.
 {lock_note}
 
 IL MESSAGGIO CHE LEGGE L'UTENTE È SOLO PROSA
@@ -282,7 +284,7 @@ PASTI COPERTI DA QUESTA SPESA (usa il meal_id per dire quale ricetta aggiorni; p
 
 REGOLE
 1. Cambia SOLO le ricette che contengono davvero l'ingrediente in questione. Le altre non si toccano.
-2. Ogni ricetta modificata deve continuare a rispettare i macro target del suo pasto (±10%) e non usare ingredienti esclusi. Ricalcola i valori nutrizionali.
+2. Mai ingredienti esclusi. Se il sostituto lo scegli tu, ogni ricetta modificata resta nei macro target del suo pasto (±10%); se è l'utente a chiedere un cambio preciso, comanda lui: applicalo anche se sposta i macro, e dillo in breve. Ricalcola sempre i valori nutrizionali.
 3. Il sostituto dev'essere reperibile in un supermercato italiano e coerente col piatto — e con la cucina a cui il piatto appartiene.
 4. Pensa a tutto quello che è in lista come a una spesa sola: se puoi, usa lo stesso sostituto in tutte le ricette invece di introdurne uno diverso per ognuna.
 5. Se il sostituto è qualcosa che l'utente ha GIÀ IN DISPENSA, scrivilo con lo stesso identico nome che ha lì (vedi la regola NOMI nel contesto) e non dirgli di comprarlo: quella roba è già in casa, e la lista si aggiorna da sola scomputando la dispensa. Se ne serve più di quanta ne ha, dillo con la quantità che manca — non con l'intera quantità della ricetta.
@@ -291,7 +293,7 @@ COME RISPONDERE
 - Sempre in italiano, tono diretto e concreto, poche righe.
 - Se l'utente fa una domanda o chiede un consiglio senza voler cambiare niente: rispondi a parole, senza JSON.
 - Se applichi un cambio: scrivi prima una frase che dice cosa hai cambiato e in quali piatti, poi vai a capo, scrivi [RECIPES_UPDATE] e subito dopo il JSON nel formato qui sotto — una voce per ogni ricetta modificata, con la RICETTA COMPLETA aggiornata.
-- Se il cambio è impossibile senza sforare i macro o usare un escluso: NON aggiornare niente, spiega perché e proponi un'alternativa.
+- Se il cambio richiede un ingrediente escluso: NON aggiornare niente, spiega perché e proponi un'alternativa. I macro invece non sono un motivo per rifiutare un cambio chiesto dall'utente.
 {lock_note}
 
 IL MESSAGGIO CHE LEGGE L'UTENTE È SOLO PROSA

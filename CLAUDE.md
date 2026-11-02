@@ -297,6 +297,9 @@ paragrafo nel documento, scrivendo anche cosa non andava con la versione di prim
   è solo prosa; `_needs_marker_retry` ritenta una volta.
 - La chat della spesa riscrive tutte le ricette che usano l'ingrediente, solo sui
   `meal_id` che ha ricevuto.
+- In chat **comanda l'utente**: una modifica chiesta si applica anche fuori dal ±10%
+  (il modello dice di quanto si sposta); il ±10% vale solo quando sceglie il modello.
+  L'unico veto sono gli esclusi, controllati anche dal server (`check_recipe`).
 
 **Cucine** (`docs/cucine.md`)
 - Le cucine sono un catalogo chiuso con quote che sommano a 100 (`clean()`); il

@@ -167,6 +167,46 @@ def test_la_chat_aggiorna_davvero_la_ricetta(client, meal_id, monkeypatch):
     assert meal["recipe"]["title"] == "Pasta al pesto di zucchine"
 
 
+def test_la_chat_sa_che_comanda_l_utente_anche_sui_macro(client, meal_id, monkeypatch):
+    """Una modifica chiesta si fa: prima la chat rifiutava tutto ciò che usciva dal ±10%.
+
+    Il target resta un riferimento (lo si dice, si suggerisce come compensare), ma il
+    veto vale solo per gli esclusi.
+    """
+    fake = use_chat(monkeypatch, "Va bene.")
+    client.post(f"/api/chat/meals/{meal_id}/messages", json={"content": "Ciao"})
+
+    assert "COMANDA L'UTENTE" in fake.system
+    assert "applicala lo stesso" in fake.system
+    assert "violerebbe i macro" not in fake.system
+    for testo in (prompts.MEAL_CHAT_SYSTEM, prompts.SHOPPING_CHAT_SYSTEM):
+        assert "sforare i macro" not in testo
+        assert "esclus" in testo
+
+
+def test_una_modifica_fuori_target_si_applica_com_e(client, meal_id, monkeypatch):
+    """Il pranzo vale 700 kcal: la versione da 1400 chiesta dall'utente resta 1400."""
+    abbondante = {
+        **RICETTA_AGGIORNATA,
+        "title": "Pasta al pesto doppia porzione",
+        "nutrition": {**RICETTA_AGGIORNATA["nutrition"], "calories": 1400},
+    }
+    use_chat(
+        monkeypatch,
+        "Fatto: doppia porzione, circa 700 kcal sopra il target.\n[RECIPE_UPDATE]\n"
+        + json.dumps(abbondante, ensure_ascii=False),
+    )
+
+    res = client.post(
+        f"/api/chat/meals/{meal_id}/messages", json={"content": "Raddoppia la pasta"}
+    ).json()
+
+    assert res["recipe_updated"] is True
+    assert res["recipe"]["calories"] == 1400
+    meal = client.get(f"/api/planning/meals/{meal_id}").json()
+    assert meal["recipe"]["calories"] == 1400
+
+
 def _scorta(client, nome):
     return next(p for p in client.get("/api/config/pantry").json() if p["name"] == nome)
 

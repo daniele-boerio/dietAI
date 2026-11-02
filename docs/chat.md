@@ -23,6 +23,19 @@ davanti allo stesso modo) e la chat della spesa ci aggiunge di non consigliare l
 di quello che è già in casa. È una cintura sopra una bretella: se il modello scrive lo
 stesso un nome suo, `normalize_name` lo riporta sulla riga giusta.
 
+**In chat comanda l'utente, anche sui macro.** Prima i due prompt (`MEAL_CHAT_SYSTEM`,
+`SHOPPING_CHAT_SYSTEM`) dicevano di NON aggiornare la ricetta se la modifica usciva dal
+±10% del target: chi chiedeva «raddoppia la pasta» o «metti il formaggio» si sentiva
+rispondere di no, con una contro-proposta che non aveva chiesto. Ma il piano è suo, e
+il target è un riferimento, non un veto. Ora una modifica chiesta si applica com'è, e
+il modello dice in mezza riga di quanto si sposta dal target (con, se vuole, un modo
+per compensare); il ±10% vale solo quando le scelte le fa il modello («alleggeriscila»,
+«scegli tu un sostituto»). L'unico limite che resta sono gli esclusi, che il server
+ricontrolla comunque (`check_recipe`). Lato server i macro non hanno mai bloccato la
+chat: il rifiuto era tutto nel prompt. Guardia in `tests/test_chat.py`
+(`test_la_chat_sa_che_comanda_l_utente_anche_sui_macro`,
+`test_una_modifica_fuori_target_si_applica_com_e`).
+
 **In chat la ricetta va dopo il marcatore, mai dentro il messaggio.** `[RECIPE_UPDATE]`
 (o `[RECIPES_UPDATE]`) è l'unico modo che ha il backend di sapere che c'è una modifica
 da applicare. Un modello che riempie lo schema a mano in markdown — con i nomi dei

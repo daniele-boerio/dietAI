@@ -58,8 +58,9 @@ e resusciterebbe ogni volta chi è stato cancellato apposta.
 **Chi paga vede quanto.** L'amministratore mette la chiave e paga per tutti, e fin qui
 aveva solo l'interruttore `ai_enabled` per frenare la bolletta, senza un numero per
 decidere quando usarlo. Ora ogni chiamata lascia una riga (`AIUsage`): token in
-entrata e in uscita e il costo in dollari, e Impostazioni → Utenti mostra il conto per
-account su 7, 30 o 90 giorni (`GET /api/admin/usage`, solo amministratore). La riga va
+entrata e in uscita, il costo in dollari e la durata (`duration_ms`, migrazione
+`0036`: «l'app è lenta» senza numeri non si misurava), e Impostazioni → Utenti mostra
+il conto per account e i tempi medi e massimi per funzione su 7, 30 o 90 giorni (`GET /api/admin/usage`, solo amministratore). La riga va
 a **chi ha premuto il pulsante**, non a chi paga — chi paga è sempre lui, e la domanda
 a cui il pannello risponde è un'altra.
 

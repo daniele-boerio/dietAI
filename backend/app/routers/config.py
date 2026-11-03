@@ -4,6 +4,7 @@ Sono le quattro liste che vincolano ogni generazione: cosa c'è sempre in casa, 
 non deve comparire mai, cosa c'è adesso in dispensa e come si vuole mangiare.
 """
 
+import os
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -37,7 +38,7 @@ from ..schemas import (
     PreferencesUpdate,
 )
 from ..services import normalization, planner
-from ..services.ai_client import ai_owner
+from ..services.ai_client import ROLES, ai_owner, model_for
 from ..services.catalog import list_models
 from ..services import exclusions
 from ..services.ingredients import (
@@ -394,6 +395,7 @@ ROLE_LABELS = {
     "planning": "Pianificazione settimanale",
     "chat": "Chat e modifiche",
     "diet": "Lettura della dieta",
+    "quick": "Stime veloci",
 }
 
 ROLE_HINTS = {
@@ -409,6 +411,12 @@ ROLE_HINTS = {
     "diet": (
         "La dieta due o tre volte l'anno. Se il PDF contiene testo va bene qualunque "
         "modello; per le scansioni serve un modello che sappia guardare le immagini."
+    ),
+    "quick": (
+        "Pasto libero, «ho mangiato altro», ricetta scritta da te e i valori degli "
+        "ingredienti nuovi: risposte brevi, dove si aspetta per niente. Un modello veloce "
+        "(Haiku o Sonnet) le porta da un minuto a pochi secondi. Senza scelta usa "
+        "quello della chat."
     ),
 }
 
@@ -446,9 +454,13 @@ def get_ai_config(
                 "label": ROLE_LABELS[role],
                 "hint": ROLE_HINTS[role],
                 "model": getattr(prefs, f"ai_model_{role}", None),
-                "default": default_model(role),
+                "default": (
+                    model_for(db, owner.id, "chat")
+                    if role == "quick" and not os.getenv("AI_MODEL_QUICK", "").strip()
+                    else default_model(role)
+                ),
             }
-            for role in ("planning", "chat", "diet")
+            for role in ROLES
         ],
     }
 
@@ -485,7 +497,7 @@ def update_ai_models(
     """Cambia i modelli. Solo l'amministratore: valgono anche per gli altri account,
     che generano con la sua chiave."""
     prefs = _prefs_of(db, admin.id)
-    for role in ("planning", "chat", "diet"):
+    for role in ROLES:
         value = (getattr(body, role) or "").strip()
         # Meglio rifiutare qui che lasciar scoprire lo slug sbagliato dopo mezzo
         # minuto di generazione, con una 400 del fornitore.

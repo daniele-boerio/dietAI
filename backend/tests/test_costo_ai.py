@@ -111,3 +111,33 @@ def test_cancellare_un_account_non_cancella_quello_che_e_costato(client, guest_c
 
 def test_il_riepilogo_e_solo_dell_amministratore(guest_client):
     assert guest_client.get("/api/admin/usage").status_code == 403
+
+
+def test_il_registro_scrive_quanto_e_durata_la_chiamata(db, client):
+    """«L'app è lenta» si misura: ogni riga sa quanto si è aspettato, e il riepilogo
+    lo dice per funzione."""
+    record = usage.recorder(db.get_bind(), 1, "planning")
+    record("x/modello", {"input_tokens": 10, "output_tokens": 5, "duration_ms": 40_000})
+    record("x/modello", {"input_tokens": 10, "output_tokens": 5, "duration_ms": 80_000})
+    assert {r.duration_ms for r in db.query(AIUsage)} == {40_000, 80_000}
+
+    riepilogo = usage.summary(db)
+    assert riepilogo["by_role"] == [
+        {"role": "planning", "calls": 2, "avg_seconds": 60.0, "max_seconds": 80.0}
+    ]
+
+
+def test_il_client_misura_la_durata(db, client, monkeypatch):
+    client.put("/api/auth/api-key", json={"api_key": "sk-or-chiave-finta-per-i-test"})
+    from app.models import User
+
+    admin = db.query(User).filter(User.is_admin.is_(True)).one()
+    c = get_client(db, admin, "chat")
+
+    def complete(**kwargs):
+        c._backend.last_usage = {"input_tokens": 1, "output_tokens": 1, "cost_usd": 0.0}
+        return "ciao"
+
+    monkeypatch.setattr(c._backend, "complete", complete)
+    c.chat("s", [{"role": "user", "content": "ciao"}])
+    assert db.query(AIUsage).one().duration_ms is not None

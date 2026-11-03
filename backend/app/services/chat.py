@@ -94,8 +94,48 @@ def _retry_for_marker(
     return second if marker in second else answer
 
 
+class ProseStream:
+    """Passa a `emit` i pezzi della risposta man mano che escono, ma solo la prosa.
+
+    Dopo il marcatore viene il JSON della ricetta, che l'utente non deve vedere: si
+    trattengono sempre gli ultimi caratteri, quanti ne servono perché un marcatore a
+    metà fra due pezzi («[RECIPE_» + «UPDATE]») non scappi fuori. Il messaggio vero
+    resta quello finale, che la pagina mette al posto del provvisorio.
+    """
+
+    def __init__(self, marker: str, emit):
+        self.marker = marker
+        self.emit = emit
+        self._buffer = ""
+        self._sent = 0
+        self._closed = False
+
+    def __call__(self, kind: str, delta: str) -> None:
+        if kind != "content" or self._closed or not delta:
+            return
+        self._buffer += delta
+        cut = self._buffer.find(self.marker)
+        if cut >= 0:
+            self._closed = True
+            end = cut
+        else:
+            end = len(self._buffer) - (len(self.marker) - 1)
+        if end > self._sent:
+            self.emit(self._buffer[self._sent : end])
+            self._sent = end
+
+
 def _needs_marker_retry(answer: str, marker: str) -> bool:
     return marker not in answer and bool(_RECIPE_DUMP.search(answer))
+
+
+def _ask(client, system, messages, max_tokens, marker, on_delta) -> str:
+    """La chiamata della chat: in streaming (solo la prosa) quando qualcuno guarda."""
+    if on_delta is None:
+        return client.chat(system, messages, max_tokens=max_tokens)
+    return client.chat(
+        system, messages, max_tokens=max_tokens, on_progress=ProseStream(marker, on_delta)
+    )
 
 
 def serialize_message(message: MealChatMessage | ShoppingChatMessage) -> dict:
@@ -119,7 +159,8 @@ def _history(db: Session, model, filtro, content: str) -> list[dict]:
 
 
 def send_meal_message(
-    db: Session, client, user: User, meal: PlannedMeal, day: DayPlan, content: str
+    db: Session, client, user: User, meal: PlannedMeal, day: DayPlan, content: str,
+    on_delta=None,
 ) -> dict:
     """Un messaggio sulla ricetta di un pasto, e la ricetta riscritta se il modello la cambia.
 
@@ -168,7 +209,7 @@ def send_meal_message(
     db.commit()
     # Budget largo: sui modelli che ragionano una parte se ne va in ragionamento
     # prima ancora che comincino a scrivere.
-    answer = client.chat(system, messages, max_tokens=8000)
+    answer = _ask(client, system, messages, 8000, UPDATE_MARKER, on_delta)
     db.add(MealChatMessage(planned_meal_id=meal_id, role="user", content=content))
     if not frozen and _needs_marker_retry(answer, UPDATE_MARKER):
         answer = _retry_for_marker(client, system, messages, answer, UPDATE_MARKER, 8000)
@@ -332,7 +373,7 @@ def _apply_recipes_update(
 
 
 def send_shopping_message(
-    db: Session, client, user: User, week: WeekPlan, content: str
+    db: Session, client, user: User, week: WeekPlan, content: str, on_delta=None
 ) -> dict:
     """Chat "da supermercato": cambia un ingrediente in tutte le ricette che lo usano.
 
@@ -360,7 +401,7 @@ def send_shopping_message(
     db.commit()  # come nella chat del pasto: niente transazione aperta durante la chiamata
     # Budget più largo della chat sul pasto: qui una risposta può contenere più ricette
     # complete in una volta.
-    answer = client.chat(system, messages, max_tokens=16000)
+    answer = _ask(client, system, messages, 16000, RECIPES_UPDATE_MARKER, on_delta)
     db.add(ShoppingChatMessage(week_plan_id=week_id, role="user", content=content))
     if _needs_marker_retry(answer, RECIPES_UPDATE_MARKER):
         answer = _retry_for_marker(

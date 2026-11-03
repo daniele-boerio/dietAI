@@ -52,6 +52,8 @@ export default function ShoppingChat({ weekId, onClose, onListUpdated, inline = 
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  // La risposta mentre arriva: il testo compare man mano invece dei tre puntini.
+  const [inArrivo, setInArrivo] = useState('');
   const bodyRef = useRef(null);
   const keyboard = useKeyboardInset();
 
@@ -76,7 +78,7 @@ export default function ShoppingChat({ weekId, onClose, onListUpdated, inline = 
 
   useEffect(() => {
     bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight, behavior: 'smooth' });
-  }, [messages, sending]);
+  }, [messages, sending, inArrivo]);
 
   const send = async (text) => {
     const content = (text ?? draft).trim();
@@ -88,7 +90,7 @@ export default function ShoppingChat({ weekId, onClose, onListUpdated, inline = 
     setMessages((prev) => [...prev, { id: provvisorio, role: 'user', content }]);
 
     try {
-      const reply = await api.sendShoppingChat(weekId, content);
+      const reply = await api.sendShoppingChat(weekId, content, (pezzo) => setInArrivo((t) => t + pezzo));
       setMessages((prev) => [
         ...prev,
         { id: `tmp-a-${Date.now()}`, role: 'assistant', content: reply.content },
@@ -106,6 +108,7 @@ export default function ShoppingChat({ weekId, onClose, onListUpdated, inline = 
       setDraft((attuale) => attuale || content);
     } finally {
       setSending(false);
+      setInArrivo('');
     }
   };
 
@@ -186,9 +189,13 @@ export default function ShoppingChat({ weekId, onClose, onListUpdated, inline = 
 
         {sending && (
           <div className="chat-bubble assistant">
-            <span className="typing">
-              DietAI sta rispondendo <i /> <i /> <i />
-            </span>
+            {inArrivo ? (
+              <ChatText text={inArrivo} />
+            ) : (
+              <span className="typing">
+                DietAI sta rispondendo <i /> <i /> <i />
+              </span>
+            )}
           </div>
         )}
       </div>

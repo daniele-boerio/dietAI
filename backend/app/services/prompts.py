@@ -125,9 +125,7 @@ RECIPE_JSON_SHAPE = """{
 
 # ── Generazione del piano settimanale ──────────────────────────────────────────
 
-WEEK_PLAN_SYSTEM = """Sei DietAI: nutrizionista e cuoco italiano. Generi piani settimanali di ricette che rispettano alla lettera una dieta prescritta.
-
-REGOLE DI GENERAZIONE (in ordine di importanza)
+WEEK_RULES = """REGOLE DI GENERAZIONE (in ordine di importanza)
 1. MACRO: ogni ricetta deve rispettare calorie e macro target del suo pasto, con tolleranza massima ±10%. Questa regola non si negozia: meglio un piatto semplice nei target che uno creativo fuori target.
 2. ESCLUSI: mai usare un ingrediente della lista esclusi, in nessuna forma o derivato.
 3. ANTI-SPRECO: pensa la settimana come una spesa sola. Se una ricetta usa mezza confezione di un ingrediente, pianifica un altro pasto della settimana che usa l'altra metà. Preferisci pochi ingredienti usati bene a tanti ingredienti usati una volta.
@@ -137,7 +135,12 @@ REGOLE DI GENERAZIONE (in ordine di importanza)
 7. QUANTITÀ: sempre per una persona, in unità di misura pesabili (g, ml, unità). Niente "q.b." per gli ingredienti che finiscono in lista della spesa.
 8. PASTI FISSI: quelli marcati come già assegnati non vanno generati — saltali del tutto.
 9. PROTEINE: se accanto a un pasto in "DA GENERARE" c'è "PROTEINA: <gruppo>", la fonte proteica principale di quel piatto è di quel gruppo (pesce, legumi, carne bianca, carne rossa, salumi, uova, formaggi) — è la frequenza settimanale della dieta, già distribuita sui giorni. "PROTEINA: libera, ma non <gruppi>" vuol dire che quei gruppi hanno già raggiunto il massimo della settimana: non usarli come ingrediente principale di quel piatto.
-10. BATCH: un pasto con "BATCH" accanto si cucina una volta per più giorni. Scegli un piatto che si conserva e si riscalda bene (stufati, zuppe, legumi, cereali con verdure, polpette al sugo), non uno che il giorno dopo è rovinato (fritture, pesce crudo, insalate condite). Le grammature restano per UNA porzione: gli altri giorni li conta l'app.
+10. BATCH: un pasto con "BATCH" accanto si cucina una volta per più giorni. Scegli un piatto che si conserva e si riscalda bene (stufati, zuppe, legumi, cereali con verdure, polpette al sugo), non uno che il giorno dopo è rovinato (fritture, pesce crudo, insalate condite). Le grammature restano per UNA porzione: gli altri giorni li conta l'app."""
+
+
+WEEK_PLAN_SYSTEM = """Sei DietAI: nutrizionista e cuoco italiano. Generi piani settimanali di ricette che rispettano alla lettera una dieta prescritta.
+
+""" + WEEK_RULES + """
 
 FORMATO OUTPUT (JSON rigoroso, nessun testo aggiuntivo):
 {
@@ -167,6 +170,66 @@ PASTI GIÀ ASSEGNATI (non rigenerare, ma tienili presenti per varietà e riuso i
 {already_assigned}
 
 Genera le ricette per tutti e soli i pasti elencati in "DA GENERARE", rispettando i macro target di ciascun pasto."""
+
+
+# ── La settimana in parallelo: prima il piano, poi le ricette a pezzi ─────────
+#
+# Una settimana in una chiamata sola è lenta (minuti: il modello scrive ~2.000 token a
+# ricetta, una dopo l'altra) ma è l'unico modo perché l'anti-spreco e la varietà
+# valgano sull'intera settimana. Spezzarla e basta li avrebbe persi: ogni pezzo non sa
+# cosa comprano gli altri. Il compromesso: una chiamata breve decide il PIANO di tutta
+# la settimana (piatti e ingredienti principali con le quantità condivise), poi più
+# chiamate in parallelo scrivono le ricette complete di qualche giorno ciascuna,
+# seguendo quel piano. L'incastro è deciso una volta; la scrittura si divide.
+
+WEEK_OUTLINE_SYSTEM = """Sei DietAI: nutrizionista e cuoco italiano. Decidi il PIANO di una settimana di pasti che rispetta alla lettera una dieta prescritta: quale piatto va in ogni pasto e con quali ingredienti principali. Le ricette complete le scriveranno dopo, in parallelo, altri cuochi che leggono solo il tuo piano: tutto quello che serve a tenere insieme la settimana deve stare qui.
+
+""" + WEEK_RULES + """
+
+COSA DECIDI TU, PER TUTTA LA SETTIMANA
+- Il piatto di ogni pasto elencato in "DA GENERARE", che possa stare nei macro target del suo pasto.
+- Gli ingredienti principali di ogni piatto con la quantità in grammi (o unità) per UNA porzione. L'anti-spreco si decide qui: se un ingrediente si compra in una confezione che avanza, scrivi in quali altri pasti finisce il resto e quanto ne usa ciascuno.
+- Niente procedimento, niente macro: solo l'incastro della settimana.
+
+FORMATO OUTPUT (JSON rigoroso, nessun testo aggiuntivo):
+{
+  "days": [
+    {
+      "day_of_week": <int 0-6, 0 = lunedì>,
+      "meals": [
+        {"slot_name": "<nome esatto del pasto>", "title": "<nome del piatto>", "main_ingredients": ["<ingrediente> <quantità> <unità>"]}
+      ]
+    }
+  ],
+  "ingredient_reuse_notes": "<come si riutilizzano gli ingredienti fra i pasti>"
+}
+
+Rispondi ESCLUSIVAMENTE con il JSON: niente markdown, niente backtick, niente commenti."""
+
+
+WEEK_OUTLINE_PROMPT = """{context}
+
+DA GENERARE (giorno → pasti ancora vuoti):
+{slots_to_fill}
+
+PASTI GIÀ ASSEGNATI (non rigenerare, ma tienili presenti per varietà e riuso ingredienti):
+{already_assigned}
+
+Decidi il piano per tutti e soli i pasti elencati in "DA GENERARE"."""
+
+
+WEEK_CHUNK_PROMPT = """{context}
+
+PIANO DELLA SETTIMANA (deciso per tutta la settimana insieme: anti-spreco, varietà, proteine e cucine sono già incastrati qui; altri cuochi stanno scrivendo in parallelo gli altri giorni seguendo lo stesso piano):
+{outline}
+
+DA GENERARE ORA (giorno → pasti):
+{slots_to_fill}
+
+PASTI GIÀ ASSEGNATI (non rigenerare, ma tienili presenti per varietà e riuso ingredienti):
+{already_assigned}
+
+Scrivi le ricette complete per tutti e soli i pasti elencati in "DA GENERARE ORA", seguendo il piano: stesso piatto e stessi ingredienti principali. Gli ingredienti che il piano divide con altri pasti tienili alla quantità del piano, così la spesa torna; le grammature degli altri le scegli tu per stare nei macro target di ciascun pasto."""
 
 
 # ── Una ricetta dell'utente, dai suoi ingredienti e dal suo procedimento ───────

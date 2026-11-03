@@ -90,7 +90,7 @@ def test_la_pianificazione_chiede_il_ragionamento_in_token_non_in_effort():
 
     _call(backend, thinking=True, max_tokens=24000)
 
-    assert completions.kwargs["extra_body"] == {"reasoning": {"max_tokens": 6000}}
+    assert completions.kwargs["extra_body"] == {"reasoning": {"max_tokens": 3000}}
 
 
 def test_al_contenuto_resta_sempre_la_maggioranza_del_budget():
@@ -142,14 +142,14 @@ def _anthropic_backend():
 
 def test_sul_ramo_anthropic_il_ragionamento_non_ruba_spazio_al_contenuto():
     """Era `effort: high` dentro lo stesso max_tokens: la trappola di OpenRouter. Ora
-    il ragionamento ha il suo quarto in più, e il contenuto tiene tutto il suo."""
+    il ragionamento ha il suo ottavo in più (mai sotto 1024), e il contenuto tiene tutto il suo."""
     backend, messages = _anthropic_backend()
 
     backend.complete(model="claude-opus-4-8", system="s",
                      messages=[{"role": "user", "content": "ciao"}],
                      max_tokens=6000, thinking=True)
 
-    assert messages.kwargs["max_tokens"] == 6000 + 1500
+    assert messages.kwargs["max_tokens"] == 6000 + 1024
     assert messages.kwargs["output_config"] == {"effort": "medium"}
 
 

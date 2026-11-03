@@ -1,6 +1,7 @@
 """Lo stato della generazione sul `WeekPlan`: in corso, diario, esito, errore, e chi se la aggiudica."""
 
 import logging
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -55,29 +56,54 @@ class GenerationProgress:
         self.week_id = week_id
         self.expected_recipes = expected_recipes
         self._session_factory = session_factory
-        self._reasoning: list[str] = []
-        self._content: list[str] = []
+        # Un canale per chiamata: con la settimana in parallelo più chiamate scrivono
+        # insieme, e mescolate in una lista sola il testo diventava una poltiglia e le
+        # ricette si contavano a metà. Il canale 0 è quello di sempre (`__call__`).
+        self._channels: list[dict] = [{"reasoning": [], "content": [], "counts": True}]
+        self._lock = threading.Lock()
         self._last_flush = 0.0
+        self._latest = 0
 
     def __call__(self, kind: str, delta: str) -> None:
-        (self._reasoning if kind == "reasoning" else self._content).append(delta)
+        self._write(0, kind, delta)
 
-        now = time.monotonic()
-        if now - self._last_flush < self.FLUSH_EVERY:
-            return
+    def channel(self, *, counts_recipes: bool = True):
+        """Un nuovo canale per una chiamata che corre in parallelo alle altre.
+        `counts_recipes=False` per il piano della settimana, che di titoli ne scrive
+        ma ricette non ne produce."""
+        with self._lock:
+            self._channels.append({"reasoning": [], "content": [], "counts": counts_recipes})
+            index = len(self._channels) - 1
+        return lambda kind, delta: self._write(index, kind, delta)
+
+    def _write(self, index: int, kind: str, delta: str) -> None:
+        with self._lock:
+            channel = self._channels[index]
+            channel["reasoning" if kind == "reasoning" else "content"].append(delta)
+            self._latest = index
+            now = time.monotonic()
+            if now - self._last_flush < self.FLUSH_EVERY:
+                return
+            self._last_flush = now
         self.flush()
 
     def snapshot(self) -> dict:
-        reasoning = "".join(self._reasoning)
-        content = "".join(self._content)
+        with self._lock:
+            testi = [
+                ("".join(c["reasoning"]), "".join(c["content"]), c["counts"])
+                for c in self._channels
+            ]
+            latest = self._latest
+        reasoning, content, _ = testi[latest]
         return {
+            # La coda di chi ha scritto per ultimo: è quello che si vede «muoversi».
             "reasoning": reasoning[-self.REASONING_TAIL :],
             "content": content[-self.CONTENT_TAIL :],
-            "reasoning_chars": len(reasoning),
-            "content_chars": len(content),
+            "reasoning_chars": sum(len(r) for r, _, _ in testi),
+            "content_chars": sum(len(c) for _, c, _ in testi),
             # Ogni ricetta comincia con la sua chiave "title": contarle è il modo più
             # economico di dire a che punto siamo senza parsare un JSON a metà.
-            "recipes_written": content.count('"title"'),
+            "recipes_written": sum(c.count('"title"') for _, c, conta in testi if conta),
             "expected_recipes": self.expected_recipes,
         }
 

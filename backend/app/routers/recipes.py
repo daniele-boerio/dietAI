@@ -127,7 +127,7 @@ def create_recipe_from_text(
     Il modello divide le quantità, il server calcola i macro dagli ingredienti
     (`recipes.create_from_text`). Nasce nel ricettario, pronta da mettere in un pasto.
     """
-    client = get_client(db, user, "chat")
+    client = get_client(db, user, "quick")
     recipe = create_from_text(
         db,
         client,

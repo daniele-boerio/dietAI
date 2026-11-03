@@ -3,6 +3,7 @@
 import json
 import logging
 import threading
+from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session, sessionmaker
@@ -170,13 +171,16 @@ def generate_week(
         dict(zip(giorni, cuisines.draw(scelte, len(giorni)))) if len(scelte) > 1 else {}
     )
 
-    slots_to_fill = "\n".join(
-        f"{DAY_NAMES[dow]} (day_of_week {dow})"
-        + (f" — CUCINA: {sorteggio[dow]}" if dow in sorteggio else "")
-        + ":\n"
-        + "\n".join(f"  · {line}" for line in by_day[dow])
-        for dow in giorni
-    )
+    def slots_text(dows: list[int]) -> str:
+        return "\n".join(
+            f"{DAY_NAMES[dow]} (day_of_week {dow})"
+            + (f" — CUCINA: {sorteggio[dow]}" if dow in sorteggio else "")
+            + ":\n"
+            + "\n".join(f"  · {line}" for line in by_day[dow])
+            for dow in dows
+        )
+
+    slots_to_fill = slots_text(giorni)
 
     if fixed:
         already = "\n".join(
@@ -187,14 +191,42 @@ def generate_week(
     else:
         already = "  (nessuno)"
 
+    context = build_context(db, user.id, cuisine=cuisines.PER_GIORNO if sorteggio else None)
     prompt = prompts.render(
         prompts.WEEK_PLAN_PROMPT,
-        context=build_context(
-            db, user.id, cuisine=cuisines.PER_GIORNO if sorteggio else None
-        ),
+        context=context,
         slots_to_fill=slots_to_fill,
         already_assigned=already,
     )
+
+    # In parallelo quando conviene: il piano di tutta la settimana in una chiamata
+    # breve, poi le ricette a pezzi di qualche giorno (vedi `_generate_in_parallel`).
+    # Il prompt della chiamata unica resta pronto: è la strada di riserva.
+    parti = _split_days(by_day) if planner.PARALLEL_GENERATION else []
+    parallel = None
+    if len(parti) > 1:
+        parallel = {
+            "recipes": len(prompt_rows),
+            "outline_prompt": prompts.render(
+                prompts.WEEK_OUTLINE_PROMPT,
+                context=context,
+                slots_to_fill=slots_to_fill,
+                already_assigned=already,
+            ),
+            # Il piano si inserisce dopo, quando c'è: `{outline}` resta da riempire.
+            "chunks": [
+                (
+                    prompts.render(
+                        prompts.WEEK_CHUNK_PROMPT,
+                        context=context,
+                        slots_to_fill=slots_text(dows),
+                        already_assigned=already,
+                    ),
+                    sum(len(by_day[d]) for d in dows),
+                )
+                for dows in parti
+            ],
+        }
 
     client = planner.get_client(db, user, "planning")
 
@@ -237,6 +269,7 @@ def generate_week(
                 max_tokens=max_tokens,
                 progress=progress,
                 followers=seguaci,
+                parallel=parallel,
             ),
         )
         return {"status": "started", "expected": len(to_fill)}
@@ -244,8 +277,122 @@ def generate_week(
     return _run_generation(
         db, user, week, prompt_rows,
         client=client, prompt=prompt, max_tokens=max_tokens, progress=progress,
-        followers=seguaci,
+        followers=seguaci, parallel=parallel,
     )
+
+
+# La settimana in parallelo (piano + pezzi). I test la spengono (`conftest.py`): il
+# modello finto risponde con tutta la settimana a ogni chiamata.
+PARALLEL_GENERATION = True
+# Quante ricette per pezzo, e quanti pezzi al massimo insieme. Sotto le due parti non
+# si divide niente: una chiamata sola è già veloce, e il piano sarebbe un costo in più.
+CHUNK_RECIPES = 4
+MAX_PARALLEL = 4
+
+
+def _split_days(by_day: dict[int, list[str]]) -> list[list[int]]:
+    """I giorni da generare divisi in pezzi consecutivi, di ricette circa uguali."""
+    totale = sum(len(v) for v in by_day.values())
+    parti = min(MAX_PARALLEL, -(-totale // CHUNK_RECIPES), len(by_day))
+    if parti < 2:
+        return [sorted(by_day)]
+    quota = totale / parti
+    pezzi: list[list[int]] = [[]]
+    contati = 0
+    for dow in sorted(by_day):
+        # Si chiude il pezzo quando ha raggiunto la sua quota, tenendo almeno un giorno
+        # per ciascuno dei pezzi che restano.
+        if pezzi[-1] and contati >= quota * len(pezzi) and len(pezzi) < parti:
+            pezzi.append([])
+        pezzi[-1].append(dow)
+        contati += len(by_day[dow])
+    return pezzi
+
+
+def _format_outline(outline) -> str:
+    """Il piano del modello, in righe da rileggere: giorno, pasto, piatto, ingredienti."""
+    if not isinstance(outline, dict) or not isinstance(outline.get("days"), list):
+        return ""
+    righe = []
+    for day in outline["days"]:
+        if not isinstance(day, dict):
+            continue
+        try:
+            nome = DAY_NAMES[int(day.get("day_of_week"))]
+        except (TypeError, ValueError, IndexError):
+            continue
+        for meal in day.get("meals") or []:
+            if not isinstance(meal, dict) or not meal.get("title"):
+                continue
+            ingredienti = ", ".join(str(i) for i in meal.get("main_ingredients") or [])
+            righe.append(
+                f"  · {nome} / {meal.get('slot_name')}: {meal['title']}"
+                + (f" — {ingredienti}" if ingredienti else "")
+            )
+    if not righe:
+        return ""
+    note = str(outline.get("ingredient_reuse_notes") or "").strip()
+    return "\n".join(righe) + (f"\nRIUSO DEGLI INGREDIENTI: {note}" if note else "")
+
+
+def _generate_in_parallel(client, parallel: dict, progress) -> dict | None:
+    """Il piano di tutta la settimana, poi le ricette a pezzi in parallelo.
+
+    Una chiamata unica scrive le ricette una dopo l'altra: nove ricette erano cinque o
+    sei minuti. Spezzarla e basta avrebbe perso l'anti-spreco e la varietà, che
+    valgono sulla settimana intera. Qui l'incastro lo decide una chiamata breve (piatti
+    e ingredienti principali di tutti i pasti, con le quantità condivise), e le
+    ricette complete le scrivono più chiamate insieme, seguendo quel piano.
+
+    Senza piano (la chiamata fallisce, o risponde qualcosa di inservibile) restituisce
+    None e si torna alla chiamata unica. Un pezzo che fallisce lascia vuoti i suoi
+    pasti — si riempiono rigenerando i buchi — invece di buttare quelli già scritti;
+    se falliscono tutti, si solleva il primo errore.
+    """
+    recipes = parallel["recipes"]
+    try:
+        outline = client.generate_json(
+            prompts.WEEK_OUTLINE_SYSTEM,
+            parallel["outline_prompt"],
+            max_tokens=min(24000, 400 * recipes + 8000),
+            thinking=True,
+            on_progress=progress.channel(counts_recipes=False) if progress else None,
+        )
+    except Exception:  # noqa: BLE001 — la chiamata unica è sempre lì
+        logger.warning("Piano della settimana non riuscito: genero in una chiamata", exc_info=True)
+        return None
+    piano = _format_outline(outline)
+    if not piano:
+        logger.warning("Piano della settimana inservibile: genero in una chiamata")
+        return None
+
+    def pezzo(chunk_prompt: str, n: int, on_progress):
+        return client.generate_json(
+            prompts.WEEK_PLAN_SYSTEM,
+            prompts.render(chunk_prompt, outline=piano),
+            max_tokens=min(64000, 2000 * n + 4000),
+            thinking=True,
+            on_progress=on_progress,
+        )
+
+    with ThreadPoolExecutor(max_workers=len(parallel["chunks"])) as pool:
+        futures = [
+            pool.submit(pezzo, chunk_prompt, n, progress.channel() if progress else None)
+            for chunk_prompt, n in parallel["chunks"]
+        ]
+        days, errori = [], []
+        for future in futures:
+            try:
+                data = future.result()
+            except Exception as exc:  # noqa: BLE001 — vedi docstring
+                logger.warning("Un pezzo della settimana è fallito", exc_info=True)
+                errori.append(exc)
+                continue
+            if isinstance(data, dict) and isinstance(data.get("days"), list):
+                days += data["days"]
+    if not days and errori:
+        raise errori[0]
+    return {"days": days, "ingredient_reuse_notes": outline.get("ingredient_reuse_notes")}
 
 
 # La rotta genera in background; i test lo spengono (`conftest.py`) e aspettano il
@@ -309,19 +456,22 @@ def _run_generation(
     max_tokens: int,
     progress,
     followers: dict[int, list[int]] | None = None,
+    parallel: dict | None = None,
 ) -> dict:
     """La chiamata al modello e la scrittura del piano: la parte che dura minuti."""
     try:
         # Nel thread le letture qui sopra hanno aperto una transazione: chiuderla prima
         # della chiamata, o la connessione resta "idle in transaction" per minuti.
         db.commit()
-        data = client.generate_json(
-            prompts.WEEK_PLAN_SYSTEM,
-            prompt,
-            max_tokens=max_tokens,
-            thinking=True,
-            on_progress=progress,
-        )
+        data = _generate_in_parallel(client, parallel, progress) if parallel else None
+        if data is None:
+            data = client.generate_json(
+                prompts.WEEK_PLAN_SYSTEM,
+                prompt,
+                max_tokens=max_tokens,
+                thinking=True,
+                on_progress=progress,
+            )
         # Anche l'applicazione della risposta sta dentro il try: una risposta parsabile
         # ma di forma sbagliata sollevava fuori di qui, e lasciava la settimana
         # bloccata su "sto generando" fino allo scadere del quarto d'ora.

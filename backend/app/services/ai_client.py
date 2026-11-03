@@ -23,9 +23,12 @@ Tre cose valgono per ogni chiamata e quindi stanno qui:
    ritenta: molto più economico che far vedere un errore all'utente.
 """
 
+import copy
 import json
 import logging
+import os
 import re
+import threading
 import time
 
 from fastapi import HTTPException
@@ -44,15 +47,21 @@ from .accounts import admin_user
 
 logger = logging.getLogger(__name__)
 
-ROLES = ("planning", "chat", "diet")
+# `quick`: le stime brevi (pasto libero, «ho mangiato altro», ricetta da testo,
+# composizione dei nomi nuovi). Se l'amministratore non sceglie, è il modello della chat.
+ROLES = ("planning", "chat", "diet", "quick")
 
 # Oltre questa soglia si passa in streaming (vedi punto 2 nel docstring).
 _STREAM_THRESHOLD = 8000
 
 
 def reasoning_budget(max_tokens: int) -> int:
-    """I token per ragionare: un quarto del budget, mai sotto il minimo di Anthropic."""
-    return max(1024, max_tokens // 4)
+    """I token per ragionare: un ottavo del budget, mai sotto il minimo di Anthropic.
+
+    Era un quarto: ogni token di ragionamento si aspetta come uno di contenuto, e su
+    una settimana da 24.000 token erano 6.000 token (un paio di minuti) di pensiero
+    prima della prima ricetta, senza che le ricette uscissero più precise."""
+    return max(1024, max_tokens // 8)
 
 
 class AIError(HTTPException):
@@ -172,6 +181,12 @@ def _provider_message(exc) -> str:
 # ── Backend ────────────────────────────────────────────────────────────────────
 
 
+def _caches_explicitly(model: str) -> bool:
+    """I modelli che la cache del prompt la vogliono chiesta (`cache_control`): su
+    OpenRouter quelli Anthropic. OpenAI, DeepSeek e gli altri la fanno da sé."""
+    return (model or "").startswith("anthropic/")
+
+
 def _usage_dict(usage) -> dict | None:
     """Token e costo da una risposta OpenAI-compatibile. OpenRouter mette il costo in
     dollari nello stesso oggetto (`usage.cost`), fra i campi che l'SDK non conosce."""
@@ -192,7 +207,21 @@ def _usage_dict(usage) -> dict | None:
     }
 
 
-class _AnthropicBackend:
+class _UsageSlot:
+    """`last_usage` per thread: la generazione della settimana fa più chiamate in
+    parallelo con lo stesso client, e su un attributo semplice ogni thread avrebbe
+    letto (e registrato) l'uso della chiamata di un altro."""
+
+    @property
+    def last_usage(self):
+        return getattr(self.__dict__.setdefault("_usage_local", threading.local()), "value", None)
+
+    @last_usage.setter
+    def last_usage(self, value):
+        self.__dict__.setdefault("_usage_local", threading.local()).value = value
+
+
+class _AnthropicBackend(_UsageSlot):
     """SDK ufficiale Anthropic. L'unico che legge PDF nativamente."""
 
     supports_native_pdf = True
@@ -208,7 +237,8 @@ class _AnthropicBackend:
         params: dict = {
             "model": model,
             "max_tokens": max_tokens,
-            "system": system,
+            # In cache: vedi `_OpenAICompatibleBackend.complete`.
+            "system": [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
             "messages": messages,
         }
         # La stessa lezione dell'altro backend (vedi `_OpenAICompatibleBackend`): i token
@@ -225,7 +255,8 @@ class _AnthropicBackend:
 
         anthropic = self._anthropic
         try:
-            if max_tokens > _STREAM_THRESHOLD:
+            # In streaming anche quando qualcuno guarda i pezzi uscire (la chat).
+            if max_tokens > _STREAM_THRESHOLD or on_progress is not None:
                 with self._client.messages.stream(**params) as stream:
                     if on_progress:
                         # Gli eventi si consumano uno a uno solo se serve guardarli:
@@ -302,7 +333,7 @@ class _AnthropicBackend:
         )
 
 
-class _OpenAICompatibleBackend:
+class _OpenAICompatibleBackend(_UsageSlot):
     """Qualunque endpoint OpenAI-compatibile: OpenRouter, e volendo altri."""
 
     supports_native_pdf = False
@@ -321,7 +352,20 @@ class _OpenAICompatibleBackend:
         )
 
     def complete(self, *, model, system, messages, max_tokens, thinking, on_progress=None) -> str:
-        payload = [{"role": "system", "content": system}, *messages]
+        # Sui modelli Anthropic il prompt di sistema (regole, dieta, contesto: migliaia
+        # di token sempre uguali) si chiede in cache: le chiamate che lo ripetono entro
+        # cinque minuti — i pezzi della settimana in parallelo, i messaggi di una chat —
+        # partono prima e lo pagano un decimo. Gli altri provider fanno da sé o ignorano.
+        if _caches_explicitly(model):
+            system_message = {
+                "role": "system",
+                "content": [
+                    {"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}
+                ],
+            }
+        else:
+            system_message = {"role": "system", "content": system}
+        payload = [system_message, *messages]
         self.last_usage = None
 
         # Sui modelli che ragionano (GLM, Hy3, o-series...) il ragionamento è ACCESO
@@ -346,7 +390,8 @@ class _OpenAICompatibleBackend:
 
         openai = self._openai
         try:
-            if max_tokens > _STREAM_THRESHOLD:
+            # In streaming anche quando qualcuno guarda i pezzi uscire (la chat).
+            if max_tokens > _STREAM_THRESHOLD or on_progress is not None:
                 # Streaming: una generazione da trentamila token può richiedere
                 # minuti, e senza stream molti proxy chiudono la connessione prima.
                 chunks = []
@@ -473,6 +518,10 @@ def model_for(db: Session, user_id: int, role: str) -> str:
         )
         chosen = ""
 
+    if not chosen and role == "quick" and not os.getenv("AI_MODEL_QUICK", "").strip():
+        # Nessuna scelta per le stime brevi: si resta sul modello della chat, che
+        # l'amministratore ha già scelto, invece di imporre un modello mai provato.
+        return model_for(db, user_id, "chat")
     return chosen or default_model(role)
 
 
@@ -499,14 +548,15 @@ class AIClient:
     def supports_native_pdf(self) -> bool:
         return self._backend.supports_native_pdf
 
-    def _report_usage(self) -> None:
+    def _report_usage(self, duration_ms: int | None = None) -> None:
         usage = getattr(self._backend, "last_usage", None)
         if usage and self.on_usage:
-            self.on_usage(self.model, usage)
+            self.on_usage(self.model, {**usage, "duration_ms": duration_ms})
 
     def _complete(self, system, messages, max_tokens, thinking, on_progress=None) -> str:
         # Nel `finally`: anche una risposta che poi fallisce (vuota, rifiutata) è stata
         # pagata, e il registro deve contarla.
+        started = time.monotonic()
         try:
             text = self._backend.complete(
                 model=self.model,
@@ -517,7 +567,7 @@ class AIClient:
                 on_progress=on_progress,
             )
         finally:
-            self._report_usage()
+            self._report_usage(round((time.monotonic() - started) * 1000))
         if not text.strip():
             raise AIError("Il modello ha restituito una risposta vuota. Riprova.")
         return text
@@ -583,9 +633,12 @@ class AIClient:
             "Se succede spesso, prova un modello più capace da Impostazioni → Modelli AI."
         )
 
-    def chat(self, system: str, messages: list[dict], *, max_tokens: int = 2000) -> str:
-        """Conversazione multi-turno (chat per pasto). Risposta come testo libero."""
-        return self._complete(system, messages, max_tokens, False)
+    def chat(
+        self, system: str, messages: list[dict], *, max_tokens: int = 2000, on_progress=None
+    ) -> str:
+        """Conversazione multi-turno (chat per pasto). Risposta come testo libero.
+        Con `on_progress` la risposta arriva a pezzi mentre il modello la scrive."""
+        return self._complete(system, messages, max_tokens, False, on_progress)
 
     def parse_pdf(self, system: str, pdf_b64: str, prompt: str) -> dict | list:
         """Legge un PDF senza estrarne prima il testo. Solo backend Anthropic."""
@@ -593,12 +646,13 @@ class AIClient:
             raise AIError(
                 "Il provider configurato non legge i PDF direttamente.", 400
             )
+        started = time.monotonic()
         try:
             text = self._backend.complete_with_pdf(
                 model=self.model, system=system, pdf_b64=pdf_b64, prompt=prompt
             )
         finally:
-            self._report_usage()
+            self._report_usage(round((time.monotonic() - started) * 1000))
         try:
             return _extract_json(text)
         except ValueError:
@@ -653,4 +707,17 @@ def get_client(db: Session, user: User, role: str) -> AIClient:
     from .usage import recorder
 
     client.on_usage = recorder(db.get_bind(), user.id, role)
+    # Il client gemello per le stime brevi, pronto senza sessione: la generazione gira
+    # in un thread con una sessione sua e la composizione dei nomi nuovi la chiede lì.
+    if role != "quick":
+        quick_model = model_for(db, owner.id, "quick")
+        bind, uid = db.get_bind(), user.id
+
+        def quick() -> AIClient:
+            twin = copy.copy(client)
+            twin.model = quick_model
+            twin.on_usage = recorder(bind, uid, "quick")
+            return twin
+
+        client.quick = quick
     return client

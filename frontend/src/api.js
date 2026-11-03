@@ -73,6 +73,41 @@ async function request(path, options = {}) {
   return res.json();
 }
 
+// La chat in streaming: il server manda una riga JSON per evento (NDJSON) —
+// `{delta}` mentre il modello scrive, poi `{done}` con la risposta intera (la stessa
+// della POST normale) oppure `{error}`. `onDelta` riceve il testo man mano; la
+// promessa si risolve con `done`. Passa da `raw`, quindi il refresh sul 401 vale
+// anche qui.
+async function streamed(path, body, onDelta) {
+  const res = await raw(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let resto = '';
+  let fine = null;
+  const leggi = (riga) => {
+    if (!riga.trim()) return;
+    const evento = JSON.parse(riga);
+    if (evento.delta) onDelta?.(evento.delta);
+    else if (evento.error) throw new Error(evento.error);
+    else if (evento.done) fine = evento.done;
+  };
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    resto += decoder.decode(value, { stream: true });
+    const righe = resto.split('\n');
+    resto = righe.pop();
+    righe.forEach(leggi);
+  }
+  leggi(resto);
+  if (!fine) throw new Error('Risposta interrotta, riprova.');
+  return fine;
+}
+
 // Upload multipart: niente Content-Type a mano, lo scrive il browser col boundary.
 async function upload(path, file) {
   const form = new FormData();
@@ -369,11 +404,14 @@ export const api = {
   // ── Chat per pasto ──
   getChat: (mealId) => request(`/chat/meals/${mealId}/messages`),
 
-  sendChat: (mealId, content) =>
-    request(`/chat/meals/${mealId}/messages`, {
-      method: 'POST',
-      body: JSON.stringify({ content }),
-    }),
+  // Con `onDelta` la risposta arriva mentre il modello la scrive (vedi `streamed`).
+  sendChat: (mealId, content, onDelta) =>
+    onDelta
+      ? streamed(`/chat/meals/${mealId}/messages/stream`, { content }, onDelta)
+      : request(`/chat/meals/${mealId}/messages`, {
+          method: 'POST',
+          body: JSON.stringify({ content }),
+        }),
 
   clearChat: (mealId) => request(`/chat/meals/${mealId}/messages`, { method: 'DELETE' }),
 
@@ -412,11 +450,13 @@ export const api = {
   // Chat della spesa: legata alla settimana (week_plan_id della lista mostrata).
   getShoppingChat: (weekId) => request(`/chat/shopping/${weekId}/messages`),
 
-  sendShoppingChat: (weekId, content) =>
-    request(`/chat/shopping/${weekId}/messages`, {
-      method: 'POST',
-      body: JSON.stringify({ content }),
-    }),
+  sendShoppingChat: (weekId, content, onDelta) =>
+    onDelta
+      ? streamed(`/chat/shopping/${weekId}/messages/stream`, { content }, onDelta)
+      : request(`/chat/shopping/${weekId}/messages`, {
+          method: 'POST',
+          body: JSON.stringify({ content }),
+        }),
 
   clearShoppingChat: (weekId) =>
     request(`/chat/shopping/${weekId}/messages`, { method: 'DELETE' }),

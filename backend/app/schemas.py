@@ -185,6 +185,7 @@ class AiModelsUpdate(BaseModel):
     planning: str | None = Field(default=None, max_length=120)
     chat: str | None = Field(default=None, max_length=120)
     diet: str | None = Field(default=None, max_length=120)
+    quick: str | None = Field(default=None, max_length=120)
 
 
 # ── Ricette ────────────────────────────────────────────────────────────────────

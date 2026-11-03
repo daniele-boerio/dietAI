@@ -165,8 +165,9 @@ paragrafo nel documento, scrivendo anche cosa non andava con la versione di prim
   schermate che non ha.
 - `is_active` toglie l'accesso subito (sessioni revocate, `token_version`);
   `ai_enabled` spegne solo l'AI. L'admin non si sospende, cancella o resetta da solo.
-- Ogni chiamata al modello lascia una riga in `AIUsage` (token e costo, a chi ha premuto
-  il pulsante): il client la scrive da sé se è stato costruito da `get_client`.
+- Ogni chiamata al modello lascia una riga in `AIUsage` (token, costo e durata, a chi ha
+  premuto il pulsante): il client la scrive da sé se è stato costruito da `get_client`.
+  `last_usage` è per thread: lo stesso client lavora in parallelo.
 - Niente email: l'unico endpoint pubblico è `/auth/login`. Cancellare un utente porta
   via tutto (CASCADE) tranne le sue righe di `AIUsage`, che restano anonime (SET NULL,
   «Account cancellati»); il seed ricrea solo l'amministratore.
@@ -254,12 +255,16 @@ paragrafo nel documento, scrivendo anche cosa non andava con la versione di prim
   spento nei test); le chiavi VAPID si ricavano da `SECRET_KEY`.
 
 **Generazione** (`docs/generazione.md`)
-- Una chiamata sola per settimana (anti-spreco); di default riempie solo i buchi, e la
-  selezione di giorni e pasti (`days`, `slot_ids`) filtra senza spezzarla. La conta in
+- L'anti-spreco si decide su tutta la settimana insieme: oltre le quattro ricette una
+  chiamata breve fa il **piano** (piatti e ingredienti principali di tutti i pasti), poi
+  le ricette complete si scrivono a pezzi di giorni **in parallelo** seguendo quel piano
+  (`_generate_in_parallel`; senza piano si torna alla chiamata unica, la suite la usa
+  sempre: `generazione_in_una_chiamata`). Di default riempie solo i buchi, e la
+  selezione di giorni e pasti (`days`, `slot_ids`) filtra senza spezzare il piano. La conta in
   `lib/generation.js` deve dare lo stesso numero del server: se una casella si genera
   lo decide solo `planner.is_generable`, esposto come `generable` sul pasto.
-- Il ragionamento si chiede in token (un quarto di `max_tokens`, `reasoning_budget`), mai
-  `effort: high`. Sul ramo SDK Anthropic quel quarto si aggiunge a `max_tokens`, con
+- Il ragionamento si chiede in token (un ottavo di `max_tokens`, `reasoning_budget`), mai
+  `effort: high`. Sul ramo SDK Anthropic quell'ottavo si aggiunge a `max_tokens`, con
   `thinking: adaptive` ed `effort: medium`.
 - Stato, diario ed errore della generazione stanno sul `WeekPlan`, non nella pagina:
   ciò che può fallire sta dentro il `try` e il fallimento si registra e si logga.
@@ -267,6 +272,9 @@ paragrafo nel documento, scrivendo anche cosa non andava con la versione di prim
   (`_in_background`): la POST risponde 202 e l'esito lo dice il polling. La suite la
   fa in primo piano (`generazione_in_primo_piano` in `conftest.py`).
 - Il singolo pasto con `user_request`: comanda l'utente, tranne macro ed esclusi.
+- Le stime brevi (pasto libero, «ho mangiato altro», ricetta da testo, composizione dei
+  nomi nuovi) vanno al ruolo `quick`; senza scelta è il modello della chat. Sui modelli
+  Anthropic il prompt di sistema si chiede in cache (`cache_control`).
 - Gli esclusi li controlla il server dopo il modello (`exclusions.check_recipe`), non
   solo il prompt: una ricetta del modello che li contiene non entra nel piano.
 
@@ -297,6 +305,8 @@ paragrafo nel documento, scrivendo anche cosa non andava con la versione di prim
 **Chat** (`docs/chat.md`)
 - La ricetta va dopo il marcatore (`[RECIPE_UPDATE]`, `[RECIPES_UPDATE]`), il messaggio
   è solo prosa; `_needs_marker_retry` ritenta una volta.
+- La chat risponde in streaming (`/messages/stream`, NDJSON): esce solo la prosa prima
+  del marcatore (`ProseStream`), e alla fine la stessa risposta della POST normale.
 - La chat della spesa riscrive tutte le ricette che usano l'ingrediente, solo sui
   `meal_id` che ha ricevuto.
 - In chat **comanda l'utente**: una modifica chiesta si applica anche fuori dal ±10%

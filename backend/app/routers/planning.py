@@ -308,7 +308,7 @@ def set_eaten_instead(
     """«Ho mangiato altro: cosa?» — il testo e la stima (`meals.eaten_instead`)."""
     meal, day, _week = _get_meal(db, user.id, meal_id)
     return meals.eaten_instead(
-        db, lambda: get_client(db, user, "chat"), meal, day, body.text, body.nothing
+        db, lambda: get_client(db, user, "quick"), meal, day, body.text, body.nothing
     )
 
 
@@ -323,7 +323,7 @@ def ate_meal(
 ):
     """«Ho mangiato questo» su una casella vuota: ricetta stimata e pasto seguito."""
     meal, day, _week = _get_meal(db, user.id, meal_id)
-    return meals.ate(db, user, lambda: get_client(db, user, "chat"), meal, day, body.text)
+    return meals.ate(db, user, lambda: get_client(db, user, "quick"), meal, day, body.text)
 
 
 @router.put("/meals/{meal_id}/followed")

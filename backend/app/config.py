@@ -117,7 +117,9 @@ def model_matches_provider(model: str) -> bool:
 
 
 def default_model(role: str) -> str:
-    fallback = _DEFAULTS.get(AI_PROVIDER, _DEFAULTS["openrouter"])[role]
+    defaults = _DEFAULTS.get(AI_PROVIDER, _DEFAULTS["openrouter"])
+    # Le stime brevi non hanno un default loro: senza scelta usano quello della chat.
+    fallback = defaults.get(role) or defaults["chat"]
     env = _clean(os.getenv(f"AI_MODEL_{role.upper()}"))
     if not env:
         return fallback

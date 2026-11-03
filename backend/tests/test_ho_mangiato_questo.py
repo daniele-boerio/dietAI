@@ -117,11 +117,13 @@ def test_su_una_casella_piena_no(client, settimana, finto):
     assert finto.chiamate == chiamate
 
 
-def test_nel_futuro_no(client, settimana, finto):
+def test_nel_futuro_e_un_pasto_libero_in_programma(client, settimana, finto):
+    """Martedì non è ancora successo: la ricetta entra, il pasto non risulta seguito."""
     cena_di_martedi = pasto(settimana, 1, "Cena")
-    res = mangiato(client, cena_di_martedi["id"])
-    assert res.status_code == 400
-    assert finto.chiamate == 0
+    res = mangiato(client, cena_di_martedi["id"], "pizza fuori con gli amici")
+    assert res.status_code == 200, res.text
+    assert res.json()["recipe"]["title"] == "Pizza margherita"
+    assert res.json()["is_followed"] is None
 
 
 def test_un_giorno_passato_si(client, settimana, finto, monkeypatch):

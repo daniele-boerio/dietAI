@@ -250,8 +250,9 @@ export default function MealDetailPage() {
   // altrove. Tutto il resto — passato compreso — si modifica quando si vuole.
   const skipped = meal.day_is_skipped;
   const frozen = skipped || meal.is_skipped;
-  // Una casella vuota di oggi o di un giorno passato si può riempire con quello che
-  // si è mangiato davvero; il futuro non è ancora successo.
+  // Una casella vuota si riempie con un piatto scritto a parole su qualunque giorno:
+  // di oggi o del passato è «quello che ho mangiato» (e risulta seguito), di un giorno
+  // che deve ancora venire è un pasto libero in programma.
   const giaSuccesso = meal.date <= oggiIso();
 
   return (
@@ -374,6 +375,8 @@ export default function MealDetailPage() {
                         cioè nel punto della pagina in cui si è quando si è cucinato.
                         Sul telefono le stesse due sono anche nella barra in fondo
                         (`.meal-bar`), e lì queste si nascondono per non doppiarle. */}
+                    <div className="azioni-gruppo">
+                    <span className="eyebrow azioni-etichetta">Com'è andata</span>
                     <div className="andata-answers">
                       <button
                         className={`btn ${
@@ -405,6 +408,13 @@ export default function MealDetailPage() {
                       <span>Voto</span>
                       <StarRating value={meal.recipe.rating} onChange={rate} />
                     </div>
+                    </div>
+
+                    {/* I comandi che cambiano il piatto, raccolti sotto un'etichetta sola:
+                        sparsi nella stessa riga di «l'ho seguito» non si capiva quale
+                        servisse a cosa. */}
+                    <div className="azioni-gruppo">
+                    <span className="eyebrow azioni-etichetta">Cambia il piatto</span>
 
                     <button
                       className="btn btn-secondary"
@@ -422,7 +432,7 @@ export default function MealDetailPage() {
                           meal.is_recurring ? "var(--accent)" : "currentColor"
                         }
                       />
-                      {meal.is_recurring ? "Fisso" : "Rendi fisso"}
+                      {meal.is_recurring ? "Fisso: si ripete" : "Ripetilo nei prossimi giorni"}
                     </button>
 
                     {/* Spostare il piatto in un altro giorno (o a un altro pasto) è la
@@ -441,7 +451,7 @@ export default function MealDetailPage() {
                             : "Scambialo con un altro pasto della settimana"
                       }
                     >
-                      <ArrowLeftRight size={16} /> Scambia
+                      <ArrowLeftRight size={16} /> Scambia con un altro pasto
                     </button>
 
                     {/* Al posto del piatto generato, uno di quelli salvati: la spesa e la
@@ -452,7 +462,7 @@ export default function MealDetailPage() {
                       onClick={() => setPicker(true)}
                       disabled={frozen || meal.is_recurring || meal.is_followed !== null}
                     >
-                      <BookOpen size={16} /> Dal ricettario
+                      <BookOpen size={16} /> Metti una ricetta salvata
                     </button>
 
                     <button
@@ -468,8 +478,10 @@ export default function MealDetailPage() {
                       ) : (
                         <Sparkles size={16} />
                       )}
-                      Rigenera
+                      Rigenera con l'AI
                     </button>
+
+                    </div>
 
                     {!frozen && (
                       <div className="recipe-actions-quiet">
@@ -488,71 +500,84 @@ export default function MealDetailPage() {
           ) : (
             <EmptyState
               icon={RefreshCw}
-              title="Nessuna ricetta per questo pasto"
+              title="Questo pasto è vuoto"
               text={`Target: ${meal.target.calories} kcal, proteine ${meal.target.protein_g}g, carboidrati ${meal.target.carbs_g}g, grassi ${meal.target.fat_g}g.`}
               action={
-                /* I tre modi di riempire la casella, incolonnati e larghi uguale
-                   (`.empty-actions`): scelgo io, scegli tu cosa e faccio i conti,
-                   oppure la ricetta ce l'hai già. In riga si allineavano solo a
-                   schermo largo — vedi il commento sulla classe. */
+                /* Tre domande, una per gruppo, ciascuna con la sua riga di spiegazione:
+                   prima erano cinque pulsanti uno sotto l'altro e non si capiva quale
+                   premere per quale caso. */
                 <div className="empty-actions">
-                  {giaSuccesso && !frozen && (
+                  {!frozen && (
+                    <div className="azioni-scelta">
+                      <span className="eyebrow">
+                        {giaSuccesso ? "Hai già mangiato?" : "Mangi fuori o hai già deciso cosa?"}
+                      </span>
+                      <button
+                        className="btn btn-ai"
+                        onClick={() => setMangiando(true)}
+                        disabled={busy}
+                      >
+                        <Sparkles size={16} />
+                        {giaSuccesso ? "Segna cosa ho mangiato" : "Pasto libero"}
+                      </button>
+                      <p className="azioni-aiuto">
+                        Scrivi il piatto a parole (una pizza, un panino al bar): l'AI ne
+                        stima i valori così com'è, senza adattarlo ai tuoi macro.
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="azioni-scelta">
+                    <span className="eyebrow">Ti serve una ricetta nuova?</span>
+                    <button
+                      className="btn btn-primary"
+                      onClick={() => regenerate()}
+                      disabled={busy || frozen}
+                    >
+                      {busy ? <span className="spinner-inline" /> : <Sparkles size={16} />}
+                      Scegli tu il piatto
+                    </button>
                     <button
                       className="btn btn-ai"
-                      onClick={() => setMangiando(true)}
-                      disabled={busy}
+                      onClick={() => setGenerator(true)}
+                      disabled={busy || frozen}
                     >
                       <Sparkles size={16} />
-                      Segna cosa ho mangiato
+                      Da una mia idea
                     </button>
-                  )}
-                  <button
-                    className="btn btn-primary"
-                    onClick={() => regenerate()}
-                    disabled={busy || frozen}
-                  >
-                    {busy ? (
-                      <span className="spinner-inline" />
-                    ) : (
-                      <Sparkles size={16} />
+                    <p className="azioni-aiuto">
+                      L'AI scrive una ricetta pesata sui macro di questo pasto: decide lei,
+                      oppure parte da un'idea o da un ingrediente che le dai.
+                    </p>
+                  </div>
+
+                  <div className="azioni-scelta">
+                    <span className="eyebrow">Il piatto ce l'hai già?</span>
+                    <button className="btn btn-secondary" onClick={() => setPicker(true)}>
+                      <BookOpen size={16} />
+                      Metti una ricetta salvata
+                    </button>
+                    {!frozen && !meal.self_managed && (
+                      <button className="btn btn-secondary" onClick={() => setSwapping(true)}>
+                        <ArrowLeftRight size={16} />
+                        Sposta qui un piatto della settimana
+                      </button>
                     )}
-                    Scegli tu il piatto
-                  </button>
-                  <button
-                    className="btn btn-ai"
-                    onClick={() => setGenerator(true)}
-                    disabled={busy || frozen}
-                  >
-                    <Sparkles size={16} />
-                    Genera da una mia idea
-                  </button>
-                  <button
-                    className="btn btn-secondary"
-                    onClick={() => setPicker(true)}
-                  >
-                    <BookOpen size={16} />
-                    Scegli dal ricettario
-                  </button>
-                  {!frozen && !meal.self_managed && (
-                    <button
-                      className="btn btn-secondary"
-                      onClick={() => setSwapping(true)}
-                    >
-                      <ArrowLeftRight size={16} />
-                      Sposta qui un piatto della settimana
-                    </button>
-                  )}
+                  </div>
                 </div>
               }
             />
           )}
         </div>
 
-        <MealChat
+        {/* A casella vuota la chat non ha niente da modificare: era un sesto modo
+            apparente di riempire il pasto, che invece rispondeva «non c'è ancora una
+            ricetta». Compare insieme al piatto. */}
+        {meal.recipe && <MealChat
           mealId={meal.id}
           locked={frozen}
           onRecipeUpdated={(recipe) => setMeal((m) => ({ ...m, recipe }))}
-        />
+        />}
       </div>
 
       {/* Le due risposte sotto il pollice. La sera il pasto si apre proprio per
@@ -643,9 +668,10 @@ export default function MealDetailPage() {
       {mangiando && (
         <AteDialog
           meal={meal}
+          futuro={!giaSuccesso}
           onSaved={(updated) => {
             setMeal(updated);
-            setAppenaMangiato(true);
+            setAppenaMangiato(updated.is_followed === true);
           }}
           onClose={() => setMangiando(false)}
         />

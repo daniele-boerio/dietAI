@@ -79,8 +79,12 @@ ingredienti come per ogni ricetta, e la ricetta nasce dell'utente (`is_custom`: 
 ricettario, mai ritoccata verso un target, esclusi non controllati — è un fatto, non
 una proposta). Il pasto nasce **seguito**, ma la dispensa **non** si scala
 (`pantry_used` resta NULL): non si sa se era roba di casa, e togliere scorte a caso è
-peggio che lasciarle. Su una casella piena risponde 409 e nel futuro 400, prima di
-chiamare il modello. Guardia in `tests/test_ho_mangiato_questo.py`.
+peggio che lasciarle. Su una casella piena risponde 409, prima di chiamare il modello.
+Su un giorno che deve ancora venire lo stesso pulsante si chiama «Pasto libero»: la
+ricetta entra nella casella ma il pasto **non** risulta seguito (si segna poi, come
+ogni altro piatto). Prima il pulsante c'era solo fino a oggi, e per mettere in
+programma «sabato pizza fuori» bisognava passare dalla generazione, che il piatto lo
+adattava ai macro. Guardia in `tests/test_ho_mangiato_questo.py`.
 
 **"Lo faccio io" è un flag della dieta, non della settimana.** `MealSlot.auto_generate`
 a False significa che l'utente quel pasto lo prepara da sé: l'AI non lo genera mai e i

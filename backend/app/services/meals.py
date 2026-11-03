@@ -100,8 +100,8 @@ def ate(
     nasce già segnato «l'ho seguito», così l'andamento e healthAI lo contano come ogni
     pasto consumato. La dispensa **non** si scala: non si sa se era roba di casa, e
     togliere a caso le scorte è peggio che lasciarle. Solo su una casella vuota (chi ha
-    già un piatto ha «ho mangiato altro») e di oggi o di un giorno passato: quello che
-    non è ancora successo non si segna.
+    già un piatto ha «ho mangiato altro»). Su un giorno futuro è un «pasto libero» in
+    programma: la ricetta entra, il segno no.
     """
     ensure_not_skipped(day, meal)
     if meal.recipe_id:
@@ -110,8 +110,10 @@ def ate(
             "Questo pasto ha già un piatto: se hai mangiato altro, segnalo con "
             "«Ho mangiato altro».",
         )
-    if day.date > planner.today():
-        raise HTTPException(400, "Si può segnare solo un pasto di oggi o dei giorni passati.")
+    # Di oggi o del passato è un fatto: il pasto risulta seguito. Di un giorno che deve
+    # ancora venire è un pasto libero in programma («sabato pizza fuori»): la ricetta
+    # entra nella casella e il segno lo si mette poi, come per ogni altro piatto.
+    gia_successo = day.date <= planner.today()
 
     slot = db.get(MealSlot, meal.meal_slot_id)
     recipe = create_from_eaten(db, client_for(), user.id, slot_name=slot.name, text=text)
@@ -120,7 +122,8 @@ def ate(
     meal.source = "user_custom"
     forget_tracking(meal)
     forget_queued_meal(db, meal)
-    meal.is_followed = True
+    if gia_successo:
+        meal.is_followed = True
     meal.pantry_used = None
     db.commit()
 

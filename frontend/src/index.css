@@ -5800,6 +5800,54 @@ input[type="range"]:disabled {
    sposta di mezza etichetta e le tre finiscono su tre ascisse diverse — una scaletta,
    dentro pulsanti perfettamente allineati. A sinistra partono tutte dallo stesso
    padding, e le etichette pure. */
+/* Un gruppo di scelte a casella vuota: la domanda, i pulsanti, una riga che dice cosa
+   fanno. Allineato a sinistra come i pulsanti (vedi sotto). */
+.azioni-scelta {
+  display: grid;
+  gap: 8px;
+  text-align: left;
+}
+
+.azioni-scelta + .azioni-scelta {
+  margin-top: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.azioni-scelta > .btn {
+  justify-content: flex-start;
+}
+
+.azioni-scelta > .btn > .spinner-inline {
+  width: 16px;
+  height: 16px;
+}
+
+.azioni-aiuto {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+/* I comandi del piatto pieno in due righe con la loro etichetta: «com'è andata» e
+   «cambia il piatto». Nella stessa riga si confondevano. */
+.azioni-gruppo {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.azioni-gruppo + .azioni-gruppo {
+  margin-top: 6px;
+}
+
+.azioni-etichetta {
+  flex-basis: 100%;
+}
+
 .empty-actions > .btn {
   justify-content: flex-start;
 }

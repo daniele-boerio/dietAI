@@ -6563,6 +6563,12 @@ input[type="range"]:disabled {
   .day-pick.today .day-dot.moved {
     background: var(--accent-contrast);
   }
+  /* Nell'intestazione della griglia i pallini stanno a destra (`margin-left: auto`);
+     qui la tessera è una colonna, e lo stesso margine li spingeva a destra invece di
+     lasciarli centrati sotto il numero. */
+  .day-pick .day-dots {
+    margin-left: 0;
+  }
   .day-pick.off {
     border-style: dashed;
   }

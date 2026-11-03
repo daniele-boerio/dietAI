@@ -58,6 +58,7 @@ def recorder(bind, user_id: int, role: str):
                         output_tokens=int(usage.get("output_tokens") or 0),
                         cost_usd=cost,
                         cost_estimated=estimated,
+                        duration_ms=usage.get("duration_ms"),
                     )
                 )
                 session.commit()
@@ -126,8 +127,31 @@ def summary(db: Session, days: int = 30) -> dict:
                 "calls_without_cost": int(senza or 0),
             }
         )
+    # I tempi per funzione: dicono dove l'attesa si accumula e se cambiare modello a
+    # un ruolo è servito. Solo le righe che la durata la conoscono.
+    by_role = [
+        {
+            "role": role,
+            "calls": calls,
+            "avg_seconds": round(avg / 1000, 1),
+            "max_seconds": round(peak / 1000, 1),
+        }
+        for role, calls, avg, peak in (
+            db.query(
+                AIUsage.role,
+                func.count(AIUsage.id),
+                func.avg(AIUsage.duration_ms),
+                func.max(AIUsage.duration_ms),
+            )
+            .filter(AIUsage.created_at >= since, AIUsage.duration_ms.isnot(None))
+            .group_by(AIUsage.role)
+            .order_by(AIUsage.role)
+            .all()
+        )
+    ]
     return {
         "days": days,
         "users": users,
+        "by_role": by_role,
         "total_cost_usd": round(sum(u["cost_usd"] or 0 for u in users), 4),
     }

@@ -3,11 +3,27 @@
 Ruoli dei modelli, budget di ragionamento, cosa si genera, stato e diario della generazione. Il perché di ogni scelta: le regole in breve stanno in
 `CLAUDE.md`, qui c'è la storia che le giustifica.
 
-**Il modello si sceglie per ruolo.** `planning`, `chat`, `diet` hanno pesi diversi:
+**Il modello si sceglie per ruolo.** `planning`, `chat`, `diet`, `quick` hanno pesi diversi:
 incastrare trenta pasti nei macro è difficile, rispondere in chat no. `get_client(db,
 user, role)` costruisce il client col modello scelto dall'**amministratore**
 (`user_preferences` della riga di `ai_owner`) o col default d'ambiente. Aggiungendo un ruolo, aggiornare `ROLES` in `ai_client.py`,
 `_DEFAULTS` in `config.py` e `ROLE_LABELS` in `routers/config.py`.
+
+**Le stime brevi hanno un ruolo loro (`quick`).** Pasto libero, «ho mangiato altro»,
+ricetta scritta dall'utente e la composizione per 100 g dei nomi nuovi andavano al
+modello della chat o a quello della settimana (Opus): risposte da poche centinaia di
+token che facevano aspettare un minuto. Ora hanno un ruolo a sé, da scegliere in
+Impostazioni → Modelli AI (Haiku o Sonnet le portano a pochi secondi). Senza scelta il
+ruolo usa il modello della chat, non un default mai provato. Per la composizione il
+client della settimana porta con sé un gemello (`client.quick()`), perché la
+generazione gira in un thread con una sessione sua e lì `get_client` non si può
+richiamare. Guardie in `tests/test_ai_provider.py`.
+
+**Il prompt di sistema si chiede in cache sui modelli Anthropic.** Regole, dieta e
+contesto sono migliaia di token sempre uguali fra chiamate vicine (i pezzi della
+settimana, i messaggi di una chat): con `cache_control` chi li ripete entro cinque
+minuti parte prima e li paga un decimo. Gli altri provider la cache la fanno da sé, e
+ricevono il testo semplice. Guardia in `tests/test_cache_del_prompt.py`.
 
 **Il PDF passa prima da `pypdf`.** Estrarre il testo rende la lettura della dieta
 indipendente dal modello (funziona anche senza vista) ed è gratis. Solo se il PDF è una
@@ -24,8 +40,10 @@ generazione finiva con `finish_reason` "length" e contenuto vuoto, dopo minuti d
 attesa e a chiamata pagata. Non era un modello sbagliato, era una richiesta
 impossibile, e **non è una questione di scala**: spezzare la settimana in giorni
 riproduce lo stesso rapporto più in piccolo (12.000 token → ~2.400 per tre ricette).
-Ora `thinking=True` manda `reasoning.max_tokens` a un quarto del budget, così al
-contenuto resta sempre la maggioranza; `thinking=False` resta `effort: low`, che sui
+Ora `thinking=True` manda `reasoning.max_tokens` a un ottavo del budget, così al
+contenuto resta sempre la maggioranza (era un quarto: 6.000 token di pensiero su una
+settimana, un paio di minuti d'attesa prima della prima ricetta senza ricette più
+precise, e si è dimezzato per la velocità); `thinking=False` resta `effort: low`, che sui
 compiti brevi va bene. La garanzia sta in `tests/test_reasoning_budget.py`, che la
 verifica sulla strada dello streaming — l'unica che la pianificazione prende davvero.
 Su risposta vuota si diagnostica comunque il `finish_reason` invece di dire
@@ -165,9 +183,23 @@ parsare un JSON a metà non si può, contare sì. Se il diario non si scrive non
 succede niente — ogni errore lì viene ingoiato, sarebbe assurdo perdere una
 generazione pagata per un log.
 
-**Una sola chiamata AI per settimana.** L'anti-spreco (mezza zucchina lunedì, l'altra
-metà giovedì) funziona solo se il modello vede tutti i pasti insieme. Sopra gli 8.000
-token di output `ai_client` passa in streaming da solo.
+**L'anti-spreco si decide su tutta la settimana; le ricette si scrivono in parallelo.**
+L'anti-spreco (mezza zucchina lunedì, l'altra metà giovedì) funziona solo se il modello
+vede tutti i pasti insieme, e per questo la settimana era una chiamata sola. Ma una
+chiamata sola scrive le ricette una dopo l'altra, ~2.000 token ciascuna: nove ricette
+erano cinque o sei minuti. Spezzarla e basta avrebbe perso l'incastro. Ora, oltre le
+quattro ricette, una chiamata breve (`WEEK_OUTLINE_SYSTEM`) decide il **piano** di tutta
+la settimana — piatto e ingredienti principali di ogni pasto, con le quantità che i
+pasti si dividono — e poi fino a quattro chiamate **in parallelo** scrivono le ricette
+complete di qualche giorno ciascuna (`WEEK_CHUNK_PROMPT`), con il piano intero davanti
+(`_generate_in_parallel`). Le regole sono le stesse (`WEEK_RULES`), il prompt di
+sistema dei pezzi è quello di sempre. Se il piano fallisce si torna alla chiamata
+unica; se fallisce un pezzo, i suoi pasti restano vuoti e gli altri entrano (sono già
+pagati). Il diario tiene un canale per chiamata (`GenerationProgress.channel`), che
+mescolati facevano poltiglia. La suite genera in una chiamata
+(`generazione_in_una_chiamata` in `conftest.py`); il parallelo lo prova
+`tests/test_generazione_parallela.py`. Sopra gli 8.000 token di output, o quando
+qualcuno guarda i pezzi uscire, `ai_client` passa in streaming da solo.
 
 **E alla fine anche il lavoro è uscito dalla richiesta.** Stato, diario ed errore
 stavano già sul `WeekPlan` perché la risposta della POST arrivava di rado; restava che
@@ -201,7 +233,7 @@ su un database suo.
 `output_config.effort: high` dentro lo stesso `max_tokens` del contenuto: la trappola di
 OpenRouter, mai vista solo perché in produzione quel ramo non gira. Il budget fisso in
 token (`budget_tokens`) sui modelli recenti è deprecato a favore di `adaptive`, quindi
-il patto si fa al contrario: il quarto per ragionare (`reasoning_budget`) si **aggiunge**
+il patto si fa al contrario: l'ottavo per ragionare (`reasoning_budget`) si **aggiunge**
 a `max_tokens` e l'effort scende a `medium`. Guardia in `test_reasoning_budget.py`. Con
 una chiave Anthropic vera non è ancora stato provato: chi passa ad
 `AI_PROVIDER=anthropic` guardi la prima generazione di settimana piena.

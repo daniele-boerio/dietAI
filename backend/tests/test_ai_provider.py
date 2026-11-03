@@ -163,7 +163,7 @@ def test_config_ai_espone_un_modello_per_ruolo(client):
 
     assert data["provider"] == "openrouter"
     assert data["key_prefix"] == "sk-or-"
-    assert [r["key"] for r in data["roles"]] == ["planning", "chat", "diet"]
+    assert [r["key"] for r in data["roles"]] == ["planning", "chat", "diet", "quick"]
     # Nessuna scelta ancora fatta: si mostra il default dell'ambiente.
     assert all(r["model"] is None for r in data["roles"])
     assert all(r["default"] for r in data["roles"])
@@ -219,3 +219,37 @@ def test_i_numeri_storti_del_pdf_si_leggono_e_si_contengono(client, monkeypatch)
     assert (pranzo["calories"], pranzo["protein_g"], pranzo["carbs_g"]) == (650, 40.5, 0)
     assert cena["calories"] == 5000
     assert res.json()["total_daily_calories"] == 5650
+
+
+def test_le_stime_veloci_senza_scelta_usano_il_modello_della_chat(client, db):
+    """Un modello mai provato non si impone: finché l'amministratore non sceglie, le
+    stime brevi vanno al modello che ha già scelto per la chat."""
+    from app.services.ai_client import model_for
+
+    client.put("/api/config/ai/models", json={"chat": "z-ai/glm-4.6"})
+    assert model_for(db, 1, "quick") == "z-ai/glm-4.6"
+    quick = next(r for r in client.get("/api/config/ai").json()["roles"] if r["key"] == "quick")
+    assert quick["default"] == "z-ai/glm-4.6"
+
+    client.put("/api/config/ai/models", json={"chat": "z-ai/glm-4.6", "quick": "anthropic/claude-haiku-4-5"})
+    assert model_for(db, 1, "quick") == "anthropic/claude-haiku-4-5"
+
+
+def test_la_composizione_dei_nomi_nuovi_va_al_modello_veloce(client, db, monkeypatch):
+    from app.models import User
+    from app.services import macros, recipes
+    from app.services.ai_client import get_client
+
+    client.put("/api/auth/api-key", json={"api_key": "sk-or-chiave-finta-per-i-test"})
+    client.put("/api/config/ai/models", json={"quick": "anthropic/claude-haiku-4-5"})
+    admin = db.query(User).filter(User.is_admin.is_(True)).one()
+    usati = []
+    monkeypatch.setattr(macros, "ATTIVO", True)
+    monkeypatch.setattr(macros, "missing_composition", lambda db, ids: ids)
+    monkeypatch.setattr(macros, "ensure_composition", lambda db, c, ids: usati.append(c.model) or 0)
+
+    recipes.learn_composition(
+        db, get_client(db, admin, "planning"),
+        [{"ingredients": [{"name": "farina di grillo", "quantity": 10, "unit": "g"}]}],
+    )
+    assert usati == ["anthropic/claude-haiku-4-5"]

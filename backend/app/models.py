@@ -653,6 +653,7 @@ class UserPreferences(Base):
     ai_model_planning = Column(String)
     ai_model_chat = Column(String)
     ai_model_diet = Column(String)
+    ai_model_quick = Column(String)  # NULL = il modello della chat (migrazione 0036)
     # Il promemoria serale: «HH:MM» nell'ora italiana, NULL = spento. `last_reminder_on`
     # è il giorno dell'ultimo giro fatto per questo utente, mandato o no: una volta al
     # giorno e non di più (vedi `services/push.py`).
@@ -689,6 +690,9 @@ class AIUsage(Base):
     # mostrare, e il registro non deve far comparire Decimal nel resto del codice.
     cost_usd = Column(Numeric(14, 8, asdecimal=False))
     cost_estimated = Column(Boolean, nullable=False, default=False, server_default="false")
+    # Quanto è durata la chiamata, dalla richiesta all'ultimo token (migrazione 0036).
+    # NULL sulle righe di prima: «l'app è lenta» senza numeri non si poteva misurare.
+    duration_ms = Column(Integer)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
 

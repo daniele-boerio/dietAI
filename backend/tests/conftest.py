@@ -176,3 +176,11 @@ def diet(client):
     )
     assert res.status_code == 200, res.text
     return res.json()
+
+
+@pytest.fixture(autouse=True)
+def generazione_in_una_chiamata(monkeypatch):
+    """La settimana si genera in una chiamata sola: i modelli finti della suite
+    rispondono con tutta la settimana a ogni domanda. `test_generazione_parallela.py`
+    riaccende il piano + pezzi e lo prova con un modello che sa distinguerli."""
+    monkeypatch.setattr(planner, "PARALLEL_GENERATION", False)

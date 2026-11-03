@@ -8,6 +8,14 @@ import { api } from '../api';
 // provider; le chiamate di cui non si sa il costo si dichiarano invece di sparire.
 const PERIODI = [7, 30, 90];
 
+const RUOLI = {
+  planning: 'Generazione ricette',
+  chat: 'Chat e modifiche',
+  diet: 'Lettura della dieta',
+  quick: 'Stime veloci',
+};
+const secondi = (s) => (s >= 60 ? `${Math.floor(s / 60)}m ${Math.round(s % 60)}s` : `${s}s`);
+
 export default function AiUsageCard() {
   const [days, setDays] = useState(30);
   const [data, setData] = useState(null);
@@ -57,6 +65,23 @@ export default function AiUsageCard() {
             {data.users.some((u) => u.calls_without_cost) &&
               ' Alcune chiamate non hanno un costo noto (né dichiarato dal provider né nel listino dei modelli) e restano fuori dal totale.'}
           </p>
+          {data.by_role?.length > 0 && (
+            <>
+              <div className="eyebrow" style={{ marginTop: 16, marginBottom: 6 }}>
+                Quanto si aspetta
+              </div>
+              <ul className="usage-list">
+                {data.by_role.map((r) => (
+                  <li key={r.role}>
+                    <span className="usage-email">{RUOLI[r.role] ?? r.role}</span>
+                    <span className="usage-num">{r.calls} chiamate</span>
+                    <span className="usage-num">massimo {secondi(r.max_seconds)}</span>
+                    <strong className="usage-num">in media {secondi(r.avg_seconds)}</strong>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </>
       )}
     </div>

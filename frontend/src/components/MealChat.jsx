@@ -18,6 +18,8 @@ export default function MealChat({ mealId, locked, onRecipeUpdated }) {
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  // La risposta mentre arriva: il testo compare man mano invece dei tre puntini.
+  const [inArrivo, setInArrivo] = useState('');
   const bodyRef = useRef(null);
 
   useEffect(() => {
@@ -36,7 +38,7 @@ export default function MealChat({ mealId, locked, onRecipeUpdated }) {
 
   useEffect(() => {
     bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight, behavior: 'smooth' });
-  }, [messages, sending]);
+  }, [messages, sending, inArrivo]);
 
   const send = async (text) => {
     const content = (text ?? draft).trim();
@@ -50,7 +52,7 @@ export default function MealChat({ mealId, locked, onRecipeUpdated }) {
     setMessages((prev) => [...prev, { id: provvisorio, role: 'user', content }]);
 
     try {
-      const reply = await api.sendChat(mealId, content);
+      const reply = await api.sendChat(mealId, content, (pezzo) => setInArrivo((t) => t + pezzo));
       setMessages((prev) => [
         ...prev,
         { id: `tmp-a-${Date.now()}`, role: 'assistant', content: reply.content },
@@ -67,6 +69,7 @@ export default function MealChat({ mealId, locked, onRecipeUpdated }) {
       setDraft((attuale) => attuale || content);
     } finally {
       setSending(false);
+      setInArrivo('');
     }
   };
 
@@ -121,9 +124,13 @@ export default function MealChat({ mealId, locked, onRecipeUpdated }) {
 
         {sending && (
           <div className="chat-bubble assistant">
-            <span className="typing">
-              DietAI sta rispondendo <i /> <i /> <i />
-            </span>
+            {inArrivo ? (
+              <ChatText text={inArrivo} />
+            ) : (
+              <span className="typing">
+                DietAI sta rispondendo <i /> <i /> <i />
+              </span>
+            )}
           </div>
         )}
       </div>

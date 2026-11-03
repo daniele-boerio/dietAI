@@ -51,6 +51,7 @@ from .lettura import (  # noqa: F401
 )
 from .generazione import (  # noqa: F401
     _apply_generated_week, generate_week, GENERATION_IN_BACKGROUND, _in_background,
+    PARALLEL_GENERATION, MAX_PARALLEL, _format_outline, _generate_in_parallel, _split_days,
     meal_context_for_chat, _partial_ingredients, regenerate_meal, _run_generation,
     _single_meal_frequencies, _slot_line,
 )

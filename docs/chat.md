@@ -49,6 +49,17 @@ un pasto saltato, dove non ci sarebbe niente da applicare. Le bolle passano da
 `ChatText`, che rende il minimo di markdown che i modelli usano davvero (grassetto,
 elenchi, paragrafi) costruendo elementi React — nessuna libreria, nessun HTML grezzo.
 
+**La risposta compare mentre il modello la scrive.** Prima la pagina mostrava tre
+puntini per tutta la risposta, mezzo minuto e oltre. Le rotte `/messages/stream` (pasto
+e spesa) mandano una riga JSON per evento: `{"delta"}` mentre esce la prosa, poi
+`{"done"}` con la stessa risposta della POST normale, oppure `{"error"}`. Il JSON della
+ricetta non deve uscire a pezzi: `ProseStream` passa solo il testo prima del marcatore
+e trattiene sempre gli ultimi caratteri, perché un marcatore spezzato fra due pezzi non
+scappi. Il lavoro gira in un thread con una sessione sua; i controlli (pasto tuo, AI
+accesa) restano risposte HTTP normali, fatti prima di cominciare. `X-Accel-Buffering:
+no` serve a Nginx, che altrimenti consegnerebbe tutto alla fine. Guardia in
+`tests/test_chat_in_streaming.py`.
+
 **Le regole dell'utente sono testo libero, di proposito.** `UserPreferences.notes`
 finisce in `CONTEXT_TEMPLATE` così com'è: il destinatario è un modello linguistico,
 quindi trasformare "carne rossa al massimo due volte a settimana" in caselle

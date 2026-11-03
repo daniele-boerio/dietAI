@@ -353,6 +353,11 @@ def learn_composition(db: Session, client, recipes_data: list[dict]) -> int:
     if not macros.missing_composition(db, ids):
         return 0
     db.commit()
+    # Una stima per 100 g di un alimento è un compito breve: va al modello veloce
+    # quando il client ne ha uno (`get_client` glielo dà), non a quello della settimana.
+    quick = getattr(client, "quick", None)
+    if callable(quick):
+        client = quick()
     imparati = macros.ensure_composition(db, client, ids)
     db.commit()
     return imparati

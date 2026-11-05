@@ -310,3 +310,15 @@ Le regole nate dall'audit WCAG 2.2, ognuna con quello che non andava prima:
 - **Tastiera**: `:focus-visible` globale (sui campi un anello, non solo il bordo da
   1px), link «Vai al contenuto», `nav` con un nome; bersagli di almeno 24px.
 - **Movimento**: `prefers-reduced-motion` spegne animazioni e transizioni.
+
+## L'app si aggiorna da sola dopo un deploy
+
+Su iPhone la PWA lasciata in background non si ricarica: quando la riapri viene solo
+risvegliata, senza chiedere di nuovo `index.html`, e il bundle resta quello di prima
+anche per ore dopo un deploy. È successo con le calorie mangiate: il server era già
+giusto, il telefono mostrava ancora il conto vecchio. `lib/versione.js`
+(`seguiVersione`, acceso in `main.jsx` solo in produzione) quando l'app torna in
+primo piano chiede `/index.html?v=…` (la query salta sia la cache HTTP sia quella del
+service worker), legge il bundle che il server serve adesso e, se non è quello
+caricato, ricarica la pagina, una volta sola per bundle. È l'unica `fetch` fuori da
+`api.js`: non parla con l'API.

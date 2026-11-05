@@ -11,21 +11,24 @@ Toast prosciutto e formaggio e un caffè al bar.`;
 // «Ho mangiato questo» / «Pasto libero»: su una casella vuota si scrive a parole un
 // piatto (di oggi o del passato: quello che si è mangiato; di un giorno che verrà: un
 // pasto libero in programma). Il modello lo trasforma in una ricetta (i macro si contano dagli
-// ingredienti) e il pasto nasce già seguito: senza, quel giorno restava un buco per
-// l'andamento e per healthAI. La dispensa non si tocca — non si sa se era roba di casa.
-export default function AteDialog({ meal, futuro = false, onSaved, onClose }) {
+// ingredienti). Nel passato il pasto nasce seguito; oggi solo se si spunta «l'ho già
+// mangiato» — altrimenti un pranzo scritto la mattina finiva fra le calorie mangiate. La dispensa non si tocca — non si sa se era roba di casa.
+export default function AteDialog({ meal, futuro = false, oggi = false, onSaved, onClose }) {
   const { addToast } = useApp();
   const [testo, setTesto] = useState('');
   const [busy, setBusy] = useState(false);
+  const [giaMangiato, setGiaMangiato] = useState(false);
+  // Nel passato è sempre già mangiato, nel futuro mai: la domanda ha senso solo oggi.
+  const segna = oggi ? giaMangiato : !futuro;
 
   const salva = async (e) => {
     e.preventDefault();
     if (testo.trim().length < 3) return;
     setBusy(true);
     try {
-      const updated = await api.ateMeal(meal.id, testo.trim());
+      const updated = await api.ateMeal(meal.id, testo.trim(), segna);
       addToast(
-        `${futuro ? 'In programma' : 'Segnato'}: ${updated.recipe.title} · ${updated.recipe.calories} kcal`,
+        `${segna ? 'Segnato' : 'In programma'}: ${updated.recipe.title} · ${updated.recipe.calories} kcal`,
       );
       onSaved(updated);
       onClose();
@@ -40,7 +43,7 @@ export default function AteDialog({ meal, futuro = false, onSaved, onClose }) {
   return (
     <Modal
       as="form"
-      title={futuro ? 'Pasto libero' : 'Cosa hai mangiato?'}
+      title={futuro || oggi ? 'Pasto libero' : 'Cosa hai mangiato?'}
       onClose={onClose}
       busy={busy}
       onSubmit={salva}
@@ -48,7 +51,7 @@ export default function AteDialog({ meal, futuro = false, onSaved, onClose }) {
       <p className="modal-text">
         {meal.slot_name}: scrivilo come lo diresti, con le quantità se le sai. Diventa una
         ricetta con calorie e macro stimati così com'è, senza adattarla ai tuoi target
-        {futuro ? '.' : ', e il pasto risulta seguito.'}
+        {segna ? ', e il pasto risulta seguito.' : '. Lo segni come mangiato quando lo mangi.'}
       </p>
       <textarea
         rows={4}
@@ -60,13 +63,24 @@ export default function AteDialog({ meal, futuro = false, onSaved, onClose }) {
         disabled={busy}
         autoFocus
       />
+      {oggi && (
+        <label className="check-row" style={{ marginTop: 12 }}>
+          <input
+            type="checkbox"
+            checked={giaMangiato}
+            onChange={(e) => setGiaMangiato(e.target.checked)}
+            disabled={busy}
+          />
+          L'ho già mangiato
+        </label>
+      )}
       <div className="modal-actions" style={{ marginTop: 16 }}>
         <button type="button" className="btn btn-secondary" onClick={onClose} disabled={busy}>
           Annulla
         </button>
         <button type="submit" className="btn btn-ai" disabled={busy || testo.trim().length < 3}>
           {busy ? <span className="spinner-inline" /> : <Sparkles size={16} />}
-          {futuro ? 'Mettilo in programma' : 'Segna come mangiato'}
+          {segna ? 'Segna come mangiato' : 'Mettilo in programma'}
         </button>
       </div>
     </Modal>

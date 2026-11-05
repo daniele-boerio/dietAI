@@ -4516,6 +4516,22 @@ textarea:focus-visible {
   }
 }
 
+/* Una casella da spuntare con la sua frase accanto (es. «L'ho già mangiato» nel pasto
+   libero di oggi): tutta la riga è il bersaglio, non solo il quadratino. */
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.check-row > input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent-fill);
+}
+
 .toggle-row {
   display: flex;
   align-items: center;

@@ -57,8 +57,10 @@ def pasto(settimana, dow, nome):
     return next(m for m in settimana["days"][dow]["meals"] if m["slot_name"] == nome)
 
 
-def mangiato(client, meal_id, testo="una pizza margherita in pizzeria"):
-    return client.post(f"/api/planning/meals/{meal_id}/ate", json={"text": testo})
+def mangiato(client, meal_id, testo="una pizza margherita in pizzeria", gia=True):
+    return client.post(
+        f"/api/planning/meals/{meal_id}/ate", json={"text": testo, "already_eaten": gia}
+    )
 
 
 def test_la_casella_vuota_diventa_un_pasto_seguito(client, settimana, finto):
@@ -124,6 +126,24 @@ def test_nel_futuro_e_un_pasto_libero_in_programma(client, settimana, finto):
     assert res.status_code == 200, res.text
     assert res.json()["recipe"]["title"] == "Pizza margherita"
     assert res.json()["is_followed"] is None
+
+
+def test_oggi_senza_spunta_e_solo_in_programma(client, settimana, finto):
+    """Il pranzo scritto la mattina non è ancora mangiato: niente segno, e nel conto
+    delle calorie mangiate non entra."""
+    cena = pasto(settimana, 0, "Cena")
+    res = mangiato(client, cena["id"], gia=False)
+    assert res.status_code == 200, res.text
+    assert res.json()["is_followed"] is None
+    lunedi = client.get("/api/planning/weeks/current").json()["days"][0]["totals"]
+    assert lunedi["eaten_calories"] == 0
+
+
+def test_nel_passato_e_sempre_mangiato(client, settimana, finto, monkeypatch):
+    oggi = planner.today()
+    monkeypatch.setattr(planner, "today", lambda: oggi + timedelta(days=2))
+    res = mangiato(client, pasto(settimana, 0, "Cena")["id"], gia=False)
+    assert res.json()["is_followed"] is True
 
 
 def test_un_giorno_passato_si(client, settimana, finto, monkeypatch):

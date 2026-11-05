@@ -91,7 +91,8 @@ def assign(
 
 
 def ate(
-    db: Session, user: User, client_for, meal: PlannedMeal, day: DayPlan, text: str
+    db: Session, user: User, client_for, meal: PlannedMeal, day: DayPlan, text: str,
+    already_eaten: bool = False,
 ) -> dict:
     """«Ho mangiato questo»: una casella vuota si riempie con quello che si è mangiato.
 
@@ -110,10 +111,13 @@ def ate(
             "Questo pasto ha già un piatto: se hai mangiato altro, segnalo con "
             "«Ho mangiato altro».",
         )
-    # Di oggi o del passato è un fatto: il pasto risulta seguito. Di un giorno che deve
+    # Di un giorno passato è un fatto: il pasto risulta seguito. Di un giorno che deve
     # ancora venire è un pasto libero in programma («sabato pizza fuori»): la ricetta
-    # entra nella casella e il segno lo si mette poi, come per ogni altro piatto.
-    gia_successo = day.date <= planner.today()
+    # entra nella casella e il segno lo si mette poi, come per ogni altro piatto. Oggi
+    # lo dice l'utente (`already_eaten`): prima oggi valeva sempre «già mangiato», e
+    # il pranzo scritto alle otto del mattino finiva fra le calorie mangiate.
+    oggi = planner.today()
+    gia_successo = day.date < oggi or (day.date == oggi and already_eaten)
 
     slot = db.get(MealSlot, meal.meal_slot_id)
     recipe = create_from_eaten(db, client_for(), user.id, slot_name=slot.name, text=text)

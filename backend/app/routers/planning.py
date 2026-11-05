@@ -323,7 +323,10 @@ def ate_meal(
 ):
     """«Ho mangiato questo» su una casella vuota: ricetta stimata e pasto seguito."""
     meal, day, _week = _get_meal(db, user.id, meal_id)
-    return meals.ate(db, user, lambda: get_client(db, user, "quick"), meal, day, body.text)
+    return meals.ate(
+        db, user, lambda: get_client(db, user, "quick"), meal, day, body.text,
+        already_eaten=body.already_eaten,
+    )
 
 
 @router.put("/meals/{meal_id}/followed")

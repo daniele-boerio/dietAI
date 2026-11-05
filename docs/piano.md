@@ -80,6 +80,9 @@ ricettario, mai ritoccata verso un target, esclusi non controllati — è un fat
 una proposta). Il pasto nasce **seguito**, ma la dispensa **non** si scala
 (`pantry_used` resta NULL): non si sa se era roba di casa, e togliere scorte a caso è
 peggio che lasciarle. Su una casella piena risponde 409, prima di chiamare il modello.
+Oggi decide l'utente con «L'ho già mangiato» (`already_eaten`, spento di default):
+prima oggi valeva sempre come già mangiato, e un pranzo scritto alle otto del mattino
+finiva fra le calorie mangiate della home.
 Su un giorno che deve ancora venire lo stesso pulsante si chiama «Pasto libero»: la
 ricetta entra nella casella ma il pasto **non** risulta seguito (si segna poi, come
 ogni altro piatto). Prima il pulsante c'era solo fino a oggi, e per mettere in

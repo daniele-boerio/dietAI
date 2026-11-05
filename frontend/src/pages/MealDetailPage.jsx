@@ -510,7 +510,7 @@ export default function MealDetailPage() {
                   {!frozen && (
                     <div className="azioni-scelta">
                       <span className="eyebrow">
-                        {giaSuccesso ? "Hai già mangiato?" : "Mangi fuori o hai già deciso cosa?"}
+                        {meal.date < oggiIso() ? "Hai già mangiato?" : "Mangi fuori o hai già deciso cosa?"}
                       </span>
                       <button
                         className="btn btn-ai"
@@ -518,7 +518,7 @@ export default function MealDetailPage() {
                         disabled={busy}
                       >
                         <Sparkles size={16} />
-                        {giaSuccesso ? "Segna cosa ho mangiato" : "Pasto libero"}
+                        {meal.date < oggiIso() ? "Segna cosa ho mangiato" : "Pasto libero"}
                       </button>
                       <p className="azioni-aiuto">
                         Scrivi il piatto a parole (una pizza, un panino al bar): l'AI ne
@@ -669,6 +669,7 @@ export default function MealDetailPage() {
         <AteDialog
           meal={meal}
           futuro={!giaSuccesso}
+          oggi={meal.date === oggiIso()}
           onSaved={(updated) => {
             setMeal(updated);
             setAppenaMangiato(updated.is_followed === true);

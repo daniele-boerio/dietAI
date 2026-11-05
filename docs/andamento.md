@@ -79,6 +79,17 @@ cena dava «1400 / 1400», come se fosse andata a puntino; ora dà «2250 / 2000
 numero dice «con le stime» invece di «in programma». Saltato senza stima conta zero,
 ma il target resta, e la riga del pasto dice che la stima manca.
 
+**Il numero grande è quello mangiato finora, non il piano.** Home e intestazione del
+giorno nella settimana mostravano la somma dei piatti in programma: la mattina, a
+colazione appena fatta, segnavano già «2000 / 2000», e un pranzo da 700 al posto dei
+500 previsti non si vedeva finché non si guardava il piano. Ora contano solo i pasti
+segnati, coi valori del piatto (un pranzo da 700 conta 700) o con la stima di «ho
+mangiato altro», contro il target pieno: 0 la mattina e nei giorni che devono venire,
+e il numero sale man mano che si segna (`todayTotals().mangiato` in `lib/today.js`,
+`totals.eaten_calories` e `tracked_meals` in `serialize_week`). Il piano resta nella
+riga sotto («in programma …») e nel title dell'intestazione. Guardie in
+`lib/today.test.js` e `tests/test_mangiato_finora.py`.
+
 L'andamento ne ricava **quanto si è mangiato davvero** (`eaten_calories` per giorno):
 il piatto per i pasti seguiti, la stima per quelli sostituiti. Ma lo dice solo dei
 giorni di cui si sa tutto (`eaten_complete`), e la media della settimana conta solo

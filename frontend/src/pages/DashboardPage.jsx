@@ -253,25 +253,27 @@ export default function DashboardPage() {
         <div className="page-main">
           {today.meals.length > 0 && (
             <div className="day-summary">
+              {/* Il numero grande è quello che si è mangiato davvero, solo coi pasti
+                  segnati e coi loro valori (un pranzo da 700 conta 700 anche se la
+                  dieta ne chiedeva 500); il piano della giornata va sotto, piccolo. */}
               <div className="day-summary-top">
-                <strong>{formatNumber(totali.calories)}</strong>
+                <strong>{formatNumber(totali.mangiato.calories)}</strong>
                 <span>
                   / {formatNumber(totali.target)} kcal
                   <br />
-                  {/* Con una stima dentro il numero non è più solo il piano: è un
-                      misto di piatti e di cose mangiate, e va detto. */}
-                  {totali.stime > 0 ? 'con le stime' : 'in programma'}
+                  {totali.stime > 0 ? 'mangiate, con le stime' : 'mangiate'}
                 </span>
               </div>
               <MacroBar
                 className="macro-holder"
-                protein={totali.protein_g}
-                carbs={totali.carbs_g}
-                fat={totali.fat_g}
+                protein={totali.mangiato.protein_g}
+                carbs={totali.mangiato.carbs_g}
+                fat={totali.mangiato.fat_g}
                 legend
               />
               <span className="day-summary-tracked">
-                {totali.segnati} di {today.meals.length} segnati
+                {totali.segnati} di {today.meals.length} segnati · in programma{' '}
+                {formatNumber(totali.calories)} kcal
               </span>
             </div>
           )}

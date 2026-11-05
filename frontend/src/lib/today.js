@@ -52,22 +52,51 @@ export function mealContribution(meal) {
   return { ...VUOTO, stimato: false, mancante: false };
 }
 
+// Quanto si è mangiato davvero finora: solo i pasti segnati. Un pasto seguito porta il
+// suo piatto (700 kcal se il piatto era da 700, anche se il target era 500), uno
+// «ho mangiato altro» la sua stima. Quelli non ancora segnati non portano niente:
+// prima il numero grande della home era il piano della giornata, e con solo
+// colazione e pranzo mangiati diceva già 2000 su 2000.
+export function eatenContribution(meal) {
+  if (meal.is_followed === null || meal.is_followed === undefined) {
+    if (!meal.is_skipped) return null;
+  }
+  return mealContribution(meal);
+}
+
 export function todayTotals(meals) {
   return meals.reduce(
     (somma, meal) => {
       const c = mealContribution(meal);
+      const m = eatenContribution(meal);
       return {
         calories: somma.calories + c.calories,
         protein_g: somma.protein_g + c.protein_g,
         carbs_g: somma.carbs_g + c.carbs_g,
         fat_g: somma.fat_g + c.fat_g,
         target: somma.target + (meal.target_calories || 0),
+        mangiato: {
+          calories: somma.mangiato.calories + (m?.calories || 0),
+          protein_g: somma.mangiato.protein_g + (m?.protein_g || 0),
+          carbs_g: somma.mangiato.carbs_g + (m?.carbs_g || 0),
+          fat_g: somma.mangiato.fat_g + (m?.fat_g || 0),
+        },
         // Segnato lo è anche il pasto rimandato: è una risposta come l'altra.
         segnati: somma.segnati + (meal.is_followed === null ? 0 : 1),
-        stime: somma.stime + (c.stimato ? 1 : 0),
+        stime: somma.stime + (m?.stimato ? 1 : 0),
         mancanti: somma.mancanti + (c.mancante ? 1 : 0),
       };
     },
-    { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, target: 0, segnati: 0, stime: 0, mancanti: 0 }
+    {
+      calories: 0,
+      protein_g: 0,
+      carbs_g: 0,
+      fat_g: 0,
+      target: 0,
+      mangiato: { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 },
+      segnati: 0,
+      stime: 0,
+      mancanti: 0,
+    }
   );
 }

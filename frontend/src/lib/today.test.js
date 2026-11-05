@@ -64,3 +64,34 @@ describe('il totale di oggi', () => {
     expect(t.calories).toBe(300);
   });
 });
+
+describe('mangiato finora', () => {
+  it('la mattina, niente segnato: zero', () => {
+    const t = todayTotals([
+      { ...colazione, is_followed: null },
+      { ...pranzo, is_followed: null },
+    ]);
+    expect(t.mangiato.calories).toBe(0);
+    expect(t.calories).toBe(1400); // il piano resta, sotto
+  });
+
+  it('cresce coi pasti segnati, coi loro valori e non col target', () => {
+    const pranzoAbbondante = {
+      ...pranzo,
+      target_calories: 500,
+      recipe: { calories: 700, protein_g: 30, carbs_g: 80, fat_g: 25 },
+    };
+    const t = todayTotals([colazione, pranzoAbbondante, { ...cena(), is_skipped: false, is_followed: null }]);
+    expect(t.mangiato.calories).toBe(400 + 700);
+    expect(t.mangiato.protein_g).toBe(20 + 30);
+  });
+
+  it('«ho mangiato altro» conta la stima', () => {
+    const t = todayTotals([
+      colazione,
+      cena({ eaten_nutrition: { calories: 850, protein_g: 32, carbs_g: 105, fat_g: 30 } }),
+    ]);
+    expect(t.mangiato.calories).toBe(400 + 850);
+    expect(t.stime).toBe(1);
+  });
+});

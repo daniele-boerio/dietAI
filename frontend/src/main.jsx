@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import { AuthProvider } from './AuthContext'
+import { seguiVersione } from './lib/versione'
 import './index.css'
 
 // Tema applicato prima del render, così non c'è il flash del tema sbagliato al reload.
@@ -30,3 +31,6 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(() => {})
   })
 }
+
+// Dopo un deploy l'app già aperta si aggiorna da sé quando torna in primo piano.
+if (import.meta.env.PROD) seguiVersione()

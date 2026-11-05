@@ -117,7 +117,7 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
     ├── lib/macros.js           # ripartizione calorie/macro tra i pasti (+ test)
     ├── lib/generation.js       # cosa c'è da generare in settimana: la conta della dialog (+ test)
     ├── lib/nutrients.js        # fibre, zuccheri, saturi, alcol, caffeina: la riga sotto i macro (+ test)
-    ├── lib/…                   # navigation (useGoBack), pantry, push, quote, schermo, today
+    ├── lib/…                   # navigation (useGoBack), pantry, push, quote, schermo, today, versione
     ├── components/             # WeekGrid, WeekGenerateDialog, MealCard, DayDots, MealChat, RecipeView, MacroBar,
     │                           # Questionnaire (dieta calcolata, onboarding + /diet)...
     └── pages/                  # Dashboard, Planning, MealDetail, Shopping, Pantry,
@@ -372,7 +372,8 @@ threadpool. La regola non ha eccezioni e `tests/test_concurrency.py` la fa rispe
   scrive e `--accent-fill` si riempie; ogni pulsante ha il bordo da 1px; chi chiama il
   modello usa il lime e `Sparkles`; il telefono è il caso normale (`dvh`, safe-area,
   niente solo-hover); nessuna pagina renderizza il vuoto (`LoadError`); indietro con
-  `useGoBack`. Il dettaglio di tutto in `docs/interfaccia.md`.
+  `useGoBack`; dopo un deploy l'app aperta si ricarica da sé tornando in primo piano
+  (`lib/versione.js`). Il dettaglio di tutto in `docs/interfaccia.md`.
 
 ## Sviluppo in locale
 

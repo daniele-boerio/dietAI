@@ -391,6 +391,9 @@ class AteRequest(BaseModel):
     """«Ho mangiato questo» su una casella vuota: il piatto a parole."""
 
     text: str = Field(min_length=3, max_length=1000)
+    # Solo per oggi: l'hai già mangiato (segnato seguito) o è il piatto che mangerai?
+    # Un giorno passato è sempre già mangiato, uno futuro mai.
+    already_eaten: bool = False
 
 
 class PushKeys(BaseModel):

@@ -333,10 +333,10 @@ export const api = {
 
   // «Ho mangiato questo» su una casella vuota: il piatto a parole diventa una ricetta
   // stimata e il pasto risulta seguito. Risponde col pasto intero.
-  ateMeal: (mealId, text) =>
+  ateMeal: (mealId, text, alreadyEaten = false) =>
     request(`/planning/meals/${mealId}/ate`, {
       method: 'POST',
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, already_eaten: alreadyEaten }),
     }),
 
   setFollowed: (mealId, is_followed, deviation_notes = null) =>

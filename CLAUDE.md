@@ -200,8 +200,8 @@ paragrafo nel documento, scrivendo anche cosa non andava con la versione di prim
 - «Ho mangiato questo» / «Pasto libero» (`meals.ate`) riempie una casella **vuota**
   con un piatto scritto a parole: ricetta dell'utente stimata dal modello
   (`create_from_eaten`, macro dagli ingredienti, nessun adattamento ai target),
-  dispensa non scalata. Oggi o nel passato il pasto risulta seguito; nel futuro è
-  solo in programma.
+  dispensa non scalata. Nel passato il pasto risulta seguito, nel futuro è solo in
+  programma; oggi lo dice l'utente (`already_eaten`, «L'ho già mangiato»).
 - Un piatto nuovo in una casella azzera il tracking con `forget_tracking` (segno, nota,
   stima, `pantry_used`): i vincoli `ck_planned_meal_*` (migrazione 0035) rifiutano gli
   stati incoerenti, e porzioni, batch, macro e quantità fuori regola.

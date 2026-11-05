@@ -322,3 +322,11 @@ primo piano chiede `/index.html?v=…` (la query salta sia la cache HTTP sia que
 service worker), legge il bundle che il server serve adesso e, se non è quello
 caricato, ricarica la pagina, una volta sola per bundle. È l'unica `fetch` fuori da
 `api.js`: non parla con l'API.
+
+Non bastava: anche chiudendo davvero l'app, il telefono riapriva la versione vecchia
+senza che nginx vedesse una sola richiesta di `/`. `index.html` usciva senza
+`Cache-Control`, e il browser lo teneva in cache a stima; il service worker lo
+chiedeva con la cache HTTP di default e se lo vedeva restituire da lì. Ora nginx manda
+`Cache-Control: no-cache` su `location /` e il service worker (cache `dietai-shell-v3`)
+chiede le navigazioni con `cache: 'no-cache'`: la pagina si riconvalida sempre col
+server, che al più risponde 304.

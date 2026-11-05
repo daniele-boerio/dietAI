@@ -2,9 +2,10 @@
 // senza rete (la lista della spesa al supermercato è il caso d'uso). Le chiamate
 // /api NON vengono mai messe in cache: dati stantii su una dieta sono peggio di un
 // errore di rete.
+// v3: la v2 poteva tenere un index.html vecchio (cache HTTP).
 // v2: la v1 poteva contenere risposte d'errore messe in cache come asset; cambiare
 // nome la fa svuotare all'attivazione.
-const CACHE = 'dietai-shell-v2';
+const CACHE = 'dietai-shell-v3';
 // Ogni deploy porta bundle con un nome nuovo: oltre questo numero si buttano i più
 // vecchi, o la cache cresce per sempre.
 const MAX_ASSET = 60;
@@ -84,7 +85,9 @@ self.addEventListener('fetch', (event) => {
   // l'app si apre e resta nera, senza nemmeno un errore da leggere.
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request)
+      // `no-cache`: la pagina si chiede sempre al server (al più risponde 304). Con
+      // la cache HTTP di default l'iPhone si teneva l'index.html di prima del deploy.
+      fetch(request.url, { cache: 'no-cache', credentials: 'same-origin' })
         .then((response) => {
           if (response.ok) {
             const copy = response.clone();

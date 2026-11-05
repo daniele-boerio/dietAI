@@ -121,6 +121,14 @@ def serialize_week(db: Session, week: WeekPlan) -> dict:
             return meal["target"] if meal["self_managed"] else {}
 
         contributi = [_macros(m) for m in entry["meals"]]
+        # Quello mangiato davvero: solo i pasti segnati. Seguito → il suo piatto coi
+        # suoi valori (o il target se «lo faccio io»), «ho mangiato altro» → la stima.
+        # Prima l'intestazione del giorno diceva solo il piano, e la mattina, a
+        # colazione appena fatta, segnava già la giornata intera.
+        mangiati = [
+            c for m, c in zip(entry["meals"], contributi)
+            if m["is_skipped"] or m["is_followed"] is not None
+        ]
         entry["totals"] = {
             "calories": sum(c.get("calories", 0) for c in contributi),
             "protein_g": round(sum(c.get("protein_g", 0) for c in contributi), 1),
@@ -131,6 +139,8 @@ def serialize_week(db: Session, week: WeekPlan) -> dict:
             # saltato usciva da tutte e due le cifre, e una pizza al posto della cena
             # dava «1100 / 1100», come se la giornata fosse andata a puntino.
             "target_calories": sum(m["target"]["calories"] for m in entry["meals"]),
+            "eaten_calories": sum(c.get("calories", 0) for c in mangiati),
+            "tracked_meals": len(mangiati),
         }
 
     # "Da riempire" conta solo le caselle che l'AI deve generare: includere quelle

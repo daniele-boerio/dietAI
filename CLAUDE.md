@@ -249,7 +249,12 @@ paragrafo nel documento, scrivendo anche cosa non andava con la versione di prim
   peso del questionario si **propone** il ricalcolo dei target, mai lo si fa da soli, e
   mai per la dieta di un nutrizionista.
 - «Ho mangiato altro: cosa?» si stima (`PlannedMeal.eaten_nutrition`) solo su un pasto
-  segnato così; il «mangiato davvero» del giorno si dice solo se si sa di tutti i pasti.
+  segnato così; nella pagina Andamento il «mangiato davvero» del giorno si dice solo se
+  si sa di tutti i pasti.
+- Home e intestazione del giorno nella settimana mostrano il **mangiato finora** contro
+  il target pieno: solo i pasti segnati, coi valori del piatto (o la stima), quindi 0 la
+  mattina e nei giorni che verranno (`todayTotals().mangiato`, `totals.eaten_calories`).
+  Il piano del giorno resta sotto, in piccolo.
 - Il promemoria serale (push) parte all'ora italiana scelta, una volta al giorno e solo
   se oggi c'è qualcosa da segnare. Lo manda un thread del backend (`push.start_scheduler`,
   spento nei test); le chiavi VAPID si ricavano da `SECRET_KEY`.

@@ -54,10 +54,18 @@ export default function WeekGrid({
                 {day.day_name} <span className="day-date">{Number(day.date.slice(8, 10))}</span>
               </div>
               <div className="day-sum">
-                <span>
+                <span
+                  title={
+                    day.is_skipped
+                      ? undefined
+                      : `Mangiate ${day.totals.eaten_calories} kcal · in programma ${day.totals.calories} kcal`
+                  }
+                >
+                  {/* Quello mangiato davvero: solo i pasti segnati, coi loro valori.
+                      Un giorno che deve ancora venire dice 0; il piano sta nel title. */}
                   {day.is_skipped
                     ? 'Giornata saltata'
-                    : `${day.totals.calories} / ${day.totals.target_calories} kcal`}
+                    : `${day.totals.eaten_calories} / ${day.totals.target_calories} kcal`}
                 </span>
                 <DayDots day={day} />
               </div>

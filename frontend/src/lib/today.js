@@ -75,6 +75,9 @@ export function todayTotals(meals) {
         carbs_g: somma.carbs_g + c.carbs_g,
         fat_g: somma.fat_g + c.fat_g,
         target: somma.target + (meal.target_calories || 0),
+        target_protein_g: somma.target_protein_g + (meal.target_protein_g || 0),
+        target_carbs_g: somma.target_carbs_g + (meal.target_carbs_g || 0),
+        target_fat_g: somma.target_fat_g + (meal.target_fat_g || 0),
         mangiato: {
           calories: somma.mangiato.calories + (m?.calories || 0),
           protein_g: somma.mangiato.protein_g + (m?.protein_g || 0),
@@ -93,10 +96,58 @@ export function todayTotals(meals) {
       carbs_g: 0,
       fat_g: 0,
       target: 0,
+      target_protein_g: 0,
+      target_carbs_g: 0,
+      target_fat_g: 0,
       mangiato: { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 },
       segnati: 0,
       stime: 0,
       mancanti: 0,
     }
   );
+}
+
+// Fibre, zuccheri, saturi, alcol e caffeina mangiati finora: gli stessi pasti del
+// numero grande, ognuno coi suoi valori (il piatto, o la stima di «ho mangiato altro»).
+// NULL non è zero: un pasto che quel valore non lo sa (un «lo prepari tu», un
+// ingrediente senza composizione) lascia la somma aperta, e la voce lo dice con
+// `parziale` invece di contarlo come zero. Una voce che nessun pasto sa non c'è.
+export const DETTAGLI = [
+  { key: 'fiber_g', label: 'Fibre', unit: 'g', sempre: true },
+  { key: 'sugar_g', label: 'Zuccheri', unit: 'g', sempre: true },
+  { key: 'saturated_fat_g', label: 'Saturi', unit: 'g', sempre: true },
+  { key: 'alcohol_g', label: 'Alcol', unit: 'g', sempre: false },
+  { key: 'caffeine_mg', label: 'Caffeina', unit: 'mg', sempre: false },
+];
+
+function valoriDelPasto(meal) {
+  if (meal.is_skipped || meal.is_followed === false) return meal.eaten_nutrition || null;
+  return meal.recipe || null;
+}
+
+export function dettagliMangiati(meals) {
+  const somme = {};
+  for (const { key } of DETTAGLI) somme[key] = { valore: 0, noti: 0, parziale: false };
+  for (const meal of meals) {
+    if (!eatenContribution(meal)) continue;
+    const fonte = valoriDelPasto(meal);
+    for (const { key } of DETTAGLI) {
+      const v = fonte?.[key];
+      if (v == null) somme[key].parziale = true;
+      else {
+        somme[key].valore += v;
+        somme[key].noti += 1;
+      }
+    }
+  }
+  return DETTAGLI.filter(({ key, sempre }) => {
+    const s = somme[key];
+    return s.noti > 0 && (sempre || s.valore > 0);
+  }).map(({ key, label, unit }) => ({
+    key,
+    label,
+    unit,
+    valore: somme[key].valore,
+    parziale: somme[key].parziale,
+  }));
 }

@@ -16,6 +16,7 @@ import {
 import { useAuth } from './AuthContext';
 
 import DashboardPage from './pages/DashboardPage';
+import DayPage from './pages/DayPage';
 import PlanningPage from './pages/PlanningPage';
 import ShoppingPage from './pages/ShoppingPage';
 import AltroPage from './pages/AltroPage';
@@ -252,6 +253,7 @@ function AuthenticatedApp() {
               {/* Il lunedì della settimana da aprire, o `next` — l'indirizzo di prima,
                   che resta valido dovunque sia già linkato. */}
               <Route path="/plan/:weekStart" element={<PlanningPage />} />
+              <Route path="/day/:date" element={<DayPage />} />
               <Route path="/meals/:mealId" element={<MealDetailPage />} />
               <Route path="/shopping" element={<ShoppingPage />} />
               <Route path="/recipes" element={<RecipesPage />} />

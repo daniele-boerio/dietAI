@@ -146,3 +146,13 @@ def dashboard(
 ):
     """Riepilogo della home: cosa si mangia oggi, a che punto è il piano e la spesa."""
     return tracking.dashboard(db, user_id)
+
+
+@router.get("/day/{day}")
+def day_summary(
+    day: date,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    """Il riepilogo di un giorno: pasti, macro e il resto, come la home per oggi."""
+    return tracking.day_summary(db, user_id, day)

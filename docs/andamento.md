@@ -90,6 +90,22 @@ e il numero sale man mano che si segna (`todayTotals().mangiato` in `lib/today.j
 riga sotto («in programma …») e nel title dell'intestazione. Guardie in
 `lib/today.test.js` e `tests/test_mangiato_finora.py`.
 
+**Ogni giorno ha il suo riepilogo, come la home per oggi.** Prima la striscia dei
+giorni nella settimana faceva solo scorrere fino alla colonna, e il conto di un giorno
+che non fosse oggi si leggeva solo nell'intestazione: un numero, senza macro e senza
+il resto. Ora toccare il giorno (la striscia sul telefono, il nome del giorno nella
+griglia) apre `/day/:date`: la stessa parte della home — numero grande, barra dei
+macro, pasti da segnare — che ora sta in un componente solo (`components/DayMeals.jsx`,
+e `day_meals` in `services/tracking.py` per i dati), più due righe: i macro mangiati
+contro quelli della dieta (somma dei target dei pasti) e fibre, zuccheri, saturi,
+alcol e caffeina dei pasti segnati (`dettagliMangiati` in `lib/today.js`). Come in
+`services/macros.py`, NULL non è zero: se un pasto segnato un valore non lo sa (un
+«lo prepari tu», un ingrediente senza composizione) la somma è aperta e la voce lo
+dice con «≥». La rotta (`GET /tracking/day/{day}`) apre una settimana da questa in
+avanti come la pagina della settimana, e non crea quelle passate che non ci sono:
+risponde con zero pasti. Guardie in `tests/test_riepilogo_giorno.py` e
+`lib/today.test.js`.
+
 L'andamento ne ricava **quanto si è mangiato davvero** (`eaten_calories` per giorno):
 il piatto per i pasti seguiti, la stima per quelli sostituiti. Ma lo dice solo dei
 giorni di cui si sa tutto (`eaten_complete`), e la media della settimana conta solo

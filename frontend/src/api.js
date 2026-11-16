@@ -471,6 +471,7 @@ export const api = {
     request(`/tracking/year${year ? `?year=${year}` : ''}`),
 
   getDashboard: () => request('/tracking/dashboard'),
+  getDay: (date) => request(`/tracking/day/${date}`),
 
   // Notifiche push: chiave pubblica e stato, iscrizione del dispositivo, ora del
   // promemoria serale (null = spento), notifica di prova.

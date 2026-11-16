@@ -255,6 +255,10 @@ paragrafo nel documento, scrivendo anche cosa non andava con la versione di prim
   il target pieno: solo i pasti segnati, coi valori del piatto (o la stima), quindi 0 la
   mattina e nei giorni che verranno (`todayTotals().mangiato`, `totals.eaten_calories`).
   Il piano del giorno resta sotto, in piccolo.
+- Toccare un giorno nella settimana apre il suo riepilogo (`/day/:date`,
+  `GET /tracking/day/{day}`): la stessa giornata della home (`DayMeals`, `day_meals`),
+  più macro mangiati contro il target e fibre/zuccheri/saturi (`dettagliMangiati`,
+  NULL ≠ 0: un valore che manca si dice con «≥»). Settimana passata che non c'è: vuoto.
 - Il promemoria serale (push) parte all'ora italiana scelta, una volta al giorno e solo
   se oggi c'è qualcosa da segnare. Lo manda un thread del backend (`push.start_scheduler`,
   spento nei test); le chiavi VAPID si ricavano da `SECRET_KEY`.

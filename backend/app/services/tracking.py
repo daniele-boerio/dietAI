@@ -5,7 +5,7 @@ giorno e pasto per pasto. Non è un diario alimentare: misura quanto il piano
 generato aderisce alla dieta, più l'aderenza dichiarata dall'utente (`is_followed`).
 """
 
-from datetime import date
+from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -458,21 +458,16 @@ def _da_generare_da_oggi(week_data: dict, today: date) -> int:
     )
 
 
-def dashboard(db: Session, user_id: int) -> dict:
-    """Riepilogo della home: cosa si mangia oggi, a che punto è il piano e la spesa."""
-    refresh_week_statuses(db, user_id)
+# I valori oltre ai macro che una ricetta porta con sé: la riga dei «micro» nel
+# riepilogo del giorno. NULL resta NULL (non si sa), come in `services/macros.py`.
+DETTAGLI_RICETTA = ("fiber_g", "sugar_g", "saturated_fat_g", "alcohol_g", "caffeine_mg")
 
-    diet = get_active_diet(db, user_id)
-    if not diet:
-        return {"has_diet": False}
 
-    week = get_or_create_week(db, user_id, current_week_start())
-    week_data = serialize_week(db, week)
-
-    today = planner.today()
+def day_meals(db: Session, week: WeekPlan, giorno: date) -> list[dict]:
+    """I pasti di un giorno, nella forma che usano la home e il riepilogo del giorno."""
     today_meals = []
     for day, meal, slot in week_meals(db, week):
-        if day.date != today:
+        if day.date != giorno:
             continue
         recipe = db.get(Recipe, meal.recipe_id) if meal.recipe_id else None
         today_meals.append(
@@ -481,6 +476,9 @@ def dashboard(db: Session, user_id: int) -> dict:
                 "slot_name": slot.name,
                 "slot_order": slot.order_index,
                 "target_calories": slot.target_calories,
+                "target_protein_g": slot.target_protein_g,
+                "target_carbs_g": slot.target_carbs_g,
+                "target_fat_g": slot.target_fat_g,
                 "is_followed": meal.is_followed,
                 # "Ho mangiato altro": la ricetta è scritta ma è stata rimandata. La
                 # home la mostra spenta, non tra i piatti di oggi da preparare.
@@ -507,12 +505,29 @@ def dashboard(db: Session, user_id: int) -> dict:
                         "fat_g": recipe.fat_g,
                         "prep_time_min": recipe.prep_time_min,
                         "cook_time_min": recipe.cook_time_min,
+                        **{campo: getattr(recipe, campo) for campo in DETTAGLI_RICETTA},
                     }
                     if recipe
                     else None
                 ),
             }
         )
+    return sorted(today_meals, key=lambda m: m["slot_order"])
+
+
+def dashboard(db: Session, user_id: int) -> dict:
+    """Riepilogo della home: cosa si mangia oggi, a che punto è il piano e la spesa."""
+    refresh_week_statuses(db, user_id)
+
+    diet = get_active_diet(db, user_id)
+    if not diet:
+        return {"has_diet": False}
+
+    week = get_or_create_week(db, user_id, current_week_start())
+    week_data = serialize_week(db, week)
+
+    today = planner.today()
+    today_meals = day_meals(db, week, today)
 
     # Ricalcolata, come la pagina Spesa: la lista è una funzione del piano e della
     # dispensa, e letta così com'era la home poteva contare articoli già in dispensa.
@@ -535,7 +550,7 @@ def dashboard(db: Session, user_id: int) -> dict:
         "today": {
             "date": today.isoformat(),
             "day_name": DAY_NAMES[today.weekday()],
-            "meals": sorted(today_meals, key=lambda m: m["slot_order"]),
+            "meals": today_meals,
         },
         "week": {
             "id": week.id,
@@ -570,4 +585,44 @@ def dashboard(db: Session, user_id: int) -> dict:
         "favorites_count": db.query(Recipe)
         .filter(Recipe.user_id == user_id, Recipe.is_favorite.is_(True))
         .count(),
+    }
+
+
+def day_summary(db: Session, user_id: int, giorno: date) -> dict:
+    """Il riepilogo di un giorno qualsiasi: quello che la home mostra per oggi.
+
+    Una settimana da questa in avanti si apre (crea le caselle) come fa la pagina della
+    settimana; una passata che non c'è non si crea, e il giorno risponde vuoto.
+    """
+    diet = get_active_diet(db, user_id)
+    if not diet:
+        return {"has_diet": False}
+    lunedi = giorno - timedelta(days=giorno.weekday())
+    if lunedi >= current_week_start():
+        week = get_or_create_week(db, user_id, lunedi)
+        db.commit()
+    else:
+        week = (
+            db.query(WeekPlan)
+            .filter(WeekPlan.user_id == user_id, WeekPlan.week_start_date == lunedi)
+            .first()
+        )
+    giornata = (
+        db.query(DayPlan)
+        .filter(DayPlan.week_plan_id == week.id, DayPlan.date == giorno)
+        .first()
+        if week
+        else None
+    )
+    oggi = planner.today()
+    return {
+        "has_diet": True,
+        "date": giorno.isoformat(),
+        "day_name": DAY_NAMES[giorno.weekday()],
+        "week_start_date": lunedi.isoformat(),
+        "is_today": giorno == oggi,
+        "is_past": giorno < oggi,
+        "is_skipped": bool(giornata and giornata.is_skipped),
+        "meals": day_meals(db, week, giorno) if week else [],
+        "diet": {"daily_calories": diet.total_daily_calories},
     }

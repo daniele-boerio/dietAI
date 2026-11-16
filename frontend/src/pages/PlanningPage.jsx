@@ -139,19 +139,6 @@ export default function PlanningPage() {
   // nasconderebbe il nome del giorno a cui si è saltati.
   const margineTestata = () => document.querySelector('.plan-head')?.offsetHeight || 0;
 
-  // La striscia dei giorni porta alla colonna, sotto la testata.
-  const vaiAlGiorno = (giorno) => {
-    const colonna = document.getElementById(`giorno-${giorno.day_of_week}`);
-    if (!colonna) return;
-    colonna.style.scrollMarginTop = `${margineTestata() + 8}px`;
-    colonna.scrollIntoView({
-      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
-        ? 'auto'
-        : 'smooth',
-      block: 'start',
-    });
-  };
-
   // La settimana che l'utente sta guardando adesso. Le risposte arrivano quando
   // vogliono: premere la freccia prima che la settimana di prima abbia risposto
   // lasciava la griglia di A sotto il titolo di B, e i pulsanti agivano sui pasti di A.
@@ -513,7 +500,9 @@ export default function PlanningPage() {
                 className={`day-pick ${giorno.date === oggiIso ? 'today' : ''} ${
                   giorno.is_skipped ? 'off' : ''
                 }`}
-                onClick={() => vaiAlGiorno(giorno)}
+                // Il giorno si apre nel suo riepilogo, come la home per oggi: cosa si
+                // mangia, i macro, fibre e zuccheri. La colonna resta qui sotto.
+                onClick={() => navigate(`/day/${giorno.date}`)}
               >
                 <span className="day-pick-name">{giorno.day_name.slice(0, 3)}</span>
                 <span className="day-pick-num">{Number(giorno.date.slice(8, 10))}</span>

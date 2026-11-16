@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { CalendarOff, Undo2 } from 'lucide-react';
 import DayDots from './DayDots';
 import MealCard from './MealCard';
@@ -50,9 +51,11 @@ export default function WeekGrid({
                 è il numero che si cerca guardando la giornata, e in fondo a sette
                 card finiva sotto la piega — su un monitor da 900px non si vedeva mai. */}
             <div className="day-head" style={{ gridColumn: column, gridRow: 1 }}>
-              <div className="day-name">
+              {/* Il nome del giorno apre il suo riepilogo: macro, fibre, zuccheri e i
+                  pasti da segnare, come la home per oggi. */}
+              <Link className="day-name" to={`/day/${day.date}`} title="Riepilogo del giorno">
                 {day.day_name} <span className="day-date">{Number(day.date.slice(8, 10))}</span>
-              </div>
+              </Link>
               <div className="day-sum">
                 <span
                   title={

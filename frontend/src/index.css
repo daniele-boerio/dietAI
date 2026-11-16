@@ -1419,6 +1419,18 @@ textarea {
   color: var(--text-secondary);
 }
 
+/* Il nome del giorno è un link al suo riepilogo: si capisce dal sottolineato al
+   passaggio e dal colore quando lo si tocca, senza sembrare un pulsante. */
+a.day-name {
+  text-decoration: none;
+}
+a.day-name:hover,
+a.day-name:focus-visible {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .day-date {
   font-family: var(--font-mono);
   font-size: 0.69rem;
@@ -1918,6 +1930,37 @@ textarea {
 .day-summary-tracked {
   margin-left: auto;
   white-space: nowrap;
+}
+
+/* Nel riepilogo di un giorno: i macro mangiati contro il target e le voci oltre ai
+   macro, in due righe piccole sotto il numero grande. */
+.day-extra {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: -6px 0 18px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* La testata del giorno: indietro, il giorno, e le frecce per sfogliare. */
+.day-page-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 22px;
+}
+.day-page-title {
+  flex: 1;
+  min-width: 0;
+}
+.day-page-title .page-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* La spesa non è una statistica: è quello che si fa dopo aver guardato i pasti. */

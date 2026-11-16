@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { todayTotals } from './today';
+import { dettagliMangiati, todayTotals } from './today';
 
 const colazione = {
   target_calories: 400,
@@ -93,5 +93,48 @@ describe('mangiato finora', () => {
     ]);
     expect(t.mangiato.calories).toBe(400 + 850);
     expect(t.stime).toBe(1);
+  });
+});
+
+describe('dettagliMangiati', () => {
+  const piatto = (extra) => ({
+    is_followed: true,
+    is_skipped: false,
+    target_calories: 500,
+    recipe: { calories: 500, protein_g: 20, carbs_g: 60, fat_g: 15, ...extra },
+  });
+
+  it('somma solo i pasti segnati', () => {
+    const meals = [
+      piatto({ fiber_g: 4, sugar_g: 10, saturated_fat_g: 2, alcohol_g: 0, caffeine_mg: 80 }),
+      { ...piatto({ fiber_g: 9, sugar_g: 9, saturated_fat_g: 9 }), is_followed: null },
+    ];
+    const d = dettagliMangiati(meals);
+    expect(d.map((v) => v.key)).toEqual(['fiber_g', 'sugar_g', 'saturated_fat_g', 'caffeine_mg']);
+    expect(d[0]).toMatchObject({ valore: 4, parziale: false });
+  });
+
+  it('un valore che non si sa lascia la somma aperta, non conta zero', () => {
+    const meals = [piatto({ fiber_g: 4 }), piatto({ fiber_g: null })];
+    const fibre = dettagliMangiati(meals).find((v) => v.key === 'fiber_g');
+    expect(fibre).toMatchObject({ valore: 4, parziale: true });
+  });
+
+  it('«ho mangiato altro» porta la sua stima', () => {
+    const meals = [
+      {
+        is_followed: false,
+        is_skipped: true,
+        target_calories: 500,
+        recipe: { calories: 500, fiber_g: 30 },
+        eaten_nutrition: { calories: 800, fiber_g: 3, sugar_g: 5, saturated_fat_g: 6 },
+      },
+    ];
+    const fibre = dettagliMangiati(meals).find((v) => v.key === 'fiber_g');
+    expect(fibre.valore).toBe(3);
+  });
+
+  it('niente segnato, niente voci', () => {
+    expect(dettagliMangiati([{ ...piatto({ fiber_g: 4 }), is_followed: null }])).toEqual([]);
   });
 });

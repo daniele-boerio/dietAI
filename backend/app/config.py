@@ -66,6 +66,11 @@ HEALTHAI_TOKEN = _clean(os.getenv("HEALTHAI_TOKEN"))
 # Quanto indietro guarda il giro: i pasti più vecchi non si mandano né si toccano più.
 HEALTHAI_DAYS = int(os.getenv("HEALTHAI_DAYS", 90))
 
+# --- Server MCP (per SpassoHub) ---
+# Token fisso con cui l'hub MCP di Daniele chiama `/api/mcp` a nome dell'amministratore
+# (vedi `routers/mcp.py`). Almeno 32 caratteri; senza, l'endpoint non esiste.
+MCP_TOKEN = _clean(os.getenv("MCP_TOKEN"))
+
 # --- Utente seed ---
 # L'app è single-user: l'utente non si registra, viene creato da `python -m app.seed`.
 SEED_USER_EMAIL = os.getenv("SEED_USER_EMAIL", "utente@dietai.local")

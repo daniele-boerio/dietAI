@@ -16,7 +16,7 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from .rate_limit import limiter
 from .database import SessionLocal
-from .routers import admin, auth, chat, diet, planning, push, recipes, shopping, tracking
+from .routers import admin, auth, chat, diet, mcp, planning, push, recipes, shopping, tracking
 from .routers import config as config_router
 
 logging.basicConfig(level=logging.INFO)
@@ -80,6 +80,7 @@ app.include_router(chat.router)
 app.include_router(shopping.router)
 app.include_router(tracking.router)
 app.include_router(push.router)
+app.include_router(mcp.router)
 
 
 # I log dell'app (`app.*`) a livello info, sull'output del container. Uvicorn configura

@@ -67,7 +67,7 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
 │       ├── healthai_sync.py    # `python -m app.healthai_sync`: rimanda a healthAI i pasti consumati
 │       ├── refit_macros.py     # `python -m app.refit_macros`: ritocca le grammature fuori dal ±10%
 │       ├── repair_cereals.py   # `python -m app.repair_cereals`: disfa i cereali fusi in "pasta"
-│       ├── routers/            # auth, admin, diet, config, planning, recipes, chat, shopping, tracking, push,
+│       ├── routers/            # auth, admin, diet, config, planning, recipes, chat, shopping, tracking, push, mcp,
 │       │                       # integrazioni (SpassoSpesa, server a server con token)
 │       ├── services/
 │       │   ├── accounts.py     # chi è l'amministratore, creazione di un account
@@ -419,7 +419,9 @@ migrazioni su un Postgres vero con `alembic check`: non ferma il deploy, ma dice
 quel push era rotto. Variabili da
 impostare: `DB_*`, `SECRET_KEY`, `ENCRYPTION_KEY`, `SEED_USER_EMAIL`,
 `SEED_USER_PASSWORD`, `COOKIE_SECURE=true`; per healthAI `HEALTHAI_URL` e
-`HEALTHAI_TOKEN` (facoltative). Solo il frontend ha un dominio pubblico.
+`HEALTHAI_TOKEN` (facoltative); per l'MCP che usa SpassoHub `MCP_TOKEN` (facoltativa,
+almeno 32 caratteri: `routers/mcp.py`, a nome dell'amministratore, strumenti che chiamano
+le stesse funzioni delle rotte). Solo il frontend ha un dominio pubblico.
 
 ⚠️ `ENCRYPTION_KEY` non va più cambiata dopo il primo avvio: la API key salvata
 diventerebbe indecifrabile e andrebbe reinserita.

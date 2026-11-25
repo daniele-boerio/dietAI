@@ -72,6 +72,11 @@ HEALTHAI_DAYS = int(os.getenv("HEALTHAI_DAYS", 90))
 # token sta anche su SpassoSpesa. Senza, le rotte rispondono 404 come se non ci fossero.
 SPASSOSPESA_TOKEN = _clean(os.getenv("SPASSOSPESA_TOKEN"))
 
+# --- Server MCP (per SpassoHub) ---
+# Token fisso con cui l'hub MCP di Daniele chiama `/api/mcp` a nome dell'amministratore
+# (vedi `routers/mcp.py`). Almeno 32 caratteri; senza, l'endpoint non esiste.
+MCP_TOKEN = _clean(os.getenv("MCP_TOKEN"))
+
 # --- Utente seed ---
 # L'app è single-user: l'utente non si registra, viene creato da `python -m app.seed`.
 SEED_USER_EMAIL = os.getenv("SEED_USER_EMAIL", "utente@dietai.local")

@@ -60,6 +60,8 @@ services:
       - HEALTHAI_DAYS=${HEALTHAI_DAYS:-90}
       # SpassoSpesa (lista condivisa di casa): stesso token impostato anche là.
       - SPASSOSPESA_TOKEN=${SPASSOSPESA_TOKEN:-}
+      # Server MCP per SpassoHub (routers/mcp.py): token fisso, almeno 32 caratteri.
+      - MCP_TOKEN=${MCP_TOKEN:-}
     healthcheck:
       test:
         [

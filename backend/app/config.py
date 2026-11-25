@@ -66,6 +66,12 @@ HEALTHAI_TOKEN = _clean(os.getenv("HEALTHAI_TOKEN"))
 # Quanto indietro guarda il giro: i pasti più vecchi non si mandano né si toccano più.
 HEALTHAI_DAYS = int(os.getenv("HEALTHAI_DAYS", 90))
 
+# --- SpassoSpesa ---
+# La lista della spesa condivisa di casa: legge cosa serve al piano e, a spesa fatta,
+# rimette in dispensa quello che si è comprato (`routers/integrazioni.py`). Lo stesso
+# token sta anche su SpassoSpesa. Senza, le rotte rispondono 404 come se non ci fossero.
+SPASSOSPESA_TOKEN = _clean(os.getenv("SPASSOSPESA_TOKEN"))
+
 # --- Server MCP (per SpassoHub) ---
 # Token fisso con cui l'hub MCP di Daniele chiama `/api/mcp` a nome dell'amministratore
 # (vedi `routers/mcp.py`). Almeno 32 caratteri; senza, l'endpoint non esiste.

@@ -67,7 +67,8 @@ backend ci arriva tramite le `DB_*`. In locale c'è `docker-compose.dev.yml` col
 │       ├── healthai_sync.py    # `python -m app.healthai_sync`: rimanda a healthAI i pasti consumati
 │       ├── refit_macros.py     # `python -m app.refit_macros`: ritocca le grammature fuori dal ±10%
 │       ├── repair_cereals.py   # `python -m app.repair_cereals`: disfa i cereali fusi in "pasta"
-│       ├── routers/            # auth, admin, diet, config, planning, recipes, chat, shopping, tracking, push, mcp
+│       ├── routers/            # auth, admin, diet, config, planning, recipes, chat, shopping, tracking, push, mcp,
+│       │                       # integrazioni (SpassoSpesa, server a server con token)
 │       ├── services/
 │       │   ├── accounts.py     # chi è l'amministratore, creazione di un account
 │       │   ├── ai_client.py    # due backend (openrouter/anthropic) dietro una interfaccia
@@ -238,6 +239,9 @@ paragrafo nel documento, scrivendo anche cosa non andava con la versione di prim
   scarti (`pantry_skipped`). Cambiare una ricetta non tocca la dispensa, tranne su un
   pasto già seguito: lì il segno resta e la dispensa segue la ricetta nuova
   (`rescale_pantry`, chat del pasto, chat della spesa, sostituzione).
+- SpassoSpesa (la lista condivisa di casa) legge la lista e, a spesa fatta, rimette in
+  dispensa con `store_in_pantry`, la stessa di «Ho fatto la spesa»: rotte in
+  `routers/integrazioni.py`, token `SPASSOSPESA_TOKEN` + mail dell'utente, 404 senza token.
 - Le scorte possono avere una scadenza (`PantryItem.expires_on`): nel contesto della
   generazione la dispensa va in ordine di scadenza, con la data per quello che scade
   entro una settimana.

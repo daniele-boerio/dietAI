@@ -66,6 +66,12 @@ HEALTHAI_TOKEN = _clean(os.getenv("HEALTHAI_TOKEN"))
 # Quanto indietro guarda il giro: i pasti più vecchi non si mandano né si toccano più.
 HEALTHAI_DAYS = int(os.getenv("HEALTHAI_DAYS", 90))
 
+# --- SpassoSpesa ---
+# La lista della spesa condivisa di casa: legge cosa serve al piano e, a spesa fatta,
+# rimette in dispensa quello che si è comprato (`routers/integrazioni.py`). Lo stesso
+# token sta anche su SpassoSpesa. Senza, le rotte rispondono 404 come se non ci fossero.
+SPASSOSPESA_TOKEN = _clean(os.getenv("SPASSOSPESA_TOKEN"))
+
 # --- Utente seed ---
 # L'app è single-user: l'utente non si registra, viene creato da `python -m app.seed`.
 SEED_USER_EMAIL = os.getenv("SEED_USER_EMAIL", "utente@dietai.local")

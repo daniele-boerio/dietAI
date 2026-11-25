@@ -58,6 +58,8 @@ services:
       - HEALTHAI_URL=${HEALTHAI_URL:-}
       - HEALTHAI_TOKEN=${HEALTHAI_TOKEN:-}
       - HEALTHAI_DAYS=${HEALTHAI_DAYS:-90}
+      # SpassoSpesa (lista condivisa di casa): stesso token impostato anche là.
+      - SPASSOSPESA_TOKEN=${SPASSOSPESA_TOKEN:-}
     healthcheck:
       test:
         [

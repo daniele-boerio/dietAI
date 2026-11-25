@@ -156,3 +156,23 @@ piano con un altro nome.
 La spesa fatta non tocca la scadenza di una scorta che c'era già: la data si riferiva
 al pacco vecchio, e indovinare quella del nuovo sarebbe inventare. La si corregge dalla
 dispensa. Guardie in `tests/test_scadenze.py`.
+
+## SpassoSpesa: la lista di casa
+
+La spesa vera si fa con la lista condivisa di casa (SpassoSpesa, `spesa.spassocasa.it`),
+non con questa. Le due si parlano da server a server (`routers/integrazioni.py`): non
+c'è una sessione, c'è un token condiviso (`SPASSOSPESA_TOKEN`, lo stesso valore impostato
+su SpassoSpesa) e la mail dell'utente, da cui si risale all'account. Il filtro per
+utente sta lì: una mail che non c'è risponde 404, e una mail tocca solo i suoi dati
+(`tests/test_spassospesa.py`). Senza token configurato le rotte rispondono 404, come se
+non esistessero.
+
+- `GET /lista` è la stessa lista di `/api/shopping/current`, ricalcolata, senza le righe
+  già spuntate: SpassoSpesa la mostra e l'utente sceglie cosa portare nella lista di casa.
+- `POST /dispensa` è «Ho fatto la spesa» fatto da là: passa per `store_in_pantry`, la
+  funzione che usa anche `complete_shopping`, così le regole delle unità che non si
+  sommano restano in un posto solo. Si riconosce l'ingrediente dall'id (righe importate
+  da qui) o dal nome normalizzato (righe scritte a mano): **mai** si crea anagrafica
+  nuova da un nome scritto in una lista della spesa ("detersivo piatti" non è un
+  alimento). La quantità è quella mandata, o quella scritta ("2 kg"), o quella che la
+  lista chiedeva; senza nessuna delle tre la riga torna indietro fra gli scartati.

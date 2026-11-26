@@ -33,6 +33,8 @@ from ..schemas import (
     PantryCreate,
     PantryUpdate,
     SkipDayRequest,
+    RecipeIngredientInput,
+    RecipeUpdate,
     SwapMealRequest,
     WeightEntryIn,
 )
@@ -40,6 +42,7 @@ from ..services import meals, planner
 from ..services.accounts import admin_user
 from ..services.ai_client import get_client
 from ..services.ownership import own_meal
+from ..services.recipes import edit_recipe, fork_recipe_for_meal, serialize_recipe, settle_recipe
 from . import config as config_router
 from . import diet as diet_router
 from . import planning as planning_router
@@ -58,8 +61,10 @@ ISTRUZIONI = (
     "dispensa dell'utente. Le date sono AAAA-MM-GG in ora italiana. Parti da `oggi` (i pasti "
     "di un giorno con gli id) o `settimana`; gli strumenti che segnano un pasto vogliono il "
     "`meal_id` che trovi lì. `segna_seguito` scala la dispensa; `ho_mangiato_altro` stima cosa "
-    "si è mangiato al posto del piatto previsto; `ho_mangiato_questo` riempie una casella vuota. "
-    "Quelli marcati con l'AI (`ho_mangiato_*`, `rigenera_pasto`) usano il modello e costano."
+    "si è mangiato al posto del piatto previsto; `ho_mangiato_questo` riempie una casella vuota, "
+    "`sostituisci_pasto` mette un piatto nuovo al posto di quello che c'è; `modifica_pasto` "
+    "corregge ingredienti e grammature del piatto di un pasto; `svuota_pasto` lo toglie. "
+    "Quelli con l'AI (`ho_mangiato_*`, `sostituisci_pasto`, `rigenera_pasto`) usano il modello e costano."
 )
 
 
@@ -221,11 +226,16 @@ def t_segna_seguito(db: Session, user: User, args: dict):
 
 
 def t_mangiato_altro(db: Session, user: User, args: dict):
-    meal, day, _week = own_meal(db, user.id, _int(args, "meal_id"))
+    meal, day, week = own_meal(db, user.id, _int(args, "meal_id"))
     niente = _bool(args, "niente", False)
     testo = (args.get("cosa") or "").strip() or None
     if not niente and not testo:
         raise ValueError("serve `cosa` (cosa hai mangiato) oppure `niente: true`")
+    # Nell'app sono due tocchi («ho mangiato altro», poi «cosa?»); qui è una frase sola,
+    # quindi il segno lo mette lo strumento. Prima `niente` su un pasto ancora da segnare
+    # rispondeva 400 e serviva un `segna_seguito(seguito=false)` in più.
+    if meal.is_followed is not False:
+        meals.set_followed(db, user.id, meal, day, week, False, None)
     return meals.eaten_instead(
         db, lambda: get_client(db, user, "quick"), meal, day, testo, niente
     )
@@ -240,6 +250,74 @@ def t_mangiato_questo(db: Session, user: User, args: dict):
         db, user, lambda: get_client(db, user, "quick"), meal, day, testo,
         already_eaten=_bool(args, "gia_mangiato", True),
     )
+
+
+def t_sostituisci(db: Session, user: User, args: dict):
+    meal, day, _week = own_meal(db, user.id, _int(args, "meal_id"))
+    testo = (args.get("cosa") or "").strip()
+    if len(testo) < 3:
+        raise ValueError("serve `cosa`: il piatto a parole")
+    return meals.ate(
+        db, user, lambda: get_client(db, user, "quick"), meal, day, testo,
+        already_eaten=_bool(args, "gia_mangiato", True), replace=True,
+    )
+
+
+def t_svuota(db: Session, user: User, args: dict):
+    return planning_router.clear_meal(_int(args, "meal_id"), user.id, db)
+
+
+def _ingrediente(riga: Any) -> dict:
+    if not isinstance(riga, dict):
+        raise ValueError("ogni ingrediente è un oggetto {nome, quantita, unita, note}")
+    return RecipeIngredientInput(
+        name=str(riga.get("nome") or riga.get("name") or ""),
+        quantity=riga.get("quantita", riga.get("quantity")),
+        unit=str(riga.get("unita") or riga.get("unit") or ""),
+        notes=riga.get("note") or riga.get("notes") or None,
+    ).model_dump()
+
+
+def t_modifica(db: Session, user: User, args: dict):
+    """Corregge il piatto di **questo** pasto: titolo, ingredienti, procedimento.
+
+    Come la chat del pasto: la ricetta si stacca se è in programma anche altrove
+    (`fork_recipe_for_meal`), si corregge (`edit_recipe`: macro rifatti dagli
+    ingredienti, spesa e dispensa che seguono) e si riaccorpa se torna uguale a
+    un'altra (`settle_recipe`).
+    """
+    meal, day, _week = own_meal(db, user.id, _int(args, "meal_id"))
+    planner.ensure_not_skipped(day, meal)
+    if not meal.recipe_id:
+        raise ValueError("il pasto è vuoto: per riempirlo usa `ho_mangiato_questo`")
+    ingredienti = args.get("ingredienti")
+    if ingredienti is not None and not isinstance(ingredienti, list):
+        raise ValueError("`ingredienti` è la lista completa degli ingredienti")
+    if ingredienti is None and not args.get("titolo") and not args.get("procedimento"):
+        raise ValueError("niente da cambiare: passa ingredienti, titolo o procedimento")
+
+    recipe = fork_recipe_for_meal(db, meal)
+    attuale = serialize_recipe(db, recipe, full=True)
+    dati = RecipeUpdate(
+        title=str(args.get("titolo") or attuale["title"]),
+        description=attuale.get("description"),
+        prep_time_min=attuale.get("prep_time_min") or 0,
+        cook_time_min=attuale.get("cook_time_min") or 0,
+        difficulty=attuale.get("difficulty") or "medium",
+        instructions=str(args.get("procedimento") or attuale.get("instructions") or "-"),
+        ingredients=(
+            [_ingrediente(r) for r in ingredienti]
+            if ingredienti is not None
+            else [
+                {k: r.get(k) for k in ("name", "quantity", "unit", "notes")}
+                for r in attuale["ingredients"]
+            ]
+        ),
+    ).model_dump()
+    edit_recipe(db, user.id, recipe, dati)
+    settle_recipe(db, meal)
+    db.commit()
+    return planning_router.get_meal(meal.id, user.id, db)
 
 
 def t_rigenera(db: Session, user: User, args: dict):
@@ -395,7 +473,8 @@ TOOLS: dict[str, tuple[Callable, dict]] = {
     "ho_mangiato_altro": _tool(
         t_mangiato_altro,
         "«Ho mangiato altro»: cosa si è mangiato al posto del piatto previsto; il modello ne stima "
-        "calorie e macro e la ricetta prevista slitta più avanti. niente=true per un pasto saltato.",
+        "calorie e macro e la ricetta prevista slitta più avanti. niente=true per un pasto saltato. "
+        "Segna da sé il pasto come «ho mangiato altro»; richiamarlo corregge la stima.",
         {"meal_id": _MEAL, "cosa": {"type": "string"}, "niente": {"type": "boolean"}},
         ["meal_id"], CON_AI,
     ),
@@ -405,6 +484,48 @@ TOOLS: dict[str, tuple[Callable, dict]] = {
         "gia_mangiato=false se è oggi e lo mangerai dopo.",
         {"meal_id": _MEAL, "cosa": {"type": "string"}, "gia_mangiato": {"type": "boolean", "default": True}},
         ["meal_id", "cosa"], CON_AI,
+    ),
+    "sostituisci_pasto": _tool(
+        t_sostituisci,
+        "Mette al posto del piatto di un pasto (anche già segnato) quello descritto a parole: "
+        "ricetta stimata dal modello, come `ho_mangiato_questo`. Il piatto di prima resta nel "
+        "ricettario e la dispensa scalata torna com'era. Nel passato il pasto risulta "
+        "mangiato; oggi gia_mangiato=false se lo mangerai dopo. Per un pasto «ho mangiato "
+        "altro» si corregge la stima con `ho_mangiato_altro`.",
+        {"meal_id": _MEAL, "cosa": {"type": "string"}, "gia_mangiato": {"type": "boolean", "default": True}},
+        ["meal_id", "cosa"], CON_AI,
+    ),
+    "modifica_pasto": _tool(
+        t_modifica,
+        "Corregge il piatto di un pasto senza AI: titolo, procedimento o la lista **completa** "
+        "degli ingredienti (leggila prima con `pasto`, poi passala intera con le modifiche). "
+        "I macro si ricalcolano dagli ingredienti; vale solo per questo pasto.",
+        {
+            "meal_id": _MEAL,
+            "titolo": {"type": "string"},
+            "procedimento": {"type": "string"},
+            "ingredienti": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "nome": {"type": "string"},
+                        "quantita": {"type": "number", "minimum": 0},
+                        "unita": {"type": "string", "description": "g, ml, unità…"},
+                        "note": {"type": "string"},
+                    },
+                    "required": ["nome", "quantita", "unita"],
+                },
+            },
+        },
+        ["meal_id"], SCRITTURA,
+    ),
+    "svuota_pasto": _tool(
+        t_svuota,
+        "Toglie il piatto da un pasto: la casella torna vuota (e non segnata), la ricetta "
+        "resta nel ricettario, la dispensa scalata torna com'era.",
+        {"meal_id": _MEAL}, ["meal_id"],
+        {"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False},
     ),
     "rigenera_pasto": _tool(
         t_rigenera,

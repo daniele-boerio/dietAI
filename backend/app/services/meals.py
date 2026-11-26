@@ -92,7 +92,7 @@ def assign(
 
 def ate(
     db: Session, user: User, client_for, meal: PlannedMeal, day: DayPlan, text: str,
-    already_eaten: bool = False,
+    already_eaten: bool = False, replace: bool = False,
 ) -> dict:
     """«Ho mangiato questo»: una casella vuota si riempie con quello che si è mangiato.
 
@@ -103,9 +103,15 @@ def ate(
     togliere a caso le scorte è peggio che lasciarle. Solo su una casella vuota (chi ha
     già un piatto ha «ho mangiato altro»). Su un giorno futuro è un «pasto libero» in
     programma: la ricetta entra, il segno no.
+
+    Con `replace` (lo usa l'MCP: «a cena in realtà ho mangiato altro, rifalla») vale
+    anche su una casella piena: prima si stima il piatto nuovo, poi la casella si
+    svuota come col cestino (`clear`: dispensa rimessa se era stata scalata) e si
+    riempie. In quest'ordine un errore del modello lascia il pasto com'era. Un pasto
+    «ho mangiato altro» resta escluso anche così: lì si corregge la stima.
     """
     ensure_not_skipped(day, meal)
-    if meal.recipe_id:
+    if meal.recipe_id and not replace:
         raise HTTPException(
             409,
             "Questo pasto ha già un piatto: se hai mangiato altro, segnalo con "
@@ -121,6 +127,12 @@ def ate(
 
     slot = db.get(MealSlot, meal.meal_slot_id)
     recipe = create_from_eaten(db, client_for(), user.id, slot_name=slot.name, text=text)
+
+    if replace and meal.recipe_id:
+        if meal.is_followed is True and meal.pantry_used:
+            restore_to_pantry(db, user.id, meal.pantry_used)
+        clear_meal_cell(db, meal)
+        db.flush()
 
     meal.recipe_id = recipe.id
     meal.source = "user_custom"

@@ -89,6 +89,16 @@ ogni altro piatto). Prima il pulsante c'era solo fino a oggi, e per mettere in
 programma «sabato pizza fuori» bisognava passare dalla generazione, che il piatto lo
 adattava ai macro. Guardia in `tests/test_ho_mangiato_questo.py`.
 
+Dall'MCP (SpassoHub) c'è anche la **sostituzione**: `sostituisci_pasto` chiama
+`meals.ate(replace=True)`, che stima il piatto nuovo *prima* di svuotare la casella
+come il cestino (`clear_meal_cell`, dispensa rimessa) e poi la riempie, così un errore
+del modello lascia il pasto com'era. Prima un pasto segnato con la stima sbagliata
+(«l'aperitivo era più fritto») si correggeva solo dall'app, svuotando a mano. Accanto
+ci sono `modifica_pasto` (ingredienti e titolo: `fork_recipe_for_meal` →
+`edit_recipe` → `settle_recipe`, come la chat) e `svuota_pasto` (`meals.clear`); e
+`ho_mangiato_altro` mette da sé il segno «ho mangiato altro», perché prima `niente`
+su un pasto ancora da segnare rispondeva 400. Guardia in `tests/test_mcp.py`.
+
 **"Lo faccio io" è un flag della dieta, non della settimana.** `MealSlot.auto_generate`
 a False significa che l'utente quel pasto lo prepara da sé: l'AI non lo genera mai e i
 suoi ingredienti non entrano in lista della spesa, **ma i suoi macro contano lo stesso**
